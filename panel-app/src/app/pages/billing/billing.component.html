@@ -1,0 +1,60 @@
+<div class="page">
+  <h1>Cobrança</h1>
+  <p class="subtitle">Saldo de tokens da plataforma</p>
+
+  @if (balanceLoading()) {
+    <div class="loading">Carregando saldo…</div>
+  }
+
+  @if (balanceZero()) {
+    <div class="zero-warning">Saldo zerado — a Helena vai parar de responder até uma nova compra.</div>
+  }
+
+  @if (balance(); as bal) {
+    <div class="balance-card">
+      <div class="balance-label">Saldo atual</div>
+      <div class="balance-value" [class.balance-zero]="bal.balance === 0">{{ balanceLabel() }} <span>tokens</span></div>
+      <div class="balance-meta">
+        <span>Concedido: <strong>{{ totalGrantedLabel() }}</strong></span>
+        <span>Comprado: <strong>{{ totalPurchasedLabel() }}</strong></span>
+      </div>
+    </div>
+  }
+
+  @if (hasPendingPayment()) {
+    <div class="pending-card">
+      <div class="pending-head">
+        <div class="pending-title">Compra pendente — {{ pendingTokensLabel() }} tokens</div>
+        <button class="cancel" (click)="cancelPending()">Cancelar</button>
+      </div>
+      @if (pixPayload()) {
+        <div class="pix-box">
+          @if (pixQrDataUrl()) {
+            <img [src]="pixQrDataUrl()" alt="QR Pix" />
+          } @else if (pixQrPending()) {
+            <div class="qr-placeholder">gerando QR…</div>
+          }
+          <div class="pix-payload">{{ pixPayload() }}</div>
+          <button class="copy" (click)="copyPix()">{{ copyPixLabel() }}</button>
+        </div>
+      }
+      <a [href]="invoiceUrl()" target="_blank" rel="noopener" class="invoice-link">Ver fatura hospedada (PIX/cartão/boleto)</a>
+    </div>
+  }
+
+  @if (showPurchaseForm()) {
+    <div class="purchase-card">
+      <div class="purchase-title">Comprar tokens</div>
+      <label>Quantidade de tokens</label>
+      <input type="number" [(ngModel)]="purchaseTokens" name="tokens" />
+      <label>CPF/CNPJ</label>
+      <input [(ngModel)]="purchaseCpf" name="cpf" placeholder="000.000.000-00" />
+      @if (purchaseError()) {
+        <div class="error">{{ purchaseError() }}</div>
+      }
+      <button class="submit" [disabled]="purchaseBusy()" (click)="submitPurchase()">
+        {{ purchaseBusy() ? "Gerando cobrança…" : "Comprar" }}
+      </button>
+    </div>
+  }
+</div>

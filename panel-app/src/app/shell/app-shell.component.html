@@ -1,0 +1,66 @@
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="9" stroke="white" stroke-width="2" />
+          <path d="M9 10h.01M15 10h.01M9 14c.8.7 1.9 1 3 1s2.2-.3 3-1" stroke="white" stroke-width="2" stroke-linecap="round" />
+        </svg>
+      </div>
+      <span class="brand-name">Helena</span>
+    </div>
+
+    <nav class="nav">
+      @for (item of navItems; track item.path) {
+        <a [routerLink]="item.path" routerLinkActive="nav-active" class="nav-item">
+          <app-icon [name]="item.icon" />
+          {{ item.label }}
+        </a>
+      }
+    </nav>
+
+    <div class="conversations">
+      <div class="conversations-head">
+        <span>Conversas</span>
+        <a routerLink="/chat" (click)="chatUi.newConversation()" class="new-conversation" title="Nova conversa">+</a>
+      </div>
+      <div class="conversations-list">
+        @if (chatUi.sessions().length === 0) {
+          <div class="conversations-empty">Nenhuma conversa ainda</div>
+        }
+        @for (sess of chatUi.sessions(); track sess.id) {
+          <a
+            routerLink="/chat"
+            (click)="selectSession(sess.id)"
+            class="conversation-item"
+            [class.conversation-active]="sess.id === chatUi.activeSessionId()"
+          >
+            <div class="conversation-title">{{ sess.title || "Conversa " + sess.id.slice(0, 8) }}</div>
+            <div class="conversation-when">{{ fmtWhen(sess.updatedAt) }}</div>
+          </a>
+        }
+      </div>
+    </div>
+
+    <div class="account">
+      <div class="account-row">
+        <div class="avatar">{{ me().initial }}</div>
+        <div class="account-info">
+          <div class="account-name">{{ me().name }}</div>
+          <div class="account-email">{{ me().email }}</div>
+        </div>
+        <button (click)="theme.toggle()" class="theme-toggle" title="Alternar tema">
+          <app-icon [name]="theme.theme() === 'dark' ? 'moon' : 'sun'" />
+        </button>
+      </div>
+      <button (click)="auth.logout()" class="logout-button">
+        <app-icon name="logout" />
+        Sair
+      </button>
+    </div>
+  </aside>
+
+  <main class="content">
+    <router-outlet />
+  </main>
+</div>

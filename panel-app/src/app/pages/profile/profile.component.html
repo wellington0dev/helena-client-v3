@@ -1,0 +1,94 @@
+<div class="page">
+  <h1>Perfil &amp; Conta</h1>
+  <p class="subtitle">Seus dados, consentimentos e tokens de integração</p>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="identity-row">
+        <div class="avatar">{{ me().initial }}</div>
+        <div>
+          <div class="name">{{ me().name }}</div>
+          <div class="email">{{ me().email }}</div>
+        </div>
+      </div>
+      <div class="kv"><span>Papel</span><strong>{{ me().roleLabel }}</strong></div>
+      <div class="kv"><span>Conta criada em</span><strong>{{ me().createdAtLabel }}</strong></div>
+    </div>
+
+    <div class="card">
+      <div class="telemetry-head">
+        <div class="card-title">Telemetria</div>
+        <button class="toggle" [class.toggle-on]="auth.currentUser()?.telemetryConsent" (click)="toggleTelemetry()">
+          <span class="knob"></span>
+        </button>
+      </div>
+      <p class="hint">Compartilha logs técnicos (erros e performance) para melhorar a Helena. Nunca inclui o conteúdo das suas mensagens. Ativação explícita — desligada por padrão.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Identidade nos canais</div>
+    <p class="hint small">"Este WhatsApp/Telegram sou eu" — sem isso, uma mensagem sua por fora do painel vira contato externo.</p>
+    @for (row of ownerRows(); track row.key) {
+      <div class="owner-row">
+        <span class="owner-label">{{ row.label }}</span>
+        @if (row.linked) {
+          <span class="owner-value">{{ row.value }}</span>
+        } @else if (row.editing) {
+          <div class="owner-edit">
+            <input [ngModel]="ownerDraft()[row.key]" (ngModelChange)="setOwnerDraft(row.key, $event)" placeholder="somente números" />
+            <button (click)="saveOwnerLink(row.key)">Salvar</button>
+          </div>
+        } @else if (row.empty) {
+          <button class="link-button" (click)="startLinkOwner(row.key)">Vincular</button>
+        }
+      </div>
+    }
+  </div>
+
+  <div class="card">
+    <div class="tokens-head">
+      <div class="card-title">Tokens de API</div>
+      <button class="new-token" (click)="createToken()">+ Novo token</button>
+    </div>
+    @if (newTokenValue()) {
+      <div class="new-token-box">
+        <div class="new-token-warn">Copie agora — não será mostrado novamente</div>
+        <div class="new-token-value">{{ newTokenValue() }}</div>
+      </div>
+    }
+    @if (tokensEmpty()) {
+      <div class="tokens-empty">Nenhum token criado ainda</div>
+    }
+    @for (tok of apiTokens(); track tok.id) {
+      <div class="token-row">
+        <div>
+          <div class="token-label">{{ tok.label || "(sem nome)" }}</div>
+          <div class="token-meta">criado {{ fmtDate(tok.createdAt) }} · usado {{ tok.lastUsedAt ? fmtWhen(tok.lastUsedAt) : "nunca" }}</div>
+        </div>
+        <button class="revoke" (click)="revokeToken(tok.id)">Revogar</button>
+      </div>
+    }
+  </div>
+
+  <div class="card usage-card">
+    <div class="card-title">Consumo (30 dias)</div>
+    <div class="usage-summary">{{ usageSummaryLabel() }}</div>
+    <div class="usage-bars">
+      @for (bar of usageBars(); track $index) {
+        <div class="usage-bar" [title]="bar.title" [style.height.%]="bar.heightPct"></div>
+      }
+    </div>
+    <div class="channel-bars">
+      @if (channelBars().length === 0) {
+        <div class="hint-faint">Nenhuma chamada registrada ainda.</div>
+      }
+      @for (ch of channelBars(); track ch.label) {
+        <div>
+          <div class="channel-bar-head"><span>{{ ch.label }}</span><strong>{{ ch.value }}</strong></div>
+          <div class="channel-bar-track"><div class="channel-bar-fill" [style.width.%]="ch.widthPct"></div></div>
+        </div>
+      }
+    </div>
+  </div>
+</div>

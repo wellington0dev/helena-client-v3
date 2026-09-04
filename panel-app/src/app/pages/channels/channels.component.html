@@ -1,0 +1,46 @@
+<div class="page">
+  <h1>Canais</h1>
+  <p class="subtitle">WhatsApp e Telegram conectados por esta máquina</p>
+
+  <div class="cards">
+    @for (ch of cards(); track ch.key) {
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">
+            <div class="card-icon" [class.icon-whatsapp]="ch.key === 'whatsapp'" [class.icon-telegram]="ch.key === 'telegram'">
+              <app-icon [name]="ch.icon" />
+            </div>
+            <div>
+              <div class="name">{{ ch.name }}</div>
+              <div class="status" [ngClass]="ch.statusClass">{{ ch.statusLabel }}</div>
+            </div>
+          </div>
+          <span class="badge" [ngClass]="ch.statusClass">{{ ch.badgeLabel }}</span>
+        </div>
+
+        @if (ch.showQr) {
+          <div class="qr-box">
+            @if (ch.qrDataUrl) {
+              <img [src]="ch.qrDataUrl" alt="QR do WhatsApp" />
+            } @else if (ch.qrPending) {
+              <div class="qr-placeholder">gerando QR…</div>
+            }
+            <div class="qr-hint">Escaneie no WhatsApp do celular (Aparelhos conectados → Conectar um aparelho)</div>
+          </div>
+        }
+        @if (ch.showConnecting) {
+          <div class="hint">Conectando à sessão salva desta máquina…</div>
+        }
+        @if (ch.showConnected) {
+          <div class="hint">Conectado nesta máquina.</div>
+        }
+        @if (ch.showError) {
+          <div class="error-box">{{ ch.errorMessage }}</div>
+        }
+        @if (ch.showDisconnectedHint) {
+          <div class="hint-faint">{{ ch.disconnectedHint }}</div>
+        }
+      </div>
+    }
+  </div>
+</div>

@@ -1,0 +1,82 @@
+/* Paleta idêntica ao design importado do Claude Design (Helena Panel.dc.html) — dark é o padrão (ThemeService.readInitial()), light por atributo. */
+:root {
+  --bg: #0a1420;
+  --surface: #111d2e;
+  --surface-raised: #16233a;
+  --border: #22314a;
+  --text: #eef3fa;
+  --text-muted: #8fa2bd;
+  --text-faint: #5c6f8c;
+  --accent-solid: #0f93d1;
+  --accent-text: #4cc8ef;
+  --accent-soft: rgba(76, 200, 239, 0.15);
+  --danger: #fb7185;
+  --danger-soft: rgba(251, 113, 133, 0.15);
+  --warn: #fbbf24;
+  --warn-soft: rgba(251, 191, 36, 0.15);
+  --success: #34d399;
+}
+
+:root[data-theme="light"] {
+  --bg: #f2f6fb;
+  --surface: #ffffff;
+  --surface-raised: #eef3f9;
+  --border: #dde6f0;
+  --text: #0d1b2c;
+  --text-muted: #5b6b85;
+  --text-faint: #93a3ba;
+  --accent-solid: #0f93d1;
+  --accent-text: #0c6f9e;
+  --accent-soft: rgba(15, 143, 209, 0.1);
+  --danger: #e11d48;
+  --danger-soft: rgba(225, 29, 72, 0.1);
+  --warn: #b45309;
+  --warn-soft: rgba(180, 83, 9, 0.1);
+  --success: #0f9d68;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  font-family: "Public Sans", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  transition: background 0.25s, color 0.25s;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+input,
+select,
+button,
+textarea {
+  font-family: inherit;
+}
+
+a {
+  color: inherit;
+}
+a:hover {
+  opacity: 0.85;
+}
+
+::selection {
+  background: rgba(34, 195, 234, 0.35);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(140, 160, 190, 0.35);
+  border-radius: 6px;
+}
