@@ -40,6 +40,13 @@ export interface SendMessageResult {
     pending?: PendingConfirmation[];
 }
 
+export interface UploadedDataFile {
+    fileId: string;
+    filename: string;
+    columns: string[];
+    rowCount: number;
+}
+
 /** `offset=0` é sempre a página mais recente — "carregar mais antigas" avança o offset (ver docs/architecture-v2.md e client-panel-brief.md). */
 export const CHAT_PAGE_SIZE = 50;
 
@@ -55,8 +62,15 @@ export class ChatService {
         return firstValueFrom(this.http.get<PaginatedHistory>(`/chat/sessions/${sessionId}/history?limit=${CHAT_PAGE_SIZE}&offset=${offset}`));
     }
 
-    send(text: string, sessionId?: string): Promise<SendMessageResult> {
-        return firstValueFrom(this.http.post<SendMessageResult>("/chat/messages", { text, sessionId }));
+    send(text: string, sessionId?: string, fileId?: string): Promise<SendMessageResult> {
+        return firstValueFrom(this.http.post<SendMessageResult>("/chat/messages", { text, sessionId, fileId }));
+    }
+
+    /** `FormData` — sem header manual (authInterceptor já cuida do Bearer; Content-Type multipart o próprio navegador define, com o boundary certo). */
+    uploadFile(file: File): Promise<UploadedDataFile> {
+        const formData = new FormData();
+        formData.append("file", file);
+        return firstValueFrom(this.http.post<UploadedDataFile>("/data-files/upload", formData));
     }
 
     resolve(sessionId: string, tool: string, ref: string | undefined, approved: boolean, reason?: string): Promise<SendMessageResult> {

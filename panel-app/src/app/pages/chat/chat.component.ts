@@ -1,7 +1,7 @@
 import type { ElementRef } from "@angular/core";
 import { Component, computed, effect, inject, signal, viewChild } from "@angular/core";
 import { FormsModule } from "@angular/forms";
-import type { HistoryEntry, PendingConfirmation } from "../../core/chat.service";
+import type { HistoryEntry, PendingConfirmation, UploadedDataFile } from "../../core/chat.service";
 import { ChatService } from "../../core/chat.service";
 import { ChatUiStateService } from "../../core/chat-ui-state.service";
 import { IconComponent } from "../../shared/icon.component";
@@ -31,9 +31,14 @@ export class ChatComponent {
     private readonly messagesEl = viewChild<ElementRef<HTMLDivElement>>("messagesEl");
     private readonly composerInput = viewChild<ElementRef<HTMLInputElement>>("composerInput");
 
+    private readonly fileInput = viewChild<ElementRef<HTMLInputElement>>("fileInput");
+
     private readonly historyBySession = signal<Record<string, HistoryState>>({});
     protected composerText = "";
     protected readonly chatError = signal("");
+    /** Planilha/CSV anexada nesta composição — some depois de enviada junto de uma mensagem (ver send()), nunca sobrevive entre mensagens. */
+    protected readonly attachedFile = signal<UploadedDataFile | null>(null);
+    protected readonly uploading = signal(false);
 
     private scrollIntent: ScrollIntent = null;
     private scrollHeightBeforeLoad = 0;
@@ -96,6 +101,31 @@ export class ChatComponent {
         void this.loadHistory(id, this.activeHistory().loaded, false);
     }
 
+    triggerAttach(): void {
+        this.fileInput()?.nativeElement.click();
+    }
+
+    async onFileSelected(event: Event): Promise<void> {
+        const input = event.target as HTMLInputElement;
+        const file = input.files?.[0];
+        input.value = ""; // permite escolher o MESMO arquivo de novo depois (change não dispara se o value não mudar).
+        if (!file) return;
+
+        this.chatError.set("");
+        this.uploading.set(true);
+        try {
+            this.attachedFile.set(await this.chat.uploadFile(file));
+        } catch (err) {
+            this.chatError.set(err instanceof Error ? err.message : "Falha ao enviar arquivo.");
+        } finally {
+            this.uploading.set(false);
+        }
+    }
+
+    clearAttachment(): void {
+        this.attachedFile.set(null);
+    }
+
     async send(): Promise<void> {
         const text = this.composerText.trim();
         if (!text) return;
@@ -103,6 +133,8 @@ export class ChatComponent {
         this.chatError.set("");
         this.focusComposer();
         const sessionId = this.chatUi.activeSessionId();
+        const fileId = this.attachedFile()?.fileId;
+        this.attachedFile.set(null);
 
         if (sessionId) {
             this.scrollIntent = "bottom";
@@ -113,7 +145,7 @@ export class ChatComponent {
         }
 
         try {
-            const res = await this.chat.send(text, sessionId ?? undefined);
+            const res = await this.chat.send(text, sessionId ?? undefined, fileId);
             const newId = res.sessionId;
             this.scrollIntent = "bottom";
             this.historyBySession.update((map) => {

@@ -39,7 +39,23 @@
     <div class="chat-error">{{ chatError() }}</div>
   }
 
+  @if (attachedFile(); as file) {
+    <div class="attachment-chip">
+      <app-icon name="paperclip" />
+      <span class="attachment-name">{{ file.filename }}</span>
+      <span class="attachment-meta">{{ file.columns.length }} colunas, {{ file.rowCount }} linhas</span>
+      <button class="attachment-remove" (click)="clearAttachment()" title="Remover anexo" aria-label="Remover anexo">
+        <app-icon name="close" />
+      </button>
+    </div>
+  }
+
+  <input #fileInput type="file" accept=".csv,.xlsx" class="file-input-hidden" (change)="onFileSelected($event)" />
+
   <div class="composer">
+    <button class="attach-button" (click)="triggerAttach()" [disabled]="uploading() || !!activeHistory().pending" title="Anexar planilha/CSV" aria-label="Anexar planilha/CSV">
+      <app-icon name="paperclip" />
+    </button>
     <input
       #composerInput
       [(ngModel)]="composerText"

@@ -140,6 +140,62 @@
   color: var(--danger);
 }
 
+.file-input-hidden {
+  display: none;
+}
+
+.attachment-chip {
+  flex-shrink: 0;
+  margin: 0 24px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 12.5px;
+}
+.attachment-name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.attachment-meta {
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+.attachment-remove {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  flex-shrink: 0;
+}
+
+.attach-button {
+  flex-shrink: 0;
+  width: 38px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.attach-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .composer {
   flex-shrink: 0;
   padding: 16px 24px;
@@ -183,6 +239,10 @@
   .chat-error {
     padding-left: 14px;
     padding-right: 14px;
+  }
+  .attachment-chip {
+    margin-left: 14px;
+    margin-right: 14px;
   }
   /* 62%/74% de uma tela de celular sobra pouco espaço útil pra texto — mensagens curtas quebram cedo demais. */
   .message-col {
