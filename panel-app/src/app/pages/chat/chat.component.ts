@@ -1,10 +1,13 @@
 import type { ElementRef } from "@angular/core";
 import { Component, computed, effect, inject, signal, viewChild } from "@angular/core";
 import { FormsModule } from "@angular/forms";
+import { DomSanitizer, type SafeHtml } from "@angular/platform-browser";
+import { API_BASE_URL } from "../../core/api-base.token";
 import type { HistoryEntry, PendingConfirmation, UploadedDataFile } from "../../core/chat.service";
 import { ChatService } from "../../core/chat.service";
 import { ChatUiStateService } from "../../core/chat-ui-state.service";
 import { IconComponent } from "../../shared/icon.component";
+import { renderMessageHtml } from "../../shared/markdown-html";
 
 interface HistoryState {
     entries: HistoryEntry[];
@@ -27,6 +30,8 @@ const EMPTY_HISTORY: HistoryState = { entries: [], total: 0, loaded: 0, pending:
 export class ChatComponent {
     private readonly chat = inject(ChatService);
     protected readonly chatUi = inject(ChatUiStateService);
+    private readonly sanitizer = inject(DomSanitizer);
+    private readonly apiBaseUrl = inject(API_BASE_URL);
 
     private readonly messagesEl = viewChild<ElementRef<HTMLDivElement>>("messagesEl");
     private readonly composerInput = viewChild<ElementRef<HTMLInputElement>>("composerInput");
@@ -191,6 +196,11 @@ export class ChatComponent {
 
     pendingInputLabel(pending: PendingConfirmation): string {
         return JSON.stringify(pending.input, null, 2);
+    }
+
+    /** Markdown → HTML seguro (negrito/link/lista/etc — ver shared/markdown-html.ts). `bypassSecurityTrustHtml` é seguro aqui porque quem monta o HTML já escapa todo texto e valida esquema de URL antes — nunca passa o texto cru direto. */
+    renderedText(text: string): SafeHtml {
+        return this.sanitizer.bypassSecurityTrustHtml(renderMessageHtml(text, this.apiBaseUrl));
     }
 
     private focusComposer(): void {

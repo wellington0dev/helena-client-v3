@@ -16,7 +16,7 @@
           @if (msg.senderName) {
             <div class="sender">{{ msg.senderName }}</div>
           }
-          <div class="bubble" [class.bubble-user]="msg.role === 'user'">{{ msg.text }}</div>
+          <div class="bubble" [class.bubble-user]="msg.role === 'user'" [innerHTML]="renderedText(msg.text)"></div>
         </div>
       </div>
     }

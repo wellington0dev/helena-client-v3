@@ -80,3 +80,63 @@ a:hover {
   background: rgba(140, 160, 190, 0.35);
   border-radius: 6px;
 }
+
+/*
+ * Elementos que .bubble injeta via [innerHTML] (ver shared/markdown-html.ts)
+ * — moram no CSS global de propósito: Angular emulated view encapsulation só
+ * cobre nós que o próprio compilador do template gerou; conteúdo de
+ * innerHTML nunca ganha o atributo _ngcontent-*, então uma regra ESCOPADA
+ * em chat.component.css (ex: ".bubble p") nunca bateria nesses elementos.
+ */
+.bubble p {
+  margin: 0 0 8px;
+}
+.bubble p:last-child {
+  margin-bottom: 0;
+}
+.bubble a {
+  color: inherit;
+  text-decoration: underline;
+}
+.bubble code {
+  background: rgba(0, 0, 0, 0.15);
+  padding: 1px 4px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.9em;
+}
+.bubble pre {
+  background: rgba(0, 0, 0, 0.15);
+  padding: 8px 10px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 0 0 8px;
+}
+.bubble pre code {
+  background: none;
+  padding: 0;
+}
+.bubble ul,
+.bubble ol {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+.bubble h1,
+.bubble h2,
+.bubble h3 {
+  margin: 0 0 6px;
+  font-size: 1em;
+  font-weight: 700;
+}
+.bubble hr {
+  border: none;
+  border-top: 1px solid currentColor;
+  opacity: 0.3;
+  margin: 8px 0;
+}
+.bubble .message-image {
+  max-width: 100%;
+  border-radius: 8px;
+  margin: 4px 0;
+  display: block;
+}
