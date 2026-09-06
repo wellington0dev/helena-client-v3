@@ -140,3 +140,32 @@ a:hover {
   margin: 4px 0;
   display: block;
 }
+.bubble .file-preview-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  margin: 4px 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+}
+.bubble .file-preview-card:hover {
+  background: rgba(0, 0, 0, 0.22);
+}
+.bubble .file-preview-icon {
+  font-size: 1.1em;
+  line-height: 1;
+}
+.bubble .file-preview-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bubble .file-preview-thumb {
+  max-width: 160px;
+  max-height: 160px;
+  border-radius: 8px;
+  display: block;
+}

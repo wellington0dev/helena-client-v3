@@ -40,11 +40,22 @@ export interface SendMessageResult {
     pending?: PendingConfirmation[];
 }
 
+export type DataFileKind = "csv" | "xlsx" | "image";
+
 export interface UploadedDataFile {
     fileId: string;
     filename: string;
+    kind: DataFileKind;
+    downloadUrl: string;
+    /** Só presente pra kind "csv"/"xlsx" — imagem não tem coluna/linha. */
+    columns?: string[];
+    rowCount?: number;
+}
+
+export interface DataFilePreview {
     columns: string[];
-    rowCount: number;
+    rows: (string | number | null)[][];
+    totalRows: number;
 }
 
 /** `offset=0` é sempre a página mais recente — "carregar mais antigas" avança o offset (ver docs/architecture-v2.md e client-panel-brief.md). */
@@ -71,6 +82,11 @@ export class ChatService {
         const formData = new FormData();
         formData.append("file", file);
         return firstValueFrom(this.http.post<UploadedDataFile>("/data-files/upload", formData));
+    }
+
+    /** Primeiras linhas de uma planilha já enviada — pro modal de preview (nunca chamado pra imagem, que não tem linha nenhuma). */
+    previewRows(fileId: string): Promise<DataFilePreview | { error: string }> {
+        return firstValueFrom(this.http.get<DataFilePreview | { error: string }>(`/data-files/${fileId}/preview`));
     }
 
     resolve(sessionId: string, tool: string, ref: string | undefined, approved: boolean, reason?: string): Promise<SendMessageResult> {

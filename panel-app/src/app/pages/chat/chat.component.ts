@@ -3,9 +3,10 @@ import { Component, computed, effect, inject, signal, viewChild } from "@angular
 import { FormsModule } from "@angular/forms";
 import { DomSanitizer, type SafeHtml } from "@angular/platform-browser";
 import { API_BASE_URL } from "../../core/api-base.token";
-import type { HistoryEntry, PendingConfirmation, UploadedDataFile } from "../../core/chat.service";
+import type { DataFileKind, HistoryEntry, PendingConfirmation, UploadedDataFile } from "../../core/chat.service";
 import { ChatService } from "../../core/chat.service";
 import { ChatUiStateService } from "../../core/chat-ui-state.service";
+import { FilePreviewModalComponent, type ModalFile } from "../../shared/file-preview-modal.component";
 import { IconComponent } from "../../shared/icon.component";
 import { renderMessageHtml } from "../../shared/markdown-html";
 
@@ -23,7 +24,7 @@ const EMPTY_HISTORY: HistoryState = { entries: [], total: 0, loaded: 0, pending:
 
 @Component({
     selector: "app-chat",
-    imports: [FormsModule, IconComponent],
+    imports: [FormsModule, IconComponent, FilePreviewModalComponent],
     templateUrl: "./chat.component.html",
     styleUrl: "./chat.component.css",
 })
@@ -44,6 +45,8 @@ export class ChatComponent {
     /** Planilha/CSV anexada nesta composição — some depois de enviada junto de uma mensagem (ver send()), nunca sobrevive entre mensagens. */
     protected readonly attachedFile = signal<UploadedDataFile | null>(null);
     protected readonly uploading = signal(false);
+    /** Card clicado numa bolha (delegação de evento — ver onBubbleClick) — null quando o modal está fechado. */
+    protected readonly activeModal = signal<ModalFile | null>(null);
 
     private scrollIntent: ScrollIntent = null;
     private scrollHeightBeforeLoad = 0;
@@ -138,14 +141,15 @@ export class ChatComponent {
         this.chatError.set("");
         this.focusComposer();
         const sessionId = this.chatUi.activeSessionId();
-        const fileId = this.attachedFile()?.fileId;
+        const file = this.attachedFile();
+        const fileId = file?.fileId;
         this.attachedFile.set(null);
 
         if (sessionId) {
             this.scrollIntent = "bottom";
             this.historyBySession.update((map) => {
                 const h = map[sessionId] ?? EMPTY_HISTORY;
-                return { ...map, [sessionId]: { ...h, entries: [...h.entries, this.localEntry(sessionId, "user", text)] } };
+                return { ...map, [sessionId]: { ...h, entries: [...h.entries, this.localEntry(sessionId, "user", text, file)] } };
             });
         }
 
@@ -155,7 +159,7 @@ export class ChatComponent {
             this.scrollIntent = "bottom";
             this.historyBySession.update((map) => {
                 const h = map[newId] ?? EMPTY_HISTORY;
-                const entries = sessionId ? h.entries : [...h.entries, this.localEntry(newId, "user", text)];
+                const entries = sessionId ? h.entries : [...h.entries, this.localEntry(newId, "user", text, file)];
                 return {
                     ...map,
                     [newId]: {
@@ -203,11 +207,35 @@ export class ChatComponent {
         return this.sanitizer.bypassSecurityTrustHtml(renderMessageHtml(text, this.apiBaseUrl));
     }
 
+    /**
+     * O card de preview vive dentro de HTML injetado via `[innerHTML]` — um
+     * `(click)` do Angular no próprio card nunca dispararia. Em vez disso um
+     * único listener na bolha (delegação de evento) sobe a árvore a partir
+     * de `event.target` até achar `.file-preview-card` e lê os `data-*`.
+     */
+    onBubbleClick(event: Event): void {
+        const target = event.target as HTMLElement | null;
+        const card = target?.closest(".file-preview-card") as HTMLElement | null;
+        if (!card) return;
+        const { fileId, kind, downloadUrl, filename } = card.dataset;
+        if (!fileId || !kind || !downloadUrl || !filename) return;
+        this.activeModal.set({ fileId, kind: kind as DataFileKind, downloadUrl, filename });
+    }
+
     private focusComposer(): void {
         queueMicrotask(() => this.composerInput()?.nativeElement.focus());
     }
 
-    private localEntry(sessionId: string, role: "user" | "assistant", text: string): HistoryEntry {
-        return { id: `local-${role}-${Date.now()}-${Math.random()}`, sessionId, userId: "", role, text, createdAt: new Date().toISOString() };
+    /**
+     * `file`, quando presente, vira um link markdown `[nome](url)` concatenado
+     * ao texto — passa pelo MESMO `renderMessageHtml` que qualquer mensagem
+     * (ver template), então o eco local ganha o preview-card de graça, sem
+     * precisar montar HTML na mão aqui. Só existe nesta carga de página — o
+     * histórico persistido no backend não guarda referência a arquivo por
+     * mensagem, recarregar perde esse eco (limitação conhecida, aceita).
+     */
+    private localEntry(sessionId: string, role: "user" | "assistant", text: string, file?: UploadedDataFile | null): HistoryEntry {
+        const fullText = file ? `${text}\n\n[${file.filename}](${file.downloadUrl})` : text;
+        return { id: `local-${role}-${Date.now()}-${Math.random()}`, sessionId, userId: "", role, text: fullText, createdAt: new Date().toISOString() };
     }
 }

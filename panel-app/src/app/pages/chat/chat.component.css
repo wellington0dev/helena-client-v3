@@ -167,6 +167,13 @@
   color: var(--text-faint);
   flex-shrink: 0;
 }
+.attachment-thumb {
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
 .attachment-remove {
   margin-left: auto;
   background: transparent;

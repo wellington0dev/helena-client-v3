@@ -21,14 +21,36 @@ describe("renderMessageHtml", () => {
         expect(html).toContain('<a href="https://exemplo.com/arquivo.csv"');
     });
 
-    it("caminho relativo (/data-files/...) cru vira link ABSOLUTO (resolvido contra apiBaseUrl, não a origem do painel)", () => {
-        const html = renderMessageHtml("Link: /data-files/abc123/download?token=xyz", BASE);
-        expect(html).toContain(`href="${BASE}/data-files/abc123/download?token=xyz"`);
+    it("link pra /data-files/.../download vira um preview-card, não um <a> pelado — data-download-url resolvido contra apiBaseUrl", () => {
+        const html = renderMessageHtml("[relatorio.csv](/data-files/abc123/download?token=xyz)", BASE);
+        expect(html).not.toContain("<a ");
+        expect(html).toContain('class="file-preview-card"');
+        expect(html).toContain('data-file-id="abc123"');
+        expect(html).toContain(`data-download-url="${BASE}/data-files/abc123/download?token=xyz"`);
     });
 
-    it("link markdown com caminho relativo também resolve contra apiBaseUrl", () => {
-        const html = renderMessageHtml("[arquivo.csv](/data-files/abc123/download?token=xyz)", BASE);
-        expect(html).toContain(`href="${BASE}/data-files/abc123/download?token=xyz"`);
+    it("link CRU (sem markdown) pra /data-files/.../download também vira card (via auto-linkify + detecção)", () => {
+        const html = renderMessageHtml("Link: /data-files/abc123/download?token=xyz", BASE);
+        expect(html).toContain('class="file-preview-card"');
+    });
+
+    it("kind do card vem da EXTENSÃO do texto do link: .csv/.xlsx viram ícone, imagem vira <img> thumbnail", () => {
+        const csv = renderMessageHtml("[vendas.csv](/data-files/1/download?token=t)", BASE);
+        expect(csv).toContain('data-kind="csv"');
+        expect(csv).toContain("📄");
+
+        const xlsx = renderMessageHtml("[vendas.xlsx](/data-files/2/download?token=t)", BASE);
+        expect(xlsx).toContain('data-kind="xlsx"');
+        expect(xlsx).toContain("📊");
+
+        const image = renderMessageHtml("[foto.jpg](/data-files/3/download?token=t)", BASE);
+        expect(image).toContain('data-kind="image"');
+        expect(image).toContain('<img src="' + BASE + '/data-files/3/download?token=t"');
+    });
+
+    it("texto do link sem extensão reconhecida vira kind genérico 'file'", () => {
+        const html = renderMessageHtml("[aqui](/data-files/4/download?token=t)", BASE);
+        expect(html).toContain('data-kind="file"');
     });
 
     it("esquema perigoso (javascript:) nunca vira href — cai pro texto puro", () => {

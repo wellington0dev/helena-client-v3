@@ -16,7 +16,7 @@
           @if (msg.senderName) {
             <div class="sender">{{ msg.senderName }}</div>
           }
-          <div class="bubble" [class.bubble-user]="msg.role === 'user'" [innerHTML]="renderedText(msg.text)"></div>
+          <div class="bubble" [class.bubble-user]="msg.role === 'user'" [innerHTML]="renderedText(msg.text)" (click)="onBubbleClick($event)"></div>
         </div>
       </div>
     }
@@ -41,19 +41,23 @@
 
   @if (attachedFile(); as file) {
     <div class="attachment-chip">
-      <app-icon name="paperclip" />
+      @if (file.kind === "image") {
+        <img [src]="file.downloadUrl" [alt]="file.filename" class="attachment-thumb" />
+      } @else {
+        <app-icon name="paperclip" />
+        <span class="attachment-meta">{{ file.columns?.length }} colunas, {{ file.rowCount }} linhas</span>
+      }
       <span class="attachment-name">{{ file.filename }}</span>
-      <span class="attachment-meta">{{ file.columns.length }} colunas, {{ file.rowCount }} linhas</span>
       <button class="attachment-remove" (click)="clearAttachment()" title="Remover anexo" aria-label="Remover anexo">
         <app-icon name="close" />
       </button>
     </div>
   }
 
-  <input #fileInput type="file" accept=".csv,.xlsx" class="file-input-hidden" (change)="onFileSelected($event)" />
+  <input #fileInput type="file" accept=".csv,.xlsx,image/*" class="file-input-hidden" (change)="onFileSelected($event)" />
 
   <div class="composer">
-    <button class="attach-button" (click)="triggerAttach()" [disabled]="uploading() || !!activeHistory().pending" title="Anexar planilha/CSV" aria-label="Anexar planilha/CSV">
+    <button class="attach-button" (click)="triggerAttach()" [disabled]="uploading() || !!activeHistory().pending" title="Anexar planilha, CSV ou foto" aria-label="Anexar planilha, CSV ou foto">
       <app-icon name="paperclip" />
     </button>
     <input
@@ -65,4 +69,8 @@
     />
     <button (click)="send()" [disabled]="!!activeHistory().pending">Enviar</button>
   </div>
+
+  @if (activeModal(); as modal) {
+    <app-file-preview-modal [file]="modal" (closed)="activeModal.set(null)" />
+  }
 </div>

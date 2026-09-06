@@ -28,6 +28,31 @@ function isSafeUrl(url: string): boolean {
     return /^https?:\/\//.test(url) || url.startsWith("/");
 }
 
+/** Reconhece um link de download do backend-v2 (POST /data-files/upload, analyze_data/standardize_data) — vira um preview-card em vez de um <a> pelado. Casa a URL crua (relativa ou absoluta, tanto faz — o path é o mesmo nos dois casos). */
+const DATA_FILE_LINK_PATTERN = /\/data-files\/([^/?]+)\/download(?:\?|$)/;
+
+function matchDataFileId(url: string): string | undefined {
+    return DATA_FILE_LINK_PATTERN.exec(url)?.[1];
+}
+
+const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "gif"]);
+
+/** Só o BACKEND sabe o mimeType de verdade — o renderer infere pela extensão do nome (texto do link) porque é tudo que tem disponível aqui; por isso as tools são instruídas a sempre usar o filename real como texto do link (ver data-files.tools.ts). */
+function kindFromLinkText(text: string): "image" | "csv" | "xlsx" | "file" {
+    const ext = text.toLowerCase().split(".").pop() ?? "";
+    if (IMAGE_EXTENSIONS.has(ext)) return "image";
+    if (ext === "xlsx") return "xlsx";
+    if (ext === "csv") return "csv";
+    return "file";
+}
+
+function renderFilePreviewCard(fileId: string, kind: string, downloadUrl: string, filename: string): string {
+    const url = escapeHtml(downloadUrl);
+    const name = escapeHtml(filename);
+    const body = kind === "image" ? `<img src="${url}" alt="${name}" class="file-preview-thumb" />` : `<span class="file-preview-icon">${kind === "xlsx" ? "📊" : "📄"}</span><span class="file-preview-name">${name}</span>`;
+    return `<div class="file-preview-card" data-file-id="${escapeHtml(fileId)}" data-kind="${escapeHtml(kind)}" data-download-url="${url}" data-filename="${name}">${body}</div>`;
+}
+
 function renderInlineNode(node: InlineNode, apiBaseUrl: string): string {
     switch (node.kind) {
         case "text":
@@ -41,6 +66,8 @@ function renderInlineNode(node: InlineNode, apiBaseUrl: string): string {
         case "link": {
             if (!isSafeUrl(node.url)) return escapeHtml(node.text);
             const href = resolveUrl(node.url, apiBaseUrl);
+            const fileId = matchDataFileId(node.url);
+            if (fileId) return renderFilePreviewCard(fileId, kindFromLinkText(node.text), href, node.text);
             return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(node.text)}</a>`;
         }
         case "image": {
