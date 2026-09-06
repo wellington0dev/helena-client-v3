@@ -2,6 +2,11 @@
   padding: 28px 36px;
   max-width: 800px;
 }
+@media (max-width: 600px) {
+  .page {
+    padding: 20px 16px;
+  }
+}
 h1 {
   font-family: "Space Grotesk", sans-serif;
   font-size: 24px;

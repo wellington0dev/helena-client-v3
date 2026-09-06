@@ -24,6 +24,17 @@ h1 {
   .grid2 {
     grid-template-columns: 1fr;
   }
+  .page {
+    padding: 20px 16px 32px;
+  }
+  .owner-edit {
+    flex-wrap: wrap;
+  }
+  .owner-edit input {
+    width: auto;
+    flex: 1;
+    min-width: 0;
+  }
 }
 
 .card {

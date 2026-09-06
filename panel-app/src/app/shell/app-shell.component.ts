@@ -1,4 +1,4 @@
-import { Component, computed, inject } from "@angular/core";
+import { Component, computed, inject, signal } from "@angular/core";
 import { RouterLink, RouterLinkActive, RouterOutlet } from "@angular/router";
 import { ChatUiStateService } from "../core/chat-ui-state.service";
 import { AuthService } from "../core/auth.service";
@@ -30,6 +30,9 @@ export class AppShellComponent {
         { path: "/perfil", label: "Perfil", icon: "profile" },
     ];
 
+    /** Sidebar vira um drawer off-canvas abaixo do breakpoint mobile (ver app-shell.component.css) — fechado por padrão, mesmo se a pessoa girar a tela ou navegar; nunca persiste entre sessões, é só estado de UI momentâneo. */
+    protected readonly sidebarOpen = signal(false);
+
     protected readonly me = computed(() => {
         const user = this.auth.currentUser();
         if (!user) return { initial: "", name: "", email: "" };
@@ -43,6 +46,15 @@ export class AppShellComponent {
 
     selectSession(id: string): void {
         this.chatUi.selectSession(id);
+        this.closeSidebar();
+    }
+
+    toggleSidebar(): void {
+        this.sidebarOpen.update((open) => !open);
+    }
+
+    closeSidebar(): void {
+        this.sidebarOpen.set(false);
     }
 
     fmtWhen(iso: string): string {

@@ -1,5 +1,16 @@
 <div class="shell">
-  <aside class="sidebar">
+  <header class="topbar">
+    <button (click)="toggleSidebar()" class="menu-button" title="Menu" aria-label="Abrir menu">
+      <app-icon name="menu" />
+    </button>
+    <span class="topbar-brand">Helena</span>
+  </header>
+
+  @if (sidebarOpen()) {
+    <div class="backdrop" (click)="closeSidebar()"></div>
+  }
+
+  <aside class="sidebar" [class.sidebar-open]="sidebarOpen()">
     <div class="brand">
       <div class="brand-mark">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -8,11 +19,14 @@
         </svg>
       </div>
       <span class="brand-name">Helena</span>
+      <button (click)="closeSidebar()" class="close-button" title="Fechar menu" aria-label="Fechar menu">
+        <app-icon name="close" />
+      </button>
     </div>
 
     <nav class="nav">
       @for (item of navItems; track item.path) {
-        <a [routerLink]="item.path" routerLinkActive="nav-active" class="nav-item">
+        <a [routerLink]="item.path" routerLinkActive="nav-active" (click)="closeSidebar()" class="nav-item">
           <app-icon [name]="item.icon" />
           {{ item.label }}
         </a>
@@ -22,7 +36,7 @@
     <div class="conversations">
       <div class="conversations-head">
         <span>Conversas</span>
-        <a routerLink="/chat" (click)="chatUi.newConversation()" class="new-conversation" title="Nova conversa">+</a>
+        <a routerLink="/chat" (click)="chatUi.newConversation(); closeSidebar()" class="new-conversation" title="Nova conversa">+</a>
       </div>
       <div class="conversations-list">
         @if (chatUi.sessions().length === 0) {

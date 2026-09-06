@@ -172,3 +172,23 @@
   opacity: 0.6;
   cursor: default;
 }
+
+@media (max-width: 640px) {
+  .chat-header,
+  .messages,
+  .composer {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+  .chat-error {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+  /* 62%/74% de uma tela de celular sobra pouco espaço útil pra texto — mensagens curtas quebram cedo demais. */
+  .message-col {
+    max-width: 86%;
+  }
+  .pending-card {
+    max-width: 92%;
+  }
+}
