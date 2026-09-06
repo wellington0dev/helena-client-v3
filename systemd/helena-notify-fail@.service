@@ -1,0 +1,11 @@
+[Unit]
+Description=Helena — notifica falha de %i (crash-loop)
+# Disparado via OnFailure= do helena-client.service quando ele estoura o
+# StartLimit e o systemd desiste de reiniciar. %i = nome do unit que falhou.
+
+[Service]
+Type=oneshot
+# @NOTIFYSEND@ é o caminho absoluto do notify-send, preenchido pelo install.
+# Só aparece com sessão gráfica ativa (daemon de notificação) — limitação
+# conhecida, aceitável. Falha silenciosa sem sessão.
+ExecStart=@NOTIFYSEND@ "Helena: serviço caiu" "%i estourou o limite de restart (crash-loop). Veja: journalctl --user -u %i -e"

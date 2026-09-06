@@ -1,0 +1,22 @@
+[Unit]
+Description=Helena — client (WhatsApp/Telegram, painel local, execução de comando remoto)
+After=network-online.target
+Wants=network-online.target
+# Trava restart-loop de falha real (ex: .env quebrado -> exit 1). Uma saída
+# limpa (exit 0) é sucesso e nunca conta como falha aqui.
+StartLimitIntervalSec=120
+StartLimitBurst=5
+# Quando o systemd desiste (crash-loop), dispara a notificação de falha.
+OnFailure=helena-notify-fail@%n.service
+
+[Service]
+Type=simple
+# Caminhos absolutos preenchidos pelo install.sh. WorkingDirectory garante
+# que o dotenv ache o .env do client/.
+WorkingDirectory=@WORKDIR@
+ExecStart=@NODE@ src/main.ts
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

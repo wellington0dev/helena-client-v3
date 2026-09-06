@@ -3,11 +3,16 @@
   "version": "0.1.0",
   "description": "Serviço local da Helena — substitui o cli/ como dono da configuração de canais (WhatsApp/Telegram) e da conexão com o backend-v2. Sobe um painel web local (QR do WhatsApp no navegador, status dos canais) e faz a ponte de mensagens com o servidor. Ver docs/architecture-v2.md §4.",
   "type": "module",
+  "bin": {
+    "helena": "./bin/helena.js"
+  },
   "scripts": {
     "start": "node src/main.ts",
     "build:panel": "npm --prefix panel-app install && npm --prefix panel-app run build",
     "test": "node --test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "service:install:windows": "node scripts/install-windows-service.js",
+    "service:uninstall:windows": "node scripts/uninstall-windows-service.js"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",

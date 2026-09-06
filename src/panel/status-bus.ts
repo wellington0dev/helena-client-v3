@@ -20,14 +20,22 @@ export interface TelegramState {
     error?: string;
 }
 
+export interface MachineAgentState {
+    status: ChannelStatus;
+    machineName?: string;
+    error?: string;
+}
+
 export interface ClientState {
     whatsapp: WhatsappState;
     telegram: TelegramState;
+    machineAgent: MachineAgentState;
 }
 
 const state: ClientState = {
     whatsapp: { status: "disconnected" },
     telegram: { status: "disconnected" },
+    machineAgent: { status: "disconnected" },
 };
 
 type Listener = (state: ClientState) => void;
@@ -48,6 +56,11 @@ export function updateWhatsapp(patch: Partial<WhatsappState>): void {
 
 export function updateTelegram(patch: Partial<TelegramState>): void {
     Object.assign(state.telegram, patch);
+    notify();
+}
+
+export function updateMachineAgent(patch: Partial<MachineAgentState>): void {
+    Object.assign(state.machineAgent, patch);
     notify();
 }
 
