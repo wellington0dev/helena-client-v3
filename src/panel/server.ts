@@ -29,10 +29,13 @@ function resolveStaticFile(urlPath: string): string | null {
  * Servidor local do painel — HTTP simples (arquivos estáticos do Angular já
  * buildado, com fallback de SPA pra qualquer rota do Router, ex: `/chat`,
  * `/perfil`) + WebSocket pra empurrar o estado dos canais (status, QR) ao
- * vivo pro navegador. Roda só em localhost por padrão — este processo tem
- * acesso à sessão do WhatsApp/token do Telegram do dono da máquina, então
- * nunca deveria ficar exposto na rede sem mais nenhuma camada de auth (fica
- * como nota pra quando isto crescer além de "só eu na minha máquina").
+ * vivo pro navegador. Escuta em 0.0.0.0 (decisão explícita, 2026-09-07) —
+ * este processo tem acesso à sessão do WhatsApp/token do Telegram do dono
+ * da máquina, então isso só é seguro porque a máquina só é alcançável pela
+ * rede privada da VPN (Tailscale) e não pela internet pública. Este
+ * servidor em si não tem autenticação própria (quem alcançar a porta vê o
+ * painel) — se algum dia a máquina ficar exposta fora da VPN, volte isto
+ * pra "127.0.0.1" ou adicione auth aqui.
  */
 export function startPanelServer(port: number, backendUrl: string): void {
     const server = createServer((req, res) => {
@@ -67,7 +70,7 @@ export function startPanelServer(port: number, backendUrl: string): void {
         }
     });
 
-    server.listen(port, "127.0.0.1", () => {
-        console.log(`[painel] disponível em http://localhost:${port}`);
+    server.listen(port, "0.0.0.0", () => {
+        console.log(`[painel] disponível em http://localhost:${port} (e em qualquer IP desta máquina na VPN, porta ${port})`);
     });
 }
