@@ -16,7 +16,7 @@ Cada terceiro (uma loja, um CRM, um ERP) pode hospedar o **próprio servidor MCP
 
 É o mecanismo de "plugin": um jeito de estender o que a Helena sabe fazer sem esperar uma atualização dela.
 
-**Importante**: hoje o cadastro de uma conexão é só por API (chamadas abaixo) — ainda não tem um formulário aqui no painel. Isso está no roadmap.
+Use o formulário acima pra cadastrar/editar/remover conexões — o guia abaixo é só sobre como CONSTRUIR o servidor MCP em si (o "seu-servidor.exemplo.com/mcp" que você vai colar lá em cima).
 
 ## 1. O que a Helena espera do seu servidor
 
@@ -154,7 +154,7 @@ Se o passo 3 devolver suas tools com nome/descrição/schema certos, seu servido
 
 ## 5. Registrando na Helena
 
-Os comandos abaixo já vêm com a URL da sua Helena e o seu token de agora preenchidos — é só trocar \`name\`/\`serverUrl\`/\`authToken\` pelos do seu servidor.
+O jeito mais simples é o formulário no topo desta página. Se preferir automatizar (scripts de setup, CI, etc), os comandos abaixo já vêm com a URL da sua Helena e o seu token de agora preenchidos — é só trocar \`name\`/\`serverUrl\`/\`authToken\` pelos do seu servidor.
 
 \`\`\`bash
 curl -X POST ${base}/mcp-connections \\
@@ -189,7 +189,6 @@ ${jwt ? "" : "> Faça login pra ver seu token preenchido automaticamente aqui.\n
 
 ## Fora do escopo (por enquanto)
 
-- Formulário no painel pra gerenciar conexões (só API por ora).
 - Transporte \`stdio\`/processo local — decisão de segurança permanente, não só "ainda não implementado".
 - A Helena hospedar o PRÓPRIO servidor MCP pra outros consumirem — hoje ela é só cliente.
 `.trim();
