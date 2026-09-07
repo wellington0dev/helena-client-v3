@@ -131,6 +131,11 @@ export class ProfileComponent {
         await this.auth.setTelemetryConsent(next);
     }
 
+    async toggleAutoApproveShell(): Promise<void> {
+        const next = !this.auth.currentUser()?.autoApproveShell;
+        await this.auth.setAutoApproveShell(next);
+    }
+
     startLinkOwner(ch: Channel): void {
         this.ownerEditing.update((s) => ({ ...s, [ch]: true }));
         this.ownerDraft.update((s) => ({ ...s, [ch]: "" }));

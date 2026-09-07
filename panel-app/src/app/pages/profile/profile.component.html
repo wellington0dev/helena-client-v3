@@ -27,6 +27,16 @@
   </div>
 
   <div class="card">
+    <div class="telemetry-head">
+      <div class="card-title">Sempre permitir comandos</div>
+      <button class="toggle" [class.toggle-on]="auth.currentUser()?.autoApproveShell" (click)="toggleAutoApproveShell()">
+        <span class="knob"></span>
+      </button>
+    </div>
+    <p class="hint">Quando a Helena pede pra rodar um comando numa das suas máquinas (fora dos comandos simples de leitura, que já rodam direto), ela normalmente pede sua aprovação antes. Ligando isso, ela roda TODO comando direto, sem perguntar. Só ligue se confia no que pede pra rodar — desligada por padrão.</p>
+  </div>
+
+  <div class="card">
     <div class="card-title">Identidade nos canais</div>
     <p class="hint small">"Este WhatsApp/Telegram sou eu" — sem isso, uma mensagem sua por fora do painel vira contato externo.</p>
     @for (row of ownerRows(); track row.key) {

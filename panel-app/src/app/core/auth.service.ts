@@ -11,6 +11,7 @@ export interface CurrentUser {
     displayName?: string;
     role: UserRole;
     telemetryConsent: boolean;
+    autoApproveShell: boolean;
     whatsappOwnerNumber?: string;
     telegramOwnerId?: string;
     createdAt: string;
@@ -56,6 +57,18 @@ export class AuthService {
         if (prev) this.currentUser.set({ ...prev, telemetryConsent: consent });
         try {
             await firstValueFrom(this.http.patch<{ telemetryConsent: boolean }>("/auth/me/telemetry-consent", { consent }));
+        } catch (err) {
+            if (prev) this.currentUser.set(prev);
+            throw err;
+        }
+    }
+
+    /** Otimista, mesmo padrão de setTelemetryConsent — "sempre permitir" pra tool `shell` (ver machines.tools.ts no backend-v2). */
+    async setAutoApproveShell(enabled: boolean): Promise<void> {
+        const prev = this.currentUser();
+        if (prev) this.currentUser.set({ ...prev, autoApproveShell: enabled });
+        try {
+            await firstValueFrom(this.http.patch<{ autoApproveShell: boolean }>("/auth/me/auto-approve-shell", { enabled }));
         } catch (err) {
             if (prev) this.currentUser.set(prev);
             throw err;
