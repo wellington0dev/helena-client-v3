@@ -3,6 +3,7 @@ import { Component, computed, effect, inject, signal, viewChild } from "@angular
 import { FormsModule } from "@angular/forms";
 import { DomSanitizer, type SafeHtml } from "@angular/platform-browser";
 import { API_BASE_URL } from "../../core/api-base.token";
+import { ChatProgressService } from "../../core/chat-progress.service";
 import type { DataFileKind, HistoryEntry, PendingConfirmation, UploadedDataFile } from "../../core/chat.service";
 import { ChatService } from "../../core/chat.service";
 import { ChatUiStateService } from "../../core/chat-ui-state.service";
@@ -33,6 +34,18 @@ export class ChatComponent {
     protected readonly chatUi = inject(ChatUiStateService);
     private readonly sanitizer = inject(DomSanitizer);
     private readonly apiBaseUrl = inject(API_BASE_URL);
+    private readonly progress = inject(ChatProgressService);
+
+    /** `true` do clique em enviar até a resposta (ou erro) chegar — hoje era a única coisa que faltava pra saber que a Helena está trabalhando. */
+    protected readonly sending = signal(false);
+
+    /** Deriva do último evento de `/ws/chat-progress` — só mostra "chamando ferramenta" enquanto ESTE envio está em voo (turn_end/turn_error de um turno anterior não deixa rastro aqui). */
+    protected readonly statusText = computed(() => {
+        if (!this.sending()) return "";
+        const event = this.progress.latest();
+        if (event?.type === "tool_call") return `Chamando ferramenta: ${event.tool}...`;
+        return "Helena está pensando...";
+    });
 
     private readonly messagesEl = viewChild<ElementRef<HTMLDivElement>>("messagesEl");
     private readonly composerInput = viewChild<ElementRef<HTMLInputElement>>("composerInput");
@@ -153,6 +166,7 @@ export class ChatComponent {
             });
         }
 
+        this.sending.set(true);
         try {
             const res = await this.chat.send(text, sessionId ?? undefined, fileId);
             const newId = res.sessionId;
@@ -175,6 +189,7 @@ export class ChatComponent {
         } catch (err) {
             this.chatError.set(err instanceof Error ? err.message : "Falha ao enviar mensagem.");
         } finally {
+            this.sending.set(false);
             this.focusComposer();
         }
     }
@@ -183,6 +198,7 @@ export class ChatComponent {
         const id = this.chatUi.activeSessionId();
         const pending = this.activeHistory().pending;
         if (!id || !pending) return;
+        this.sending.set(true);
         try {
             const res = await this.chat.resolve(id, pending.tool, pending.ref, approved, approved ? undefined : "Recusado pelo usuário no painel.");
             this.scrollIntent = "bottom";
@@ -195,6 +211,8 @@ export class ChatComponent {
             });
         } catch (err) {
             this.chatError.set(err instanceof Error ? err.message : "Falha ao resolver aprovação.");
+        } finally {
+            this.sending.set(false);
         }
     }
 

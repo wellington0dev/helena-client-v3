@@ -56,18 +56,25 @@
 
   <input #fileInput type="file" accept=".csv,.xlsx,image/*" class="file-input-hidden" (change)="onFileSelected($event)" />
 
+  @if (statusText(); as status) {
+    <div class="chat-status">
+      <span class="chat-status-spinner"></span>
+      {{ status }}
+    </div>
+  }
+
   <div class="composer">
-    <button class="attach-button" (click)="triggerAttach()" [disabled]="uploading() || !!activeHistory().pending" title="Anexar planilha, CSV ou foto" aria-label="Anexar planilha, CSV ou foto">
+    <button class="attach-button" (click)="triggerAttach()" [disabled]="uploading() || sending() || !!activeHistory().pending" title="Anexar planilha, CSV ou foto" aria-label="Anexar planilha, CSV ou foto">
       <app-icon name="paperclip" />
     </button>
     <input
       #composerInput
       [(ngModel)]="composerText"
       (keydown.enter)="send()"
-      [disabled]="!!activeHistory().pending"
+      [disabled]="sending() || !!activeHistory().pending"
       placeholder="Escreva uma mensagem"
     />
-    <button (click)="send()" [disabled]="!!activeHistory().pending">Enviar</button>
+    <button (click)="send()" [disabled]="sending() || !!activeHistory().pending">Enviar</button>
   </div>
 
   @if (activeModal(); as modal) {

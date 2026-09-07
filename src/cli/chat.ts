@@ -1,24 +1,27 @@
 import "dotenv/config";
 import os from "node:os";
-import { createInterface } from "node:readline/promises";
+import { createInterface, type Interface } from "node:readline/promises";
+import React from "react";
+import { render } from "ink";
 import { config } from "../config.ts";
-import { login, resolveInterrupt, sendMessage, UnauthorizedError, type PendingConfirmation, type SendMessageResult } from "./backend.ts";
+import { login } from "./backend.ts";
 import { clearSession, loadSession, saveSession } from "./session-store.ts";
+import { App, type HistoryItem, type SessionOutcome } from "./ink/app.ts";
 
 /**
- * `helena` — REPL interativo, reescrito do zero contra o protocolo REAL do
- * backend-v2 (o `cli/src/chat.ts` antigo falava `/ws/panel`, um protocolo
- * do backend single-owner que não existe mais aqui). Fala EXATAMENTE o
- * mesmo protocolo que o painel Angular fala (login por email/senha, JWT,
- * `/chat/messages`, `/chat/sessions/:id/resolve`) — ver
- * client/panel-app/src/app/core/{auth,chat}.service.ts.
+ * `helena` — REPL interativo com Ink (React pro terminal), inspirado nos
+ * padrões reais do gemini-cli (histórico congelado em `<Static>`, spinner
+ * de status vindo de `/ws/chat-progress` — ver ChatProgressGateway no
+ * backend-v2). `React.createElement` em vez de JSX: ver comentário em
+ * ink/app.ts sobre o modelo "zero build" deste pacote.
  *
- * `cwd`/`machineName` vão em TODO turno — o diretório de onde `helena` foi
- * chamado (HELENA_CLI_CWD, ver bin/helena.js) e o hostname desta máquina.
- * Vira contexto ADVISÓRIO pro modelo (chat.agent.ts), nunca uma restrição.
+ * Login (email/senha) continua por `readline` puro, ANTES de montar o Ink
+ * — reimplementar prompt de senha mascarada dentro do Ink não teria ganho
+ * real. `cwd`/`machineName` vão em TODO turno (ver ink/app.ts), mesmo
+ * contexto advisório de antes.
  */
 
-const rl = createInterface({ input: process.stdin, output: process.stdout });
+const h = React.createElement;
 
 if (!config.backendUrl) {
     console.error("[helena] BACKEND_V2_URL não configurado no .env.");
@@ -27,14 +30,12 @@ if (!config.backendUrl) {
 
 const backendUrl = config.backendUrl;
 // bin/helena.js captura o cwd de ONDE a pessoa chamou `helena`, antes de
-// qualquer spawn mudar o diretório de trabalho do processo — sem isso,
-// process.cwd() aqui devolveria o diretório do pacote client/, não de
-// onde a pessoa realmente está.
+// qualquer spawn mudar o diretório de trabalho do processo.
 const invocationCwd = process.env.HELENA_CLI_CWD || process.cwd();
 const machineName = os.hostname();
 
 /** Prompt de senha sem eco na tela — técnica padrão sem dependência nova: suprime o que o readline escreveria de volta, exceto o próprio prompt e a quebra de linha final. */
-async function questionHidden(query: string): Promise<string> {
+async function questionHidden(rl: Interface, query: string): Promise<string> {
     const rlInternal = rl as unknown as { _writeToOutput?: (s: string) => void; output: NodeJS.WritableStream };
     const original = rlInternal._writeToOutput?.bind(rlInternal);
     rlInternal._writeToOutput = (stringToWrite: string) => {
@@ -48,13 +49,19 @@ async function questionHidden(query: string): Promise<string> {
     }
 }
 
+/** Cria e SEMPRE fecha o próprio `readline.Interface` — precisa liberar o stdin antes do Ink assumir raw mode (ver runInkSession). */
 async function interactiveLogin(): Promise<string> {
-    console.log(`Login na Helena (${backendUrl})`);
-    const email = await rl.question("Email: ");
-    const password = await questionHidden("Senha: ");
-    const token = await login(backendUrl, email.trim(), password);
-    saveSession(token);
-    return token;
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    try {
+        console.log(`Login na Helena (${backendUrl})`);
+        const email = await rl.question("Email: ");
+        const password = await questionHidden(rl, "Senha: ");
+        const token = await login(backendUrl, email.trim(), password);
+        saveSession(token);
+        return token;
+    } finally {
+        rl.close();
+    }
 }
 
 async function ensureSession(): Promise<string> {
@@ -63,74 +70,46 @@ async function ensureSession(): Promise<string> {
     return interactiveLogin();
 }
 
-/** Guarda o token atual — precisa ser mutável porque `withSession` pode relogar no meio do processo e a chamada seguinte tem que usar o token novo. */
-interface SessionBox {
-    token: string;
+/** Monta o app Ink, devolve quando `onDone` disparar (Ctrl+C/Ctrl+D ou sessão expirada) — `unmount()` libera o raw mode do stdin antes do `readline` da próxima relogin poder usá-lo. */
+function runInkSession(token: string, initialHistory: HistoryItem[], initialSessionId: string | undefined): Promise<SessionOutcome> {
+    return new Promise((resolve) => {
+        const instance = render(
+            h(App, {
+                backendUrl,
+                token,
+                invocationCwd,
+                machineName,
+                initialHistory,
+                initialSessionId,
+                onDone: (outcome: SessionOutcome) => {
+                    instance.unmount();
+                    resolve(outcome);
+                },
+            }),
+        );
+    });
 }
-
-/** Roda `action` com o token atual; se der 401, relogar UMA vez, atualizar `box.token`, e tentar de novo (sessão pode ter expirado desde a última vez). */
-async function withSession<T>(box: SessionBox, action: (token: string) => Promise<T>): Promise<T> {
-    try {
-        return await action(box.token);
-    } catch (error) {
-        if (!(error instanceof UnauthorizedError)) throw error;
-        clearSession();
-        console.log("\n[sessão expirada — relogue]");
-        box.token = await interactiveLogin();
-        return action(box.token);
-    }
-}
-
-/** Mesmo comportamento do cartão de confirmação do painel (chat.component.html): tool + input em JSON, aprovar/recusar bloqueia novo envio até resolver. */
-async function resolvePendingLoop(box: SessionBox, sessionId: string, pending: PendingConfirmation): Promise<SendMessageResult> {
-    let currentSessionId = sessionId;
-    let current: PendingConfirmation | undefined = pending;
-    let last: SendMessageResult | undefined;
-
-    while (current) {
-        console.log(`\n[confirmação] a Helena quer usar a tool "${current.tool}" com:`);
-        console.log(JSON.stringify(current.input, null, 2));
-        const answer = (await rl.question("Aprovar? (s/n) ")).trim().toLowerCase();
-        const approved = answer === "s" || answer === "sim";
-
-        last = await withSession(box, (t) => resolveInterrupt(backendUrl, t, currentSessionId, current!.tool, current!.ref, approved, approved ? undefined : "Recusado pelo usuário no CLI."));
-        currentSessionId = last.sessionId;
-        current = last.pending?.[0];
-    }
-
-    return last!;
-}
-
-rl.on("close", () => {
-    console.log("\nAté mais!");
-    process.exit(0);
-});
 
 async function main(): Promise<void> {
-    const box: SessionBox = { token: await ensureSession() };
+    let token = await ensureSession();
     console.log(`Conectado a ${backendUrl} (${invocationCwd}) — digite sua mensagem (Ctrl+C pra sair).\n`);
 
+    let history: HistoryItem[] = [];
     let sessionId: string | undefined;
 
     while (true) {
-        const input = await rl.question("Você: ").catch(() => null);
-        if (input === null) return; // rl 'close' acima já cuida da saída.
-        if (!input.trim()) continue;
-
-        try {
-            const result = await withSession(box, (t) => sendMessage(backendUrl, t, { text: input, sessionId, cwd: invocationCwd, machineName }));
-            sessionId = result.sessionId;
-            console.log(`\nHelena: ${result.text}\n`);
-
-            const firstPending = result.pending?.[0];
-            if (firstPending) {
-                const final = await resolvePendingLoop(box, sessionId, firstPending);
-                sessionId = final.sessionId;
-                console.log(`\nHelena: ${final.text}\n`);
-            }
-        } catch (error) {
-            console.log(`\n[erro inesperado] ${error instanceof Error ? error.message : error}`);
+        const outcome = await runInkSession(token, history, sessionId);
+        if (outcome.type === "exit") {
+            console.log("\nAté mais!");
+            return;
         }
+
+        // relogin — preserva o histórico já mostrado nesta sessão do terminal.
+        history = outcome.history;
+        sessionId = outcome.sessionId;
+        clearSession();
+        console.log("\n[sessão expirada — relogue]");
+        token = await interactiveLogin();
     }
 }
 

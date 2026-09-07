@@ -16,19 +16,25 @@
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
-    "@types/qrcode-terminal": "^0.12.2",
     "@types/qrcode": "^1.5.6",
+    "@types/qrcode-terminal": "^0.12.2",
+    "@types/react": "^19.2.18",
     "@types/ws": "^8.5.13",
     "typescript": "7.0.2"
   },
   "dependencies": {
     "@grammyjs/files": "^1.2.0",
     "baileys": "6.7.24",
+    "chalk": "^6.0.0",
     "dotenv": "^17.4.2",
     "grammy": "^1.46.0",
+    "ink": "^7.1.1",
+    "ink-spinner": "^5.0.0",
+    "ink-text-input": "^6.0.0",
     "pino": "^10.3.1",
     "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
+    "react": "^19.2.8",
     "ws": "^8.21.3"
   },
   "overrides": {
