@@ -1,0 +1,96 @@
+.page {
+  padding: 28px 36px 48px;
+  max-width: 860px;
+}
+h1 {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+.subtitle {
+  margin: 0 0 24px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+@media (max-width: 640px) {
+  .page {
+    padding: 20px 16px 32px;
+  }
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 24px 28px;
+}
+
+.guide {
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--text);
+}
+
+.guide ::ng-deep h2 {
+  font-size: 17px;
+  font-weight: 700;
+  margin: 28px 0 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.guide ::ng-deep h2:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+.guide ::ng-deep h3 {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 18px 0 8px;
+}
+.guide ::ng-deep p {
+  margin: 0 0 12px;
+}
+.guide ::ng-deep ul,
+.guide ::ng-deep ol {
+  margin: 0 0 12px;
+  padding-left: 22px;
+}
+.guide ::ng-deep li {
+  margin-bottom: 4px;
+}
+.guide ::ng-deep code {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 12.5px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+}
+.guide ::ng-deep pre {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  overflow-x: auto;
+  margin: 0 0 14px;
+}
+.guide ::ng-deep pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12.5px;
+  white-space: pre;
+}
+.guide ::ng-deep a {
+  color: var(--accent-text);
+}
+.guide ::ng-deep strong {
+  font-weight: 700;
+}
+.guide ::ng-deep hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 20px 0;
+}

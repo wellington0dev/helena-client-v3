@@ -11,7 +11,7 @@ interface NavItem {
     icon: string;
 }
 
-/** Sidebar fixa (logo, navegação, conversas, conta) + <router-outlet> pras 4 páginas internas — layout compartilhado, ver app.routes.ts. */
+/** Sidebar fixa (logo, navegação, conversas, conta) + <router-outlet> pras páginas internas — layout compartilhado, ver app.routes.ts. */
 @Component({
     selector: "app-shell",
     imports: [RouterLink, RouterLinkActive, RouterOutlet, IconComponent],
@@ -26,6 +26,7 @@ export class AppShellComponent {
     protected readonly navItems: NavItem[] = [
         { path: "/chat", label: "Chat", icon: "chat" },
         { path: "/canais", label: "Canais", icon: "channels" },
+        { path: "/integracoes", label: "Integrações", icon: "plug" },
         { path: "/cobranca", label: "Cobrança", icon: "billing" },
         { path: "/perfil", label: "Perfil", icon: "profile" },
     ];

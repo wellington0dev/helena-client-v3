@@ -15,6 +15,7 @@ export const routes: Routes = [
         children: [
             { path: "chat", loadComponent: () => import("./pages/chat/chat.component").then((m) => m.ChatComponent) },
             { path: "canais", loadComponent: () => import("./pages/channels/channels.component").then((m) => m.ChannelsComponent) },
+            { path: "integracoes", loadComponent: () => import("./pages/mcp-guide/mcp-guide.component").then((m) => m.McpGuideComponent) },
             { path: "perfil", loadComponent: () => import("./pages/profile/profile.component").then((m) => m.ProfileComponent) },
             { path: "cobranca", loadComponent: () => import("./pages/billing/billing.component").then((m) => m.BillingComponent) },
             { path: "", pathMatch: "full", redirectTo: "chat" },

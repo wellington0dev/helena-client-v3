@@ -25,6 +25,7 @@ const ICONS: Record<string, string> = {
     close: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
     paperclip:
         '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21 11.5l-8.5 8.5a4.5 4.5 0 01-6.4-6.4l9-9a3 3 0 014.3 4.3l-8.9 8.9a1.5 1.5 0 01-2.1-2.1l8-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    plug: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M9 3v5M15 3v5M7 8h10l-1 5a4.5 4.5 0 01-9 0L7 8z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 17v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
 };
 
 @Component({
