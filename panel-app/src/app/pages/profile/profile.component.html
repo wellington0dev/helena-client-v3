@@ -33,7 +33,13 @@
         <span class="knob"></span>
       </button>
     </div>
-    <p class="hint">Quando a Helena pede pra rodar um comando numa das suas máquinas (fora dos comandos simples de leitura, que já rodam direto), ela normalmente pede sua aprovação antes. Ligando isso, ela roda TODO comando direto, sem perguntar. Só ligue se confia no que pede pra rodar — desligada por padrão.</p>
+    <p class="hint">Quando a Helena pede pra rodar um comando numa das suas máquinas (fora dos comandos simples de leitura, que já rodam direto), ela normalmente pede sua aprovação antes. Ligando isso, ela roda TODO comando direto, sem perguntar — inclusive um comando que ela decida rodar por conta própria a partir do resultado de uma integração MCP conectada. Só ligue se confia no que pede pra rodar — desligada por padrão.</p>
+    @if (showAutoApproveMcpWarning()) {
+      <p class="warning-banner">
+        <app-icon name="warning" />
+        Você tem "sempre permitir comandos" ligado E pelo menos uma integração MCP ativa. Se essa integração devolver algo malicioso, a Helena pode rodar um comando na sua máquina sem pedir confirmação nenhuma. Veja suas conexões em <a routerLink="/integracoes">Integrações</a>.
+      </p>
+    }
   </div>
 
   <div class="card">

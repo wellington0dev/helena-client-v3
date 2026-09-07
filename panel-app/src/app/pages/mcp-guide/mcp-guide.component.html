@@ -6,6 +6,13 @@
     <div class="banner-error">{{ error() }}</div>
   }
 
+  @if (showAutoApproveWarning()) {
+    <div class="banner-warning">
+      <app-icon name="warning" />
+      Você está com "sempre permitir comandos" ligado (em <a routerLink="/perfil">Perfil</a>). Se uma conexão MCP abaixo devolver conteúdo malicioso, a Helena pode rodar um comando na sua máquina sem pedir confirmação. Só conecte servidores em que você confia.
+    </div>
+  }
+
   <div class="card">
     <div class="card-head">
       <div class="card-title">Suas conexões</div>

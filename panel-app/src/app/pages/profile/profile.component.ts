@@ -1,8 +1,11 @@
 import { Component, computed, inject, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
+import { RouterLink } from "@angular/router";
 import { AuthService } from "../../core/auth.service";
+import { McpConnectionsService } from "../../core/mcp-connections.service";
 import type { ApiTokenSummary, UsageSummary } from "../../core/profile.service";
 import { ProfileService } from "../../core/profile.service";
+import { IconComponent } from "../../shared/icon.component";
 
 type Channel = "whatsapp" | "telegram";
 
@@ -53,19 +56,24 @@ function dayLabel(key: string): string {
 /** Identidade, telemetria, vínculo de canais, tokens de API e uso (30 dias) — tudo do próprio usuário logado. */
 @Component({
     selector: "app-profile",
-    imports: [FormsModule],
+    imports: [FormsModule, RouterLink, IconComponent],
     templateUrl: "./profile.component.html",
     styleUrl: "./profile.component.css",
 })
 export class ProfileComponent {
     protected readonly auth = inject(AuthService);
     private readonly profile = inject(ProfileService);
+    private readonly mcpConnections = inject(McpConnectionsService);
 
     protected readonly apiTokens = signal<ApiTokenSummary[]>([]);
     protected readonly apiTokensLoaded = signal(false);
     protected readonly newTokenValue = signal("");
 
     protected readonly usage = signal<UsageSummary | null>(null);
+
+    /** Só pra alimentar `hasEnabledMcpConnection` — ver aviso no card de "Sempre permitir comandos". */
+    private readonly hasEnabledMcp = signal(false);
+    protected readonly showAutoApproveMcpWarning = computed(() => !!this.auth.currentUser()?.autoApproveShell && this.hasEnabledMcp());
 
     protected readonly ownerEditing = signal<Record<Channel, boolean>>({ whatsapp: false, telegram: false });
     protected readonly ownerDraft = signal<Record<Channel, string>>({ whatsapp: "", telegram: "" });
@@ -121,6 +129,7 @@ export class ProfileComponent {
             this.apiTokensLoaded.set(true);
         });
         void this.profile.usage().then((usage) => this.usage.set(usage));
+        void this.mcpConnections.list().then((connections) => this.hasEnabledMcp.set(connections.some((c) => c.enabled)));
     }
 
     fmtDate = fmtDate;

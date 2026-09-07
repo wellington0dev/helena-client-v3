@@ -2,6 +2,7 @@ import { HttpErrorResponse } from "@angular/common/http";
 import { Component, computed, inject, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { DomSanitizer, type SafeHtml } from "@angular/platform-browser";
+import { RouterLink } from "@angular/router";
 import { API_BASE_URL } from "../../core/api-base.token";
 import { AuthService } from "../../core/auth.service";
 import type { CreateMcpConnectionInput, McpConnectionSummary } from "../../core/mcp-connections.service";
@@ -33,7 +34,7 @@ function extractErrorMessage(err: unknown, fallback: string): string {
  */
 @Component({
     selector: "app-mcp-guide",
-    imports: [FormsModule, IconComponent],
+    imports: [FormsModule, IconComponent, RouterLink],
     templateUrl: "./mcp-guide.component.html",
     styleUrl: "./mcp-guide.component.css",
 })
@@ -51,6 +52,9 @@ export class McpGuideComponent {
     /** `null` = formulário fechado. */
     protected readonly form = signal<ConnectionForm | null>(null);
     protected readonly isEditing = computed(() => !!this.form()?.id);
+
+    /** Ver aviso equivalente em profile.component.ts — mesmo risco, mostrado no outro lado da combinação (aqui: "você já tem auto-approve ligado, cuidado com o que conecta"). */
+    protected readonly showAutoApproveWarning = computed(() => !!this.auth.currentUser()?.autoApproveShell);
 
     protected readonly html = computed<SafeHtml>(() => {
         const markdown = buildMcpGuideMarkdown(this.apiBaseUrl, this.auth.token() ?? "");
