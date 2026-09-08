@@ -1,4 +1,5 @@
 import os from "node:os";
+import { config } from "./config.ts";
 import { runCommand } from "./local-shell.ts";
 import { updateMachineAgent } from "./panel/status-bus.ts";
 
@@ -26,7 +27,15 @@ interface AgentExecResultMessage {
     error?: string;
 }
 
-type AgentClientMessage = AgentRegisterMessage | AgentExecResultMessage;
+interface AgentExecBackgroundResultMessage {
+    type: "exec-background-result";
+    jobId: string;
+    ok: boolean;
+    result?: unknown;
+    error?: string;
+}
+
+type AgentClientMessage = AgentRegisterMessage | AgentExecResultMessage | AgentExecBackgroundResultMessage;
 
 interface AgentExecRequest {
     type: "exec";
@@ -34,6 +43,21 @@ interface AgentExecRequest {
     capability: string;
     payload: unknown;
 }
+
+/**
+ * Fire-and-forget — tratado SEM `await` no loop de mensagem principal
+ * (ver o listener "message" abaixo), senão travaria o socket pra
+ * qualquer outra coisa (inclusive um `exec` síncrono normal) enquanto o
+ * comando em segundo plano roda, potencialmente minutos.
+ */
+interface AgentExecBackgroundRequest {
+    type: "exec-background";
+    jobId: string;
+    capability: string;
+    payload: unknown;
+}
+
+type AgentServerEvent = AgentExecRequest | AgentExecBackgroundRequest;
 
 const RECONNECT_DELAY_MS = 5_000;
 
@@ -57,6 +81,20 @@ async function handleExec(message: AgentExecRequest): Promise<AgentClientMessage
         return { type: "exec-result", requestId: message.requestId, ok: true, result };
     } catch (err) {
         return { type: "exec-result", requestId: message.requestId, ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+}
+
+/** Mesma lógica de `handleExec`, mas com o teto de tempo bem maior de `config.backgroundShellTimeoutMinutes` — quem chama NUNCA dá `await` nisto no loop de mensagem principal (ver listener "message" abaixo). */
+async function handleExecBackground(message: AgentExecBackgroundRequest): Promise<AgentClientMessage> {
+    try {
+        if (message.capability !== "shell") {
+            return { type: "exec-background-result", jobId: message.jobId, ok: false, error: `capability desconhecida: "${message.capability}"` };
+        }
+        const { command, cwd } = message.payload as { command: string; cwd?: string };
+        const result = await runCommand(command, cwd, config.backgroundShellTimeoutMinutes * 60_000);
+        return { type: "exec-background-result", jobId: message.jobId, ok: true, result };
+    } catch (err) {
+        return { type: "exec-background-result", jobId: message.jobId, ok: false, error: err instanceof Error ? err.message : String(err) };
     }
 }
 
@@ -97,14 +135,24 @@ export function startMachineAgent(backendUrl: string, apiToken: string): void {
             );
         });
 
-        socket.addEventListener("message", async (event) => {
-            let message: AgentExecRequest;
+        socket.addEventListener("message", (event) => {
+            let message: AgentServerEvent;
             try {
                 message = JSON.parse(String(event.data));
             } catch {
                 return;
             }
-            if (message.type === "exec") socket.send(JSON.stringify(await handleExec(message)));
+            if (message.type === "exec") {
+                handleExec(message).then((response) => socket.send(JSON.stringify(response)));
+                return;
+            }
+            if (message.type === "exec-background") {
+                // SEM await de propósito — um comando em segundo plano pode
+                // levar minutos; esperar aqui travaria este loop pra
+                // qualquer outra mensagem (inclusive um "exec" síncrono
+                // normal) enquanto ele roda.
+                handleExecBackground(message).then((response) => socket.send(JSON.stringify(response)));
+            }
         });
 
         socket.addEventListener("close", () => {

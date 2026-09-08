@@ -65,3 +65,12 @@ test("runCommand: saída MUITO longa é truncada, não devolvida inteira", async
     assert.ok(result.stdout.length < 25000);
     assert.match(result.stdout, /saída truncada/);
 });
+
+test("runCommand: timeoutMs customizado é respeitado (mais curto que o default de 30s) — usado pelo modo background com teto próprio", async () => {
+    const start = Date.now();
+    const result = await runCommand("sleep 5", undefined, 500);
+    const elapsedMs = Date.now() - start;
+
+    assert.ok(elapsedMs < 3000, `esperava matar o comando bem antes dos 5s reais, levou ${elapsedMs}ms`);
+    assert.match(result.stderr, /excedeu o tempo limite \(0\.5s\)/);
+});

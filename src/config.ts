@@ -20,6 +20,8 @@ export const config = {
     telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || "",
     /** Precisa bater com MEDIA_MAX_MB do backend-v2 (processos separados, sem config compartilhada) — ver media-resolve.service.ts lá. */
     mediaMaxMb: Number(process.env.MEDIA_MAX_MB || 25),
+    /** Teto de um comando `shell` rodado com `background:true` (ver machine-agent.ts) — bem maior que os 30s do modo síncrono, mas não infinito. */
+    backgroundShellTimeoutMinutes: Number(process.env.CLIENT_BACKGROUND_SHELL_TIMEOUT_MINUTES || 30),
 };
 
 export function hasBackendConfig(): boolean {

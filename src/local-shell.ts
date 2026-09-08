@@ -88,7 +88,7 @@ function cleanupFile(filePath: string): void {
     }
 }
 
-export function runCommand(command: string, cwd?: string): Promise<{ stdout: string; stderr: string; code: number | null }> {
+export function runCommand(command: string, cwd?: string, timeoutMs: number = TIMEOUT_MS): Promise<{ stdout: string; stderr: string; code: number | null }> {
     const spawnOpts = { cwd: expandHome(cwd) };
 
     const tmpBase = path.join(os.tmpdir(), `helena-shell-${randomUUID()}`);
@@ -109,9 +109,9 @@ export function runCommand(command: string, cwd?: string): Promise<{ stdout: str
         let settled = false;
 
         const timer = setTimeout(() => {
-            systemError = `comando excedeu o tempo limite (${TIMEOUT_MS / 1000}s)`;
+            systemError = `comando excedeu o tempo limite (${timeoutMs / 1000}s)`;
             child.kill();
-        }, TIMEOUT_MS);
+        }, timeoutMs);
 
         function finish(code: number | null): void {
             if (settled) return;
