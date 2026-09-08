@@ -157,6 +157,11 @@ export class ProfileComponent {
         await this.auth.setAutoApproveShell(next);
     }
 
+    async toggleAllowProactiveMessages(): Promise<void> {
+        const next = !this.auth.currentUser()?.allowProactiveMessages;
+        await this.auth.setAllowProactiveMessages(next);
+    }
+
     /** Serve tanto pra vincular (nada cadastrado ainda) quanto pra trocar (já linkado) — o draft parte do valor atual, pra editar em vez de sempre começar em branco. */
     startLinkOwner(ch: Channel): void {
         const user = this.auth.currentUser();

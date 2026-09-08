@@ -12,6 +12,7 @@ export interface CurrentUser {
     role: UserRole;
     telemetryConsent: boolean;
     autoApproveShell: boolean;
+    allowProactiveMessages: boolean;
     whatsappOwnerNumber?: string;
     telegramOwnerId?: string;
     createdAt: string;
@@ -69,6 +70,18 @@ export class AuthService {
         if (prev) this.currentUser.set({ ...prev, autoApproveShell: enabled });
         try {
             await firstValueFrom(this.http.patch<{ autoApproveShell: boolean }>("/auth/me/auto-approve-shell", { enabled }));
+        } catch (err) {
+            if (prev) this.currentUser.set(prev);
+            throw err;
+        }
+    }
+
+    /** Otimista, mesmo padrão de setAutoApproveShell — libera a tool message_contact (Helena falar por iniciativa própria, ver contacts.tools.ts no backend-v2). */
+    async setAllowProactiveMessages(enabled: boolean): Promise<void> {
+        const prev = this.currentUser();
+        if (prev) this.currentUser.set({ ...prev, allowProactiveMessages: enabled });
+        try {
+            await firstValueFrom(this.http.patch<{ allowProactiveMessages: boolean }>("/auth/me/allow-proactive-messages", { enabled }));
         } catch (err) {
             if (prev) this.currentUser.set(prev);
             throw err;

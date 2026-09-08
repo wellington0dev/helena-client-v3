@@ -43,6 +43,16 @@
   </div>
 
   <div class="card">
+    <div class="telemetry-head">
+      <div class="card-title">Mensagem por iniciativa própria</div>
+      <button class="toggle" [class.toggle-on]="auth.currentUser()?.allowProactiveMessages" (click)="toggleAllowProactiveMessages()">
+        <span class="knob"></span>
+      </button>
+    </div>
+    <p class="hint">Por padrão, a Helena só responde — nunca fala primeiro com ninguém. Ligando isso, ela pode mandar mensagem por WhatsApp/Telegram por conta própria quando você pedir algo como "avisa fulano que..." — pra QUALQUER número/id que você informar na hora, não só quem já conversou com ela antes. Tem um limite de 10 mensagens por hora como proteção. Só ligue se confia no que vai pedir pra ela mandar — desligada por padrão.</p>
+  </div>
+
+  <div class="card">
     <div class="card-title">Identidade nos canais</div>
     <p class="hint small">"Este WhatsApp/Telegram sou eu" — sem isso, uma mensagem sua por fora do painel vira contato externo.</p>
     @for (row of ownerRows(); track row.key) {
