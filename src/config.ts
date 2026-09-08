@@ -15,6 +15,8 @@ export const config = {
     backendUrl: process.env.BACKEND_V2_URL || "",
     backendApiToken: process.env.BACKEND_V2_API_TOKEN || "",
     whatsappAuthDir: process.env.WHATSAPP_AUTH_DIR || "./.whatsapp-auth",
+    /** Pins lid→telefone aprendidos via `msg.key.senderPn` (ver channels/whatsapp.ts) — persistido em disco porque o Baileys pode nunca reenviar senderPn de novo pra alguns contatos depois da 1ª vez. */
+    whatsappLidPinsFile: process.env.WHATSAPP_LID_PINS_FILE || "./.whatsapp-lid-pins.json",
     telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || "",
     /** Precisa bater com MEDIA_MAX_MB do backend-v2 (processos separados, sem config compartilhada) — ver media-resolve.service.ts lá. */
     mediaMaxMb: Number(process.env.MEDIA_MAX_MB || 25),

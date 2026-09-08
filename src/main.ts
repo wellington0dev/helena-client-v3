@@ -1,6 +1,6 @@
 import { config } from "./config.ts";
 import { startPanelServer } from "./panel/server.ts";
-import { startWhatsapp } from "./channels/whatsapp.ts";
+import { startWhatsapp, stopWhatsapp } from "./channels/whatsapp.ts";
 import { startTelegram } from "./channels/telegram.ts";
 import { startMachineAgent } from "./machine-agent.ts";
 import { startOutboundPoller } from "./outbound-poller.ts";
@@ -21,3 +21,21 @@ startWhatsapp();
 startTelegram();
 startMachineAgent(config.backendUrl, config.backendApiToken);
 startOutboundPoller();
+
+/**
+ * `systemctl restart` (rodado pelo update.sh a cada atualização) manda
+ * SIGTERM — sem este handler, o Node mata o processo na hora, podendo
+ * interromper uma gravação de credencial do WhatsApp no meio (ver
+ * stopWhatsapp em channels/whatsapp.ts) e deixar a sessão desvinculada.
+ * Timeout de segurança: nunca deixa o shutdown travar pra sempre se algo
+ * demorar mais que isso.
+ */
+const SHUTDOWN_TIMEOUT_MS = 5000;
+
+async function shutdown(): Promise<void> {
+    await Promise.race([stopWhatsapp().catch((error) => console.error("[main] falha ao encerrar WhatsApp:", error)), new Promise((resolve) => setTimeout(resolve, SHUTDOWN_TIMEOUT_MS))]);
+    process.exit(0);
+}
+
+process.on("SIGTERM", () => void shutdown());
+process.on("SIGINT", () => void shutdown());

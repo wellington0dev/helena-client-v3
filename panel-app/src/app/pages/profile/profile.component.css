@@ -162,6 +162,11 @@ h1 {
   font-size: 13px;
   color: var(--text-muted);
 }
+.owner-linked {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 .owner-value {
   font-size: 13px;
   font-weight: 700;
@@ -194,6 +199,11 @@ h1 {
 .link-button {
   background: transparent;
   color: var(--accent-text);
+  border: 1px solid var(--border);
+}
+.cancel-link {
+  background: transparent;
+  color: var(--text-muted);
   border: 1px solid var(--border);
 }
 

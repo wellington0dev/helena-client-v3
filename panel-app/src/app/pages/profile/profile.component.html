@@ -48,12 +48,16 @@
     @for (row of ownerRows(); track row.key) {
       <div class="owner-row">
         <span class="owner-label">{{ row.label }}</span>
-        @if (row.linked) {
-          <span class="owner-value">{{ row.value }}</span>
-        } @else if (row.editing) {
+        @if (row.editing) {
           <div class="owner-edit">
             <input [ngModel]="ownerDraft()[row.key]" (ngModelChange)="setOwnerDraft(row.key, $event)" placeholder="somente números" />
             <button (click)="saveOwnerLink(row.key)">Salvar</button>
+            <button class="cancel-link" (click)="cancelOwnerEdit(row.key)">Cancelar</button>
+          </div>
+        } @else if (row.linked) {
+          <div class="owner-linked">
+            <span class="owner-value">{{ row.value }}</span>
+            <button class="link-button" (click)="startLinkOwner(row.key)">Trocar</button>
           </div>
         } @else if (row.empty) {
           <button class="link-button" (click)="startLinkOwner(row.key)">Vincular</button>

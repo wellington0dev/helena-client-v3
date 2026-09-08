@@ -1,5 +1,6 @@
+import { readFileSync, writeFileSync } from "node:fs";
 import { downloadMediaMessage, isJidGroup, makeWASocket, useMultiFileAuthState, DisconnectReason } from "baileys";
-import type { Contact, WAMessage, WASocket } from "baileys";
+import type { WAMessage, WASocket } from "baileys";
 import pino from "pino";
 import QRCode from "qrcode";
 import { config } from "../config.ts";
@@ -33,6 +34,27 @@ const logger = pino({ level: "silent" });
 let currentSock: WASocket | undefined;
 
 /**
+ * `true` só durante um `stopWhatsapp()` em andamento — evita que o handler
+ * de `connection === "close"` (disparado pelo PRÓPRIO `sock.end()` do
+ * shutdown) agende uma reconexão brigando com o processo saindo.
+ */
+let shuttingDown = false;
+
+/**
+ * Última gravação de credenciais em andamento (`useMultiFileAuthState`
+ * escreve com `fs/promises.writeFile` puro, sem escrita atômica — confirmado
+ * lendo o próprio código-fonte do Baileys) — bug real reportado: toda vez
+ * que `update.sh` reinicia o serviço (`systemctl restart`, manda SIGTERM),
+ * se o processo morrer no MEIO dessa escrita, o arquivo de credencial fica
+ * truncado/corrompido, e a sessão aparece desvinculada (exige QR novo) na
+ * próxima subida — não é "às vezes trava", é uma corrida de verdade contra
+ * qualquer `creds.update` (que dispara a cada rotação de chave, com
+ * frequência). `stopWhatsapp()` espera essa promise antes de deixar o
+ * processo sair, pra nunca interromper uma escrita no meio.
+ */
+let pendingCredsSave: Promise<void> = Promise.resolve();
+
+/**
  * WhatsApp vem migrando conversa 1:1 pro formato "@lid" (identificador
  * interno, opaco — NÃO é o número de telefone) em vez do clássico
  * "<número>@s.whatsapp.net" — bug real reportado: o dono cadastrou o
@@ -40,27 +62,65 @@ let currentSock: WASocket | undefined;
  * com `remoteJid` tipo "23115665015007@lid", que nunca bate com nenhum
  * número — a Helena tratava o próprio dono como contato externo.
  *
- * Baileys expõe o par lid↔jid (telefone) via `Contact` nos eventos
- * `contacts.upsert`/`contacts.update` (sincronizados normalmente ao
- * conectar) — guarda esse mapeamento aqui pra resolver o telefone de
- * verdade antes de mandar `contactId` pro backend-v2. Isso NUNCA afeta pra
- * onde a resposta é enviada de volta (`sendWhatsappMessage` continua
- * usando o `remoteJid` cru — é o único endereço que o Baileys aceita pra
- * rotear a mensagem de volta, LID ou não).
+ * Tentativa anterior (removida): escutar `contacts.upsert`/`contacts.update`
+ * pra aprender o par lid↔telefone. Não funcionou ao vivo pra este caso real
+ * — investigando o código do backend single-owner de antes desta migração
+ * (`identity.ts`, removido do monorepo legado em 7630e6f9 mas recuperável
+ * via git), o mecanismo que REALMENTE funcionava era outro: Baileys anexa
+ * o telefone de verdade em `msg.key.senderPn` (não é evento de sync de
+ * contato — é um campo que o SERVIDOR do WhatsApp decide incluir ou não em
+ * CADA mensagem individual; confirmado no próprio código-fonte do Baileys,
+ * `WAMessageKey.senderPn`). A ausência de `senderPn` numa mensagem não
+ * significa "só na primeira" — pra alguns contatos ele nunca aparece (ver
+ * WhiskeySockets/Baileys#1718, #1768) — por isso pina o mapeamento em disco
+ * assim que aparecer uma vez, e reusa o pin quando faltar depois (mesma
+ * estratégia do código antigo, adaptada: aqui não decide dono/convidado,
+ * só resolve o `contactId` que vai pro backend-v2, que decide dono via
+ * `whatsappOwnerNumber`). Isso NUNCA afeta pra onde a resposta é enviada de
+ * volta (`sendWhatsappMessage` continua usando o `remoteJid` cru — é o
+ * único endereço que o Baileys aceita pra rotear de volta, LID ou não).
  */
-const lidToPhoneJid = new Map<string, string>();
+function isLidJid(jid: string): boolean {
+    return jid.endsWith("@lid");
+}
 
-/** Exportada só pra teste (lógica pura, sem depender de socket real) — não é chamada de fora deste módulo em produção. */
-export function trackContactMapping(contacts: Partial<Contact>[]): void {
-    for (const contact of contacts) {
-        if (contact.lid && contact.jid) lidToPhoneJid.set(contact.lid, contact.jid);
+function loadLidPins(): Record<string, string> {
+    try {
+        return JSON.parse(readFileSync(config.whatsappLidPinsFile, "utf8")) as Record<string, string>;
+    } catch {
+        return {};
     }
 }
 
-/** `remoteJid` cru → JID de telefone, se a gente já souber o mapeamento (ver trackContactMapping). Sem mapeamento conhecido, devolve o mesmo `@lid` de entrada — nunca inventa número, só não resolve ainda (mesmo efeito de antes desta correção). Exportada só pra teste, mesmo motivo de trackContactMapping. */
-export function resolvePhoneContactId(remoteJid: string): string {
-    if (!remoteJid.endsWith("@lid")) return remoteJid;
-    return lidToPhoneJid.get(remoteJid) ?? remoteJid;
+let lidPins: Record<string, string> = loadLidPins();
+
+/**
+ * Decide o `contactId` a partir do `remoteJid`/`senderPn` e do que já se
+ * sabe em `pins` — pura (sem I/O, sem mutar nada), pra testar sem depender
+ * de arquivo real. `senderPn` presente sempre vence (é o dado mais fresco);
+ * sem ele, cai pro pin conhecido; sem pin nenhum, devolve o próprio `@lid`
+ * de entrada — nunca inventa número.
+ */
+export function resolveContactIdPure(remoteJid: string, senderPn: string | undefined, pins: Readonly<Record<string, string>>): string {
+    if (!isLidJid(remoteJid)) return remoteJid;
+    if (senderPn) return senderPn;
+    return pins[remoteJid] ?? remoteJid;
+}
+
+/** Efeito colateral de resolveContactIdPure: aprende e persiste o pin em disco quando `senderPn` traz informação nova. Nunca lança — falha de disco não pode derrubar o processamento da mensagem. */
+function resolvePhoneContactId(remoteJid: string, senderPn: string | undefined): string {
+    const resolved = resolveContactIdPure(remoteJid, senderPn, lidPins);
+
+    if (senderPn && isLidJid(remoteJid) && lidPins[remoteJid] !== senderPn) {
+        lidPins = { ...lidPins, [remoteJid]: senderPn };
+        try {
+            writeFileSync(config.whatsappLidPinsFile, JSON.stringify(lidPins, null, 2), "utf8");
+        } catch (error) {
+            console.error("[whatsapp] falha ao gravar pin de lid→telefone:", error);
+        }
+    }
+
+    return resolved;
 }
 
 export async function sendWhatsappMessage(jid: string, text: string): Promise<void> {
@@ -105,7 +165,7 @@ async function handleMessage(msg: WAMessage, sock: WASocket): Promise<void> {
 
         const result = await sendInboundMessage(config.backendUrl, config.backendApiToken, {
             channel: "whatsapp",
-            contactId: resolvePhoneContactId(remoteJid),
+            contactId: resolvePhoneContactId(remoteJid, msg.key.senderPn),
             senderName: msg.pushName || undefined,
             text,
             image,
@@ -176,9 +236,9 @@ async function connect(): Promise<void> {
     const { state, saveCreds } = await useMultiFileAuthState(config.whatsappAuthDir);
     const sock = makeWASocket({ auth: state, logger, printQRInTerminal: false });
 
-    sock.ev.on("creds.update", saveCreds);
-    sock.ev.on("contacts.upsert", trackContactMapping);
-    sock.ev.on("contacts.update", trackContactMapping);
+    sock.ev.on("creds.update", () => {
+        pendingCredsSave = saveCreds().catch((error) => console.error("[whatsapp] falha ao salvar credenciais:", error));
+    });
 
     sock.ev.on("connection.update", (update) => {
         const { connection, lastDisconnect, qr } = update;
@@ -205,6 +265,7 @@ async function connect(): Promise<void> {
                 updateWhatsapp({ status: "error", error: message, qrDataUrl: undefined });
                 return;
             }
+            if (shuttingDown) return; // fomos nós que fechamos (stopWhatsapp) — não reconecta brigando com o processo saindo.
             updateWhatsapp({ status: "connecting", qrDataUrl: undefined });
             setTimeout(() => connect().catch((error) => console.error("[whatsapp] falha ao reconectar:", error)), RECONNECT_DELAY_MS);
         }
@@ -235,4 +296,25 @@ export function startWhatsapp(): void {
         console.error("[whatsapp] falha ao conectar:", error);
         updateWhatsapp({ status: "error", error: error instanceof Error ? error.message : String(error) });
     });
+}
+
+/**
+ * Chamada no shutdown (ver main.ts) — fecha a conexão de forma limpa
+ * (`sock.end()`, NUNCA `sock.logout()`: logout invalidaria a sessão de
+ * propósito, e um restart de rotina não deveria fazer isso) e espera
+ * qualquer gravação de credenciais em andamento terminar antes do processo
+ * sair de verdade. Sem isso, `systemctl restart` (usado por update.sh a
+ * cada atualização) podia matar o processo no meio de uma escrita e
+ * corromper o arquivo de auth — ver comentário de `pendingCredsSave`. Nunca
+ * lança — melhor esperar até um timeout curto do que travar o shutdown pra
+ * sempre se algo aqui falhar.
+ */
+export async function stopWhatsapp(): Promise<void> {
+    shuttingDown = true;
+    currentSock?.end(undefined);
+    try {
+        await pendingCredsSave;
+    } catch {
+        // já logado dentro do próprio saveCreds acima — aqui só garante que o await não derruba o shutdown.
+    }
 }

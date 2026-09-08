@@ -2,6 +2,7 @@ node_modules
 .env
 .whatsapp-auth
 .whatsapp-auth-unused
+.whatsapp-lid-pins.json
 *.log
 
 # Angular (panel-app/ tem seu próprio .gitignore mais completo — isto é reforço no nível raiz)

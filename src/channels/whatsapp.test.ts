@@ -1,23 +1,19 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { resolvePhoneContactId, trackContactMapping } from "./whatsapp.ts";
+import { resolveContactIdPure } from "./whatsapp.ts";
 
-test("resolvePhoneContactId: JID normal (@s.whatsapp.net) passa direto, sem tentar resolver nada", () => {
-    assert.equal(resolvePhoneContactId("5521968177605@s.whatsapp.net"), "5521968177605@s.whatsapp.net");
+test("resolveContactIdPure: JID normal (@s.whatsapp.net) passa direto, sem tentar resolver nada", () => {
+    assert.equal(resolveContactIdPure("5521968177605@s.whatsapp.net", undefined, {}), "5521968177605@s.whatsapp.net");
 });
 
-test("resolvePhoneContactId: sem mapeamento conhecido, devolve o próprio @lid de entrada (nunca inventa número)", () => {
-    assert.equal(resolvePhoneContactId("99999999999999@lid"), "99999999999999@lid");
+test("resolveContactIdPure: @lid com senderPn presente sempre vence — é o dado mais fresco, mesmo com pin antigo diferente", () => {
+    assert.equal(resolveContactIdPure("23115665015007@lid", "5521968177605@s.whatsapp.net", { "23115665015007@lid": "5511000000000@s.whatsapp.net" }), "5521968177605@s.whatsapp.net");
 });
 
-test("bug real corrigido: depois de trackContactMapping aprender o par lid/jid, resolvePhoneContactId resolve o @lid pro telefone de verdade", () => {
-    trackContactMapping([{ lid: "23115665015007@lid", jid: "5521968177605@s.whatsapp.net" }]);
-
-    assert.equal(resolvePhoneContactId("23115665015007@lid"), "5521968177605@s.whatsapp.net");
+test("resolveContactIdPure: @lid sem senderPn, com pin conhecido, resolve pro pin", () => {
+    assert.equal(resolveContactIdPure("23115665015007@lid", undefined, { "23115665015007@lid": "5521968177605@s.whatsapp.net" }), "5521968177605@s.whatsapp.net");
 });
 
-test("trackContactMapping ignora entrada sem lid OU sem jid — nunca grava mapeamento incompleto", () => {
-    trackContactMapping([{ lid: "11111111111111@lid" }, { jid: "5511999990000@s.whatsapp.net" }]);
-
-    assert.equal(resolvePhoneContactId("11111111111111@lid"), "11111111111111@lid");
+test("resolveContactIdPure: @lid sem senderPn e sem pin conhecido, devolve o próprio @lid de entrada — nunca inventa número", () => {
+    assert.equal(resolveContactIdPure("99999999999999@lid", undefined, {}), "99999999999999@lid");
 });
