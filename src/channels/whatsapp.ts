@@ -1,5 +1,5 @@
 import { downloadMediaMessage, isJidGroup, makeWASocket, useMultiFileAuthState, DisconnectReason } from "baileys";
-import type { WAMessage, WASocket } from "baileys";
+import type { Contact, WAMessage, WASocket } from "baileys";
 import pino from "pino";
 import QRCode from "qrcode";
 import { config } from "../config.ts";
@@ -31,6 +31,37 @@ const logger = pino({ level: "silent" });
 
 /** Instância ativa, pro outbound-poller conseguir mandar mensagem por iniciativa do backend (lembrete de calendário, aviso de pagamento — ver outbound-poller.ts). `undefined` enquanto não conectado. */
 let currentSock: WASocket | undefined;
+
+/**
+ * WhatsApp vem migrando conversa 1:1 pro formato "@lid" (identificador
+ * interno, opaco — NÃO é o número de telefone) em vez do clássico
+ * "<número>@s.whatsapp.net" — bug real reportado: o dono cadastrou o
+ * próprio número (`PATCH /auth/me/owner-identity`), mas a mensagem chegava
+ * com `remoteJid` tipo "23115665015007@lid", que nunca bate com nenhum
+ * número — a Helena tratava o próprio dono como contato externo.
+ *
+ * Baileys expõe o par lid↔jid (telefone) via `Contact` nos eventos
+ * `contacts.upsert`/`contacts.update` (sincronizados normalmente ao
+ * conectar) — guarda esse mapeamento aqui pra resolver o telefone de
+ * verdade antes de mandar `contactId` pro backend-v2. Isso NUNCA afeta pra
+ * onde a resposta é enviada de volta (`sendWhatsappMessage` continua
+ * usando o `remoteJid` cru — é o único endereço que o Baileys aceita pra
+ * rotear a mensagem de volta, LID ou não).
+ */
+const lidToPhoneJid = new Map<string, string>();
+
+/** Exportada só pra teste (lógica pura, sem depender de socket real) — não é chamada de fora deste módulo em produção. */
+export function trackContactMapping(contacts: Partial<Contact>[]): void {
+    for (const contact of contacts) {
+        if (contact.lid && contact.jid) lidToPhoneJid.set(contact.lid, contact.jid);
+    }
+}
+
+/** `remoteJid` cru → JID de telefone, se a gente já souber o mapeamento (ver trackContactMapping). Sem mapeamento conhecido, devolve o mesmo `@lid` de entrada — nunca inventa número, só não resolve ainda (mesmo efeito de antes desta correção). Exportada só pra teste, mesmo motivo de trackContactMapping. */
+export function resolvePhoneContactId(remoteJid: string): string {
+    if (!remoteJid.endsWith("@lid")) return remoteJid;
+    return lidToPhoneJid.get(remoteJid) ?? remoteJid;
+}
 
 export async function sendWhatsappMessage(jid: string, text: string): Promise<void> {
     if (!currentSock) throw new Error("WhatsApp não está conectado.");
@@ -74,7 +105,7 @@ async function handleMessage(msg: WAMessage, sock: WASocket): Promise<void> {
 
         const result = await sendInboundMessage(config.backendUrl, config.backendApiToken, {
             channel: "whatsapp",
-            contactId: remoteJid,
+            contactId: resolvePhoneContactId(remoteJid),
             senderName: msg.pushName || undefined,
             text,
             image,
@@ -146,6 +177,8 @@ async function connect(): Promise<void> {
     const sock = makeWASocket({ auth: state, logger, printQRInTerminal: false });
 
     sock.ev.on("creds.update", saveCreds);
+    sock.ev.on("contacts.upsert", trackContactMapping);
+    sock.ev.on("contacts.update", trackContactMapping);
 
     sock.ev.on("connection.update", (update) => {
         const { connection, lastDisconnect, qr } = update;
