@@ -47,7 +47,7 @@ function truncate(text: string): string {
 }
 
 /** Resolve "~" pro home do usuário — cross-platform via os.homedir() (funciona também no formato "~\\x" do Windows). */
-function expandHome(cwd: string | undefined): string | undefined {
+export function expandHome(cwd: string | undefined): string | undefined {
     if (!cwd) return cwd;
     if (cwd === "~") return os.homedir();
     const match = /^~[/\\](.*)$/.exec(cwd);

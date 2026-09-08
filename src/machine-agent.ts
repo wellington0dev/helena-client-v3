@@ -1,5 +1,6 @@
 import os from "node:os";
 import { config } from "./config.ts";
+import { listFiles, readFile, searchFiles, writeFile, type FileEdit } from "./local-files.ts";
 import { runCommand } from "./local-shell.ts";
 import { updateMachineAgent } from "./panel/status-bus.ts";
 
@@ -62,23 +63,49 @@ type AgentServerEvent = AgentExecRequest | AgentExecBackgroundRequest;
 const RECONNECT_DELAY_MS = 5_000;
 
 /**
- * Única capability implementada no backend-v2 hoje (device/network/gh/
- * browser/file-transfer eram do backend single-owner, não portadas — ver
- * docs/architecture-v2.md §6). Fixa, sem env var pra configurar — YAGNI
- * enquanto só existir uma.
+ * `shell`/`exec-background` são do backend-v2 desde o início; `list_files`/
+ * `read_file`/`search_files`/`write_file` são a Fase 0 do plano de agentes
+ * de dev (backend-v2 `docs/agent-team-architecture.md` §1.2) — leitura/
+ * escrita estruturada, nunca via heredoc de shell. `device`/`network`/`gh`/
+ * `browser`/`file-transfer` eram do backend single-owner, não portadas
+ * (ver docs/architecture-v2.md §6) — `git`/`gh` não precisam de capability
+ * própria, já rodam via `shell` (ver o mesmo §1.2). Fixa, sem env var pra
+ * configurar — YAGNI enquanto o conjunto não mudar por tenant.
  */
-const CAPABILITIES = ["shell"];
+const CAPABILITIES = ["shell", "list_files", "read_file", "search_files", "write_file"];
+
+/** As 4 capabilities de arquivo são síncronas e locais (sem I/O de rede) — cabem no mesmo `exec`/`exec-result` de sempre, sem precisar do caminho `exec-background`. */
+function dispatchCapability(capability: string, payload: unknown): unknown {
+    switch (capability) {
+        case "list_files": {
+            const { path, pattern } = payload as { path: string; pattern?: string };
+            return listFiles(path, pattern);
+        }
+        case "read_file": {
+            const { path } = payload as { path: string };
+            return readFile(path);
+        }
+        case "search_files": {
+            const { path, namePattern, contentPattern } = payload as { path: string; namePattern?: string; contentPattern?: string };
+            return searchFiles(path, namePattern, contentPattern);
+        }
+        case "write_file": {
+            const { path, edits } = payload as { path: string; edits: FileEdit[] };
+            return writeFile(path, edits);
+        }
+        default:
+            throw new Error(`capability desconhecida: "${capability}"`);
+    }
+}
 
 async function handleExec(message: AgentExecRequest): Promise<AgentClientMessage> {
     try {
-        if (message.capability !== "shell") {
-            // Não deveria acontecer — o backend só manda capacidades que
-            // este cliente declarou ter no register. Defensivo.
-            return { type: "exec-result", requestId: message.requestId, ok: false, error: `capability desconhecida: "${message.capability}"` };
+        if (message.capability === "shell") {
+            const { command, cwd } = message.payload as { command: string; cwd?: string };
+            const result = await runCommand(command, cwd);
+            return { type: "exec-result", requestId: message.requestId, ok: true, result };
         }
-        const { command, cwd } = message.payload as { command: string; cwd?: string };
-        const result = await runCommand(command, cwd);
-        return { type: "exec-result", requestId: message.requestId, ok: true, result };
+        return { type: "exec-result", requestId: message.requestId, ok: true, result: dispatchCapability(message.capability, message.payload) };
     } catch (err) {
         return { type: "exec-result", requestId: message.requestId, ok: false, error: err instanceof Error ? err.message : String(err) };
     }
