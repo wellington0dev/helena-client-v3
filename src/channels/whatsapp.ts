@@ -140,7 +140,8 @@ function toNumber(value: number | { toString(): string } | null | undefined): nu
     return typeof value === "number" ? value : Number(value.toString());
 }
 
-async function downloadImage(msg: WAMessage, sock: WASocket): Promise<Buffer> {
+/** Genérico o bastante pra imagem E figurinha — downloadMediaMessage do Baileys não distingue tipo de mídia. */
+async function downloadMedia(msg: WAMessage, sock: WASocket): Promise<Buffer> {
     return downloadMediaMessage(msg, "buffer", {}, { logger, reuploadRequest: sock.updateMediaMessage });
 }
 
@@ -150,17 +151,27 @@ async function handleMessage(msg: WAMessage, sock: WASocket): Promise<void> {
 
     const text = textOf(msg);
     const imageMessage = msg.message?.imageMessage;
+    const stickerMessage = msg.message?.stickerMessage;
 
-    if (!text && !imageMessage) return; // outra mídia (áudio/vídeo/documento): fora de escopo desta leva, ignora silenciosamente.
+    if (!text && !imageMessage && !stickerMessage) return; // outra mídia (áudio/vídeo/documento): fora de escopo desta leva, ignora silenciosamente.
 
     try {
         if (imageMessage && exceedsMediaLimit(toNumber(imageMessage.fileLength))) {
             await sendWhatsappMessage(remoteJid, mediaTooLargeMessage());
             return;
         }
+        if (stickerMessage && exceedsMediaLimit(toNumber(stickerMessage.fileLength))) {
+            await sendWhatsappMessage(remoteJid, mediaTooLargeMessage());
+            return;
+        }
 
         const image = imageMessage
-            ? { mimeType: imageMessage.mimetype || "image/jpeg", base64: (await downloadImage(msg, sock)).toString("base64"), caption: imageMessage.caption ?? undefined }
+            ? { mimeType: imageMessage.mimetype || "image/jpeg", base64: (await downloadMedia(msg, sock)).toString("base64"), caption: imageMessage.caption ?? undefined }
+            : undefined;
+
+        // Estática ou animada, o formato de verdade continua sendo webp (diferente do Telegram, onde animado é TGS/Lottie — outro formato) — ver stickerMimeType em telegram.ts pro caso diferente.
+        const sticker = stickerMessage
+            ? { mimeType: stickerMessage.mimetype || "image/webp", base64: (await downloadMedia(msg, sock)).toString("base64"), animated: stickerMessage.isAnimated ?? false }
             : undefined;
 
         const result = await sendInboundMessage(config.backendUrl, config.backendApiToken, {
@@ -169,10 +180,12 @@ async function handleMessage(msg: WAMessage, sock: WASocket): Promise<void> {
             senderName: msg.pushName || undefined,
             text,
             image,
+            sticker,
         });
         if ("blocked" in result) return; // rate limit — sem resposta, mesmo comportamento do backend single-owner.
 
         await sendWhatsappMessage(remoteJid, result.text);
+        if (result.sticker) await sock.sendMessage(remoteJid, { sticker: Buffer.from(result.sticker.base64, "base64") });
     } catch (error) {
         console.error("[whatsapp] falha ao processar mensagem:", error);
     }

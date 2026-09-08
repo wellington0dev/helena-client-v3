@@ -1,10 +1,17 @@
-import { Bot, type Context } from "grammy";
+import { Bot, InputFile, type Context } from "grammy";
 import { hydrateFiles, type FileFlavor } from "@grammyjs/files";
 import { config } from "../config.ts";
 import { updateTelegram } from "../panel/status-bus.ts";
 import { sendGroupInboundMessage, sendInboundMessage } from "./backend-client.ts";
 import { exceedsMediaLimit, mediaTooLargeMessage } from "./media-limit.ts";
 import { toTelegramHtml } from "./markdown-format.ts";
+
+/** Telegram tem 3 formatos de figurinha, bem diferentes — webp (estática), TGS/Lottie (animada) e webm (vídeo). `getFile()` não devolve o mimetype certo sozinho, então infere pelas flags do próprio sticker. Exportada só pra teste (lógica pura). */
+export function stickerMimeType(sticker: { is_animated: boolean; is_video: boolean }): string {
+    if (sticker.is_video) return "video/webm";
+    if (sticker.is_animated) return "application/x-tgsticker";
+    return "image/webp";
+}
 
 /** FileFlavor adiciona `ctx.getFile()` (plugin @grammyjs/files), que já resolve o file_id certo pro tipo de mídia da mensagem atual — precisa pra baixar a foto antes de mandar pro backend-v2. */
 type TelegramContext = FileFlavor<Context>;
@@ -47,11 +54,16 @@ function isMentioned(ctx: Context): boolean {
 async function handlePrivateMessage(ctx: TelegramContext): Promise<void> {
     const text = ctx.message?.text;
     const photo = ctx.message?.photo;
-    if (!text && !photo) return; // outra mídia (áudio/vídeo/documento): fora de escopo desta leva, ignora silenciosamente.
+    const stickerMsg = ctx.message?.sticker;
+    if (!text && !photo && !stickerMsg) return; // outra mídia (áudio/vídeo/documento): fora de escopo desta leva, ignora silenciosamente.
     if (!ctx.from) return;
 
     try {
         if (photo && exceedsMediaLimit(photo[photo.length - 1]!.file_size)) {
+            await ctx.reply(mediaTooLargeMessage());
+            return;
+        }
+        if (stickerMsg && exceedsMediaLimit(stickerMsg.file_size)) {
             await ctx.reply(mediaTooLargeMessage());
             return;
         }
@@ -60,16 +72,28 @@ async function handlePrivateMessage(ctx: TelegramContext): Promise<void> {
             ? { mimeType: "image/jpeg", base64: Buffer.from(await (await fetch((await ctx.getFile()).getUrl())).arrayBuffer()).toString("base64"), caption: ctx.message?.caption }
             : undefined;
 
+        const sticker = stickerMsg
+            ? {
+                  mimeType: stickerMimeType(stickerMsg),
+                  base64: Buffer.from(await (await fetch((await ctx.getFile()).getUrl())).arrayBuffer()).toString("base64"),
+                  animated: stickerMsg.is_animated || stickerMsg.is_video,
+                  emoji: stickerMsg.emoji,
+                  telegramFileId: stickerMsg.file_id,
+              }
+            : undefined;
+
         const result = await sendInboundMessage(config.backendUrl, config.backendApiToken, {
             channel: "telegram",
             contactId: String(ctx.from.id),
             senderName: ctx.from.first_name || undefined,
             text,
             image,
+            sticker,
         });
         if ("blocked" in result) return;
 
         await ctx.reply(toTelegramHtml(result.text), { parse_mode: "HTML" });
+        if (result.sticker) await ctx.replyWithSticker(new InputFile(Buffer.from(result.sticker.base64, "base64")));
     } catch (error) {
         console.error("[telegram] falha ao processar mensagem:", error);
     }

@@ -23,18 +23,31 @@ export interface InboundImagePayload {
     caption?: string;
 }
 
+export interface InboundStickerPayload {
+    mimeType: string;
+    base64: string;
+    /** Animada (WhatsApp webp-animado, Telegram TGS/vídeo) — backend não tenta descrever o conteúdo nesse caso, ver docs do plano em .claude/plans. */
+    animated?: boolean;
+    /** Só Telegram manda. */
+    emoji?: string;
+    telegramFileId?: string;
+}
+
 export interface InboundMessagePayload {
     channel: "whatsapp" | "telegram";
     contactId: string;
     senderName?: string;
-    /** Ausente quando a mensagem é uma imagem sem legenda — ver `image`. */
+    /** Ausente quando a mensagem é imagem/figurinha sem legenda — ver `image`/`sticker`. */
     text?: string;
     image?: InboundImagePayload;
+    sticker?: InboundStickerPayload;
 }
 
 export interface InboundMessageResult {
     sessionId: string;
     text: string;
+    /** Presente quando a Helena decidiu (send_sticker) mandar uma figurinha junto da resposta — vai ALÉM do texto, nunca no lugar dele. */
+    sticker?: { mimeType: string; base64: string };
 }
 
 export async function sendInboundMessage(baseUrl: string, apiToken: string, payload: InboundMessagePayload): Promise<InboundMessageResult | { blocked: true }> {
