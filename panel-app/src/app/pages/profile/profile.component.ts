@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from "@angular/common/http";
 import { Component, computed, inject, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { RouterLink } from "@angular/router";
@@ -9,6 +10,11 @@ import { IconComponent } from "../../shared/icon.component";
 
 type Channel = "whatsapp" | "telegram";
 
+function extractErrorMessage(err: unknown, fallback: string): string {
+    if (err instanceof HttpErrorResponse && typeof err.error?.message === "string") return err.error.message;
+    return err instanceof Error ? err.message : fallback;
+}
+
 interface OwnerRow {
     key: Channel;
     label: string;
@@ -16,6 +22,8 @@ interface OwnerRow {
     value?: string;
     editing: boolean;
     empty: boolean;
+    saving: boolean;
+    error: string;
 }
 
 interface UsageBar {
@@ -77,6 +85,8 @@ export class ProfileComponent {
 
     protected readonly ownerEditing = signal<Record<Channel, boolean>>({ whatsapp: false, telegram: false });
     protected readonly ownerDraft = signal<Record<Channel, string>>({ whatsapp: "", telegram: "" });
+    protected readonly ownerSaving = signal<Record<Channel, boolean>>({ whatsapp: false, telegram: false });
+    protected readonly ownerError = signal<Record<Channel, string>>({ whatsapp: "", telegram: "" });
 
     protected readonly me = computed(() => {
         const user = this.auth.currentUser();
@@ -89,9 +99,11 @@ export class ProfileComponent {
     protected readonly ownerRows = computed<OwnerRow[]>(() => {
         const user = this.auth.currentUser();
         const editing = this.ownerEditing();
+        const saving = this.ownerSaving();
+        const error = this.ownerError();
         return [
-            { key: "whatsapp", label: "WhatsApp", linked: !!user?.whatsappOwnerNumber, value: user?.whatsappOwnerNumber, editing: editing.whatsapp, empty: !user?.whatsappOwnerNumber && !editing.whatsapp },
-            { key: "telegram", label: "Telegram", linked: !!user?.telegramOwnerId, value: user?.telegramOwnerId, editing: editing.telegram, empty: !user?.telegramOwnerId && !editing.telegram },
+            { key: "whatsapp", label: "WhatsApp", linked: !!user?.whatsappOwnerNumber, value: user?.whatsappOwnerNumber, editing: editing.whatsapp, empty: !user?.whatsappOwnerNumber && !editing.whatsapp, saving: saving.whatsapp, error: error.whatsapp },
+            { key: "telegram", label: "Telegram", linked: !!user?.telegramOwnerId, value: user?.telegramOwnerId, editing: editing.telegram, empty: !user?.telegramOwnerId && !editing.telegram, saving: saving.telegram, error: error.telegram },
         ];
     });
 
@@ -151,21 +163,33 @@ export class ProfileComponent {
         const current = ch === "whatsapp" ? user?.whatsappOwnerNumber : user?.telegramOwnerId;
         this.ownerEditing.update((s) => ({ ...s, [ch]: true }));
         this.ownerDraft.update((s) => ({ ...s, [ch]: current ?? "" }));
+        this.ownerError.update((s) => ({ ...s, [ch]: "" }));
     }
 
     cancelOwnerEdit(ch: Channel): void {
         this.ownerEditing.update((s) => ({ ...s, [ch]: false }));
+        this.ownerError.update((s) => ({ ...s, [ch]: "" }));
     }
 
     setOwnerDraft(ch: Channel, value: string): void {
         this.ownerDraft.update((s) => ({ ...s, [ch]: value.replace(/\D/g, "") }));
     }
 
+    /** Bug real corrigido: sem try/catch aqui, um erro do PATCH (ex: número já registrado por outro canal) falhava em silêncio — nenhuma mensagem, nada na tela, parecia que "não funciona" sem explicar por quê. */
     async saveOwnerLink(ch: Channel): Promise<void> {
         const contactId = this.ownerDraft()[ch];
         if (!contactId) return;
-        await this.auth.setOwnerIdentity(ch, contactId);
-        this.ownerEditing.update((s) => ({ ...s, [ch]: false }));
+
+        this.ownerSaving.update((s) => ({ ...s, [ch]: true }));
+        this.ownerError.update((s) => ({ ...s, [ch]: "" }));
+        try {
+            await this.auth.setOwnerIdentity(ch, contactId);
+            this.ownerEditing.update((s) => ({ ...s, [ch]: false }));
+        } catch (err) {
+            this.ownerError.update((s) => ({ ...s, [ch]: extractErrorMessage(err, "Falha ao salvar — tente de novo.") }));
+        } finally {
+            this.ownerSaving.update((s) => ({ ...s, [ch]: false }));
+        }
     }
 
     async createToken(): Promise<void> {

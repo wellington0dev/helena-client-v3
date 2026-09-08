@@ -50,9 +50,9 @@
         <span class="owner-label">{{ row.label }}</span>
         @if (row.editing) {
           <div class="owner-edit">
-            <input [ngModel]="ownerDraft()[row.key]" (ngModelChange)="setOwnerDraft(row.key, $event)" placeholder="somente números" />
-            <button (click)="saveOwnerLink(row.key)">Salvar</button>
-            <button class="cancel-link" (click)="cancelOwnerEdit(row.key)">Cancelar</button>
+            <input [ngModel]="ownerDraft()[row.key]" (ngModelChange)="setOwnerDraft(row.key, $event)" placeholder="somente números" [disabled]="row.saving" />
+            <button (click)="saveOwnerLink(row.key)" [disabled]="row.saving">{{ row.saving ? "Salvando…" : "Salvar" }}</button>
+            <button class="cancel-link" (click)="cancelOwnerEdit(row.key)" [disabled]="row.saving">Cancelar</button>
           </div>
         } @else if (row.linked) {
           <div class="owner-linked">
@@ -63,6 +63,9 @@
           <button class="link-button" (click)="startLinkOwner(row.key)">Vincular</button>
         }
       </div>
+      @if (row.error) {
+        <p class="owner-error">{{ row.error }}</p>
+      }
     }
   </div>
 
