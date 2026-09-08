@@ -28,6 +28,8 @@ const ICONS: Record<string, string> = {
     plug: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M9 3v5M15 3v5M7 8h10l-1 5a4.5 4.5 0 01-9 0L7 8z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 17v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
     edit: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4 20l.8-3.6L15.6 5.6a2 2 0 012.8 0l1 1a2 2 0 010 2.8L8.6 20.2 4 20z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     trash: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V4.5A1.5 1.5 0 0110.5 3h3A1.5 1.5 0 0115 4.5V7M6 7l1 13.5A1.5 1.5 0 008.5 22h7a1.5 1.5 0 001.5-1.5L18 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    contacts:
+        '<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3" stroke="currentColor" stroke-width="2"/><path d="M3.5 20c.9-3.4 3-5.2 5.5-5.2s4.6 1.8 5.5 5.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M16 4.5c1.5.4 2.5 1.7 2.5 3.5s-1 3.1-2.5 3.5M17.5 14.9c2 .5 3.4 2 4 4.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
 };
 
 @Component({

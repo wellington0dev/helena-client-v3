@@ -26,6 +26,7 @@ export class AppShellComponent {
     protected readonly navItems: NavItem[] = [
         { path: "/chat", label: "Chat", icon: "chat" },
         { path: "/canais", label: "Canais", icon: "channels" },
+        { path: "/contatos", label: "Contatos", icon: "contacts" },
         { path: "/integracoes", label: "Integrações", icon: "plug" },
         { path: "/cobranca", label: "Cobrança", icon: "billing" },
         { path: "/perfil", label: "Perfil", icon: "profile" },
