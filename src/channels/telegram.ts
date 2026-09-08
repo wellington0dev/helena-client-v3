@@ -39,6 +39,12 @@ export async function sendTelegramMessage(chatId: string, text: string): Promise
     await currentBot.api.sendMessage(chatId, toTelegramHtml(text), { parse_mode: "HTML" });
 }
 
+/** Mesmo formato aceito no reply de um turno normal (ver handlePrivateMessage) — usado tanto ali quanto pelo outbound-poller (message_contact com stickerId). */
+export async function sendTelegramSticker(chatId: string, base64: string): Promise<void> {
+    if (!currentBot) throw new Error("Telegram não está conectado.");
+    await currentBot.api.sendSticker(chatId, new InputFile(Buffer.from(base64, "base64")));
+}
+
 function isMentioned(ctx: Context): boolean {
     const botInfo = currentBot?.botInfo;
     if (!botInfo) return false;

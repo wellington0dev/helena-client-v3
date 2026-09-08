@@ -100,7 +100,9 @@ export interface PendingOutboundMessage {
     id: string;
     channel: "whatsapp" | "telegram";
     contactId: string;
-    text: string;
+    /** Ausente quando a mensagem é só figurinha (ver `sticker`) — sempre pelo menos um dos dois preenchido. */
+    text?: string;
+    sticker?: { mimeType: string; base64: string };
 }
 
 /** Consultado periodicamente pelo outbound-poller — ver outbound-poller.ts. */

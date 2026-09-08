@@ -130,6 +130,12 @@ export async function sendWhatsappMessage(jid: string, text: string): Promise<vo
     }
 }
 
+/** Mesmo formato aceito no reply de um turno normal (ver handleMessage) — usado tanto ali quanto pelo outbound-poller (message_contact com stickerId). */
+export async function sendWhatsappSticker(jid: string, base64: string): Promise<void> {
+    if (!currentSock) throw new Error("WhatsApp não está conectado.");
+    await currentSock.sendMessage(jid, { sticker: Buffer.from(base64, "base64") });
+}
+
 function textOf(msg: WAMessage): string | undefined {
     return msg.message?.conversation ?? msg.message?.extendedTextMessage?.text ?? undefined;
 }
@@ -185,7 +191,7 @@ async function handleMessage(msg: WAMessage, sock: WASocket): Promise<void> {
         if ("blocked" in result) return; // rate limit — sem resposta, mesmo comportamento do backend single-owner.
 
         await sendWhatsappMessage(remoteJid, result.text);
-        if (result.sticker) await sock.sendMessage(remoteJid, { sticker: Buffer.from(result.sticker.base64, "base64") });
+        if (result.sticker) await sendWhatsappSticker(remoteJid, result.sticker.base64);
     } catch (error) {
         console.error("[whatsapp] falha ao processar mensagem:", error);
     }
