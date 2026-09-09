@@ -1,0 +1,190 @@
+<div class="page">
+  <div class="page-head">
+    <div>
+      <h1>Projects</h1>
+      <p class="subtitle">A equipe de agentes de desenvolvimento — Arquiteta, Designer, Frontend, Backend, DBA e QA</p>
+    </div>
+    <button class="new-button" (click)="openCreateForm()">
+      <app-icon name="plus" />
+      Novo Project
+    </button>
+  </div>
+
+  @if (error()) {
+    <div class="banner-error">{{ error() }}</div>
+  }
+
+  @if (creating()) {
+    <div class="card create-card">
+      <div class="card-title">Novo Project</div>
+      @if (createError()) {
+        <div class="banner-error">{{ createError() }}</div>
+      }
+      <label class="field">
+        <span>O que você quer construído</span>
+        <textarea [(ngModel)]="createSpec" rows="3" placeholder="descreva com o máximo de detalhe — a Arquiteta investiga o projeto real antes de planejar"></textarea>
+      </label>
+      <label class="field">
+        <span>Máquina (opcional)</span>
+        <input [(ngModel)]="createMachine" placeholder="vazio = tenta a única conectada agora" />
+      </label>
+      <div class="field-row">
+        <label class="field">
+          <span>Teto de custo em tokens (opcional)</span>
+          <input [(ngModel)]="createCostCapValue" type="number" min="0" placeholder="vazio = sem teto" />
+        </label>
+        <label class="field-checkbox field-checkbox-standalone">
+          <input type="checkbox" [(ngModel)]="createGitPushAllowed" />
+          <span>Permitir git push/commit neste Project</span>
+        </label>
+      </div>
+      <p class="hint">A Arquiteta roda agora, de verdade — pode levar alguns segundos enquanto ela investiga o projeto real e monta o plano.</p>
+      <div class="form-actions">
+        <button class="save-button" (click)="submitCreate()" [disabled]="createSaving() || !createSpec.trim()">{{ createSaving() ? "Arquitetando…" : "Criar" }}</button>
+        <button class="cancel-button" (click)="closeCreateForm()" [disabled]="createSaving()">Cancelar</button>
+      </div>
+    </div>
+  }
+
+  @if (autonomyPolicies(); as policies) {
+    <div class="card">
+      <div class="card-head" (click)="showAutonomyPanel.set(!showAutonomyPanel())" role="button" tabindex="0">
+        <div class="card-title">Política de autonomia</div>
+        <span class="card-toggle-hint">{{ showAutonomyPanel() ? "esconder" : "o que a Helena decide sozinha" }}</span>
+      </div>
+      @if (showAutonomyPanel()) {
+        @for (decision of autonomyDecisions; track decision) {
+          <div class="autonomy-row">
+            <div class="autonomy-info">
+              <div class="autonomy-title">{{ autonomyLabel[decision].title }}</div>
+              <p class="hint">{{ autonomyLabel[decision].hint }}</p>
+            </div>
+            <button
+              class="toggle"
+              [class.toggle-on]="policies[decision] === 'auto'"
+              [disabled]="autonomySaving() === decision"
+              (click)="toggleAutonomy(decision)"
+              title="{{ policies[decision] === 'auto' ? 'Helena decide sozinha' : 'Pausa e pergunta' }}"
+            >
+              <span class="knob"></span>
+            </button>
+          </div>
+        }
+      }
+    </div>
+  }
+
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title">Projects</div>
+    </div>
+
+    @if (loaded() && list().length === 0) {
+      <p class="hint">Nenhum Project ainda — peça pra Helena num pedido de desenvolvimento de verdade, ou clique em "Novo Project".</p>
+    }
+
+    @for (project of list(); track project.id) {
+      <div class="project-row" (click)="toggleExpand(project)" role="button" tabindex="0">
+        <div class="project-info">
+          <div class="project-spec">{{ project.spec }}</div>
+          <div class="project-meta">
+            <span class="badge" [class]="'badge-status-' + project.status">{{ statusLabel[project.status] }}</span>
+            @if (project.machine) {
+              <span class="project-machine">{{ project.machine }}</span>
+            }
+          </div>
+        </div>
+      </div>
+
+      @if (expandedId() === project.id) {
+        <div class="project-detail">
+          @if (detailLoading()) {
+            <p class="hint">Carregando…</p>
+          } @else if (detail(); as d) {
+            @if (d.project.status === 'paused') {
+              <div class="warning-banner">
+                <app-icon name="warning" />
+                <span>Pausado: {{ lastEventNote() }}</span>
+                <button class="resume-button" (click)="resume(project.id)" [disabled]="resumingId() === project.id">
+                  {{ resumingId() === project.id ? "Retomando…" : "Retomar" }}
+                </button>
+              </div>
+            }
+
+            @if (d.project.architectPlan) {
+              <div class="detail-block">
+                <div class="detail-label">Plano da Arquiteta</div>
+                <p class="detail-text">{{ d.project.architectPlan }}</p>
+                <div class="project-meta">
+                  <span class="badge">{{ d.project.executionMode === 'parallel' ? 'execução em paralelo' : 'execução sequencial' }}</span>
+                  @if (d.project.gitPushAllowed) {
+                    <span class="badge badge-trusted">git liberado</span>
+                  }
+                  @if (d.project.costCapEnabled) {
+                    <span class="badge">teto de custo: {{ d.project.costCapValue }} tokens</span>
+                  }
+                </div>
+              </div>
+            }
+
+            <div class="detail-block">
+              <div class="detail-label">Agentes</div>
+              @for (step of d.steps; track step.id) {
+                <div class="step-row">
+                  <div class="step-head">
+                    <span class="step-role">{{ roleLabel[step.role] }}</span>
+                    <span class="badge" [class]="'badge-step-' + step.status">{{ stepStatusLabel[step.status] }}</span>
+                  </div>
+                  @if (step.report) {
+                    <p class="detail-text">{{ step.report }}</p>
+                  }
+                </div>
+              }
+            </div>
+
+            @if (d.project.status === 'completed') {
+              @if (revisionForm()?.projectId !== project.id) {
+                <button class="cancel-button" (click)="openRevisionForm(project.id)">Pedir revisão</button>
+              } @else {
+                <div class="revision-form">
+                  @if (revisionError()) {
+                    <div class="banner-error">{{ revisionError() }}</div>
+                  }
+                  <div class="field">
+                    <span>Quem precisa mexer de novo</span>
+                    <div class="checkbox-group">
+                      @for (role of revisionRoleOptions; track role) {
+                        <label class="field-checkbox">
+                          <input type="checkbox" [ngModel]="revisionForm()!.roles[role]" (ngModelChange)="toggleRevisionRole(role, $event)" />
+                          <span>{{ roleLabel[role] }}</span>
+                        </label>
+                      }
+                    </div>
+                  </div>
+                  <label class="field">
+                    <span>O que precisa mudar</span>
+                    <textarea [ngModel]="revisionForm()!.note" (ngModelChange)="updateRevisionNote($event)" rows="2" placeholder="com o máximo de detalhe"></textarea>
+                  </label>
+                  <div class="form-actions">
+                    <button class="save-button" (click)="submitRevision()" [disabled]="revisionSaving() || !canSubmitRevision()">{{ revisionSaving() ? "Enviando…" : "Pedir revisão" }}</button>
+                    <button class="cancel-button" (click)="closeRevisionForm()" [disabled]="revisionSaving()">Cancelar</button>
+                  </div>
+                </div>
+              }
+            }
+
+            <div class="detail-block">
+              <div class="detail-label">Histórico</div>
+              @for (event of d.events; track event.id) {
+                <div class="event-row">
+                  <span class="event-kind">{{ eventKindLabel[event.kind] ?? event.kind }}</span>
+                  <span class="event-note">{{ event.note }}</span>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      }
+    }
+  </div>
+</div>

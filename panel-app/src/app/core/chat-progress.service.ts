@@ -6,7 +6,11 @@ export type ChatProgressEvent =
     | { type: "turn_start"; sessionId?: string; at: string }
     | { type: "tool_call"; sessionId?: string; tool: string; input?: unknown; at: string }
     | { type: "turn_end"; sessionId?: string; at: string }
-    | { type: "turn_error"; sessionId?: string; message: string; at: string };
+    | { type: "turn_error"; sessionId?: string; message: string; at: string }
+    /** Conclusão de um comando `shell` rodado com `background:true` — ver ShellJobNotifierService no backend-v2. */
+    | { type: "job_done"; jobId: string; ok: boolean; summary: string; at: string }
+    /** Marco de um Project da equipe de dev (pausou, concluiu) — ver ProjectEventNotifierService no backend-v2. */
+    | { type: "project_event"; projectId: string; kind: string; summary: string; at: string };
 
 const RECONNECT_DELAY_MS = 3000;
 

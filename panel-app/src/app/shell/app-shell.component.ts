@@ -4,6 +4,7 @@ import { ChatUiStateService } from "../core/chat-ui-state.service";
 import { AuthService } from "../core/auth.service";
 import { ThemeService } from "../core/theme.service";
 import { IconComponent } from "../shared/icon.component";
+import { ToastContainerComponent } from "../shared/toast-container.component";
 
 interface NavItem {
     path: string;
@@ -14,7 +15,7 @@ interface NavItem {
 /** Sidebar fixa (logo, navegação, conversas, conta) + <router-outlet> pras páginas internas — layout compartilhado, ver app.routes.ts. */
 @Component({
     selector: "app-shell",
-    imports: [RouterLink, RouterLinkActive, RouterOutlet, IconComponent],
+    imports: [RouterLink, RouterLinkActive, RouterOutlet, IconComponent, ToastContainerComponent],
     templateUrl: "./app-shell.component.html",
     styleUrl: "./app-shell.component.css",
 })
@@ -25,6 +26,7 @@ export class AppShellComponent {
 
     protected readonly navItems: NavItem[] = [
         { path: "/chat", label: "Chat", icon: "chat" },
+        { path: "/projetos", label: "Projects", icon: "layers" },
         { path: "/canais", label: "Canais", icon: "channels" },
         { path: "/contatos", label: "Contatos", icon: "contacts" },
         { path: "/integracoes", label: "Integrações", icon: "plug" },

@@ -14,6 +14,7 @@ export const routes: Routes = [
         canActivate: [authGuard],
         children: [
             { path: "chat", loadComponent: () => import("./pages/chat/chat.component").then((m) => m.ChatComponent) },
+            { path: "projetos", loadComponent: () => import("./pages/projects/projects.component").then((m) => m.ProjectsComponent) },
             { path: "canais", loadComponent: () => import("./pages/channels/channels.component").then((m) => m.ChannelsComponent) },
             { path: "contatos", loadComponent: () => import("./pages/contacts/contacts.component").then((m) => m.ContactsComponent) },
             { path: "integracoes", loadComponent: () => import("./pages/mcp-guide/mcp-guide.component").then((m) => m.McpGuideComponent) },
