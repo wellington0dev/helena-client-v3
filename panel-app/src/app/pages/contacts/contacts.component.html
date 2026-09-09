@@ -6,17 +6,13 @@
     <div class="banner-error">{{ error() }}</div>
   }
 
-  <div class="card">
-    <div class="card-head">
-      <div class="card-title">Contatos</div>
-    </div>
+  @if (loaded() && list().length === 0) {
+    <p class="hint hint-empty">Ninguém mandou mensagem ainda. Assim que alguém escrever pro seu WhatsApp/Telegram, o contato aparece aqui.</p>
+  }
 
-    @if (loaded() && list().length === 0) {
-      <p class="hint">Ninguém mandou mensagem ainda. Assim que alguém escrever pro seu WhatsApp/Telegram, o contato aparece aqui.</p>
-    }
-
+  <div class="contact-list">
     @for (contact of list(); track contact.id) {
-      <div class="contact-row">
+      <div class="contact-card">
         <div class="contact-info">
           <div class="contact-name">
             <app-icon [name]="contact.channel" />

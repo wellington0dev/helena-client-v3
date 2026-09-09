@@ -106,26 +106,26 @@
     }
   </div>
 
-  <div class="card">
-    <div class="card-head">
-      <div class="card-title">Projetos</div>
-    </div>
+  @if (loaded() && list().length === 0) {
+    <p class="hint hint-empty">Nenhum projeto ainda — peça pra Helena num pedido de desenvolvimento de verdade, ou clique em "Novo projeto".</p>
+  }
 
-    @if (loaded() && list().length === 0) {
-      <p class="hint">Nenhum projeto ainda — peça pra Helena num pedido de desenvolvimento de verdade, ou clique em "Novo projeto".</p>
-    }
-
+  <div class="project-list">
     @for (project of list(); track project.id) {
-      <div class="project-row" (click)="toggleExpand(project)" role="button" tabindex="0">
-        <div class="project-info">
-          <div class="project-spec">{{ project.spec }}</div>
-          <div class="project-meta">
-            <span class="badge" [class]="'badge-status-' + project.status">{{ statusLabel[project.status] }}</span>
-            @if (project.machine) {
-              <span class="project-machine">{{ project.machine }}</span>
-            }
+      <div class="project-card" [class.project-card-active]="expandedId() === project.id" (click)="toggleExpand(project)" role="button" tabindex="0">
+        <div class="project-main">
+          <span class="project-dot" [class]="'dot-status-' + project.status"></span>
+          <div class="project-info">
+            <div class="project-spec">{{ project.spec }}</div>
+            <div class="project-meta">
+              <span>{{ project.executionMode === 'parallel' ? 'Execução paralela' : 'Execução sequencial' }} · {{ agentCount }} agentes</span>
+              @if (project.machine) {
+                <span class="project-machine">· {{ project.machine }}</span>
+              }
+            </div>
           </div>
         </div>
+        <span class="badge" [class]="'badge-status-' + project.status">{{ statusLabel[project.status] }}</span>
       </div>
 
       @if (expandedId() === project.id) {

@@ -20,9 +20,9 @@ h1 {
 }
 
 .cards {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
 }
 .card {
   background: var(--surface);

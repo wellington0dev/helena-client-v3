@@ -110,6 +110,8 @@ export class ProjectsComponent {
     protected readonly revisionRoleOptions = REVISION_ROLES;
     protected readonly autonomyDecisions = AUTONOMY_DECISIONS;
     protected readonly personaRoleOptions = PERSONA_ROLE_ORDER;
+    /** Sempre 7 — a equipe de agentes tem papéis fixos (ver PERSONA_ROLE_ORDER), não varia por Project. */
+    protected readonly agentCount = PERSONA_ROLE_ORDER.length;
 
     protected readonly agentPersonas = signal<Record<AgentRole, string>>(DEFAULT_AGENT_NAMES);
     protected readonly showPersonasPanel = signal(false);

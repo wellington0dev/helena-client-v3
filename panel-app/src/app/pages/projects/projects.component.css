@@ -198,13 +198,12 @@ h1 {
 
 /* ---------- badges ---------- */
 .badge {
-  font-size: 10.5px;
-  font-weight: 600;
+  font-size: 11.5px;
+  font-weight: 700;
   color: var(--text-muted);
   background: var(--surface-raised);
-  border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 1px 8px;
+  padding: 5px 11px;
   white-space: nowrap;
 }
 .badge-trusted {
@@ -260,32 +259,78 @@ h1 {
 }
 
 /* ---------- lista de Projects ---------- */
-.project-row {
+.hint-empty {
+  margin-bottom: 14px;
+}
+.project-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.project-card {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 12px 0;
-  border-top: 1px solid var(--border);
+  gap: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px 18px;
   cursor: pointer;
+}
+.project-card-active {
+  background: var(--surface-raised);
+  border-color: var(--accent-solid);
+}
+.project-main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+}
+.project-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-faint);
+}
+.dot-status-active,
+.dot-status-planning {
+  background: var(--accent-solid);
+}
+.dot-status-completed {
+  background: var(--success);
+}
+.dot-status-paused {
+  background: var(--warn);
+}
+.dot-status-needs_revision,
+.dot-status-cancelled {
+  background: var(--danger);
 }
 .project-info {
   min-width: 0;
-  flex: 1;
 }
 .project-spec {
-  font-size: 13.5px;
+  font-size: 14.5px;
   font-weight: 700;
-  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .project-meta {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   flex-wrap: wrap;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 .project-machine {
-  font-size: 12px;
   color: var(--text-muted);
 }
 

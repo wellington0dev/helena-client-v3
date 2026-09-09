@@ -53,13 +53,23 @@ h1 {
   line-height: 1.6;
 }
 
-.contact-row {
+.hint-empty {
+  margin-bottom: 14px;
+}
+.contact-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.contact-card {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 12px 0;
-  border-top: 1px solid var(--border);
+  gap: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 18px;
 }
 .contact-info {
   min-width: 0;
@@ -79,13 +89,13 @@ h1 {
   white-space: nowrap;
 }
 .badge {
-  font-size: 10.5px;
-  font-weight: 600;
+  font-size: 11.5px;
+  font-weight: 700;
   color: var(--text-muted);
   background: var(--surface-raised);
-  border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 1px 8px;
+  padding: 5px 11px;
+  white-space: nowrap;
 }
 .badge-trusted {
   color: var(--accent-text);
@@ -117,8 +127,6 @@ h1 {
 }
 
 .contact-form {
-  margin-top: 4px;
-  margin-bottom: 8px;
   padding: 14px 16px;
   border-radius: 10px;
   background: var(--surface-raised);

@@ -1,6 +1,16 @@
 <div class="page">
-  <h1>Integrações</h1>
-  <p class="subtitle">Conecte servidores MCP de terceiros (loja, CRM, ERP) pra Helena usar como ferramenta</p>
+  <div class="page-head">
+    <div>
+      <h1>Integrações</h1>
+      <p class="subtitle">Conecte servidores MCP de terceiros (loja, CRM, ERP) pra Helena usar como ferramenta</p>
+    </div>
+    @if (!form()) {
+      <button class="add-button" (click)="openCreateForm()">
+        <app-icon name="plus" />
+        Nova conexão
+      </button>
+    }
+  </div>
 
   @if (error()) {
     <div class="banner-error">{{ error() }}</div>
@@ -13,23 +23,13 @@
     </div>
   }
 
-  <div class="card">
-    <div class="card-head">
-      <div class="card-title">Suas conexões</div>
-      @if (!form()) {
-        <button class="add-button" (click)="openCreateForm()">
-          <app-icon name="plus" />
-          Nova conexão
-        </button>
-      }
-    </div>
+  @if (loaded() && list().length === 0 && !form()) {
+    <p class="hint hint-empty">Nenhuma conexão cadastrada ainda. Crie uma acima, ou veja o guia abaixo pra construir seu próprio servidor MCP primeiro.</p>
+  }
 
-    @if (loaded() && list().length === 0 && !form()) {
-      <p class="hint">Nenhuma conexão cadastrada ainda. Crie uma acima, ou veja o guia abaixo pra construir seu próprio servidor MCP primeiro.</p>
-    }
-
+  <div class="conn-list">
     @for (conn of list(); track conn.id) {
-      <div class="conn-row">
+      <div class="conn-card">
         <div class="conn-info">
           <div class="conn-name">
             {{ conn.name }}
@@ -55,38 +55,38 @@
         </div>
       </div>
     }
-
-    @if (form(); as f) {
-      <div class="conn-form">
-        <div class="form-title">{{ isEditing() ? "Editar conexão" : "Nova conexão" }}</div>
-
-        <label class="field">
-          <span>Nome</span>
-          <input [ngModel]="f.name" (ngModelChange)="updateForm({ name: $event })" placeholder="ex: minha-loja" />
-        </label>
-
-        <label class="field">
-          <span>URL do servidor</span>
-          <input [ngModel]="f.serverUrl" (ngModelChange)="updateForm({ serverUrl: $event })" placeholder="https://seu-servidor.exemplo.com/mcp" />
-        </label>
-
-        <label class="field">
-          <span>Token de autenticação (opcional)</span>
-          <input [ngModel]="f.authToken" (ngModelChange)="updateForm({ authToken: $event })" type="password" [placeholder]="isEditing() ? 'deixe em branco pra manter o atual' : 'só se o seu servidor exigir'" />
-        </label>
-
-        <label class="field field-checkbox">
-          <input type="checkbox" [ngModel]="f.enabled" (ngModelChange)="updateForm({ enabled: $event })" />
-          <span>Ativada</span>
-        </label>
-
-        <div class="form-actions">
-          <button class="save-button" (click)="save()" [disabled]="saving() || !f.name.trim() || !f.serverUrl.trim()">{{ saving() ? "Salvando…" : "Salvar" }}</button>
-          <button class="cancel-button" (click)="closeForm()" [disabled]="saving()">Cancelar</button>
-        </div>
-      </div>
-    }
   </div>
+
+  @if (form(); as f) {
+    <div class="conn-form">
+      <div class="form-title">{{ isEditing() ? "Editar conexão" : "Nova conexão" }}</div>
+
+      <label class="field">
+        <span>Nome</span>
+        <input [ngModel]="f.name" (ngModelChange)="updateForm({ name: $event })" placeholder="ex: minha-loja" />
+      </label>
+
+      <label class="field">
+        <span>URL do servidor</span>
+        <input [ngModel]="f.serverUrl" (ngModelChange)="updateForm({ serverUrl: $event })" placeholder="https://seu-servidor.exemplo.com/mcp" />
+      </label>
+
+      <label class="field">
+        <span>Token de autenticação (opcional)</span>
+        <input [ngModel]="f.authToken" (ngModelChange)="updateForm({ authToken: $event })" type="password" [placeholder]="isEditing() ? 'deixe em branco pra manter o atual' : 'só se o seu servidor exigir'" />
+      </label>
+
+      <label class="field field-checkbox">
+        <input type="checkbox" [ngModel]="f.enabled" (ngModelChange)="updateForm({ enabled: $event })" />
+        <span>Ativada</span>
+      </label>
+
+      <div class="form-actions">
+        <button class="save-button" (click)="save()" [disabled]="saving() || !f.name.trim() || !f.serverUrl.trim()">{{ saving() ? "Salvando…" : "Salvar" }}</button>
+        <button class="cancel-button" (click)="closeForm()" [disabled]="saving()">Cancelar</button>
+      </div>
+    </div>
+  }
 
   <div class="card guide" [innerHTML]="html()"></div>
 </div>
