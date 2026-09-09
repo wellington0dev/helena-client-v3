@@ -75,6 +75,38 @@
   }
 
   <div class="card">
+    <div class="card-head" (click)="showPersonasPanel.set(!showPersonasPanel())" role="button" tabindex="0">
+      <div class="card-title">Personalizar agentes</div>
+      <span class="card-toggle-hint">{{ showPersonasPanel() ? "esconder" : "renomear a equipe" }}</span>
+    </div>
+    @if (showPersonasPanel()) {
+      @if (personaError()) {
+        <div class="banner-error">{{ personaError() }}</div>
+      }
+      <p class="hint">Só o nome muda — o foco e os limites de cada papel continuam os mesmos.</p>
+      @for (role of personaRoleOptions; track role) {
+        <div class="persona-row">
+          @if (editingPersonaRole() === role) {
+            <input class="persona-input" [(ngModel)]="personaDraft" (keyup.enter)="savePersona(role)" (keyup.escape)="cancelEditingPersona()" />
+            <div class="persona-actions">
+              <button class="save-button" (click)="savePersona(role)" [disabled]="personaSaving() === role || !personaDraft.trim()">{{ personaSaving() === role ? "Salvando…" : "Salvar" }}</button>
+              <button class="cancel-button" (click)="cancelEditingPersona()" [disabled]="personaSaving() === role">Cancelar</button>
+            </div>
+          } @else {
+            <span class="persona-name">{{ roleLabel()[role] }}</span>
+            <div class="persona-actions">
+              @if (isPersonaCustomized(role)) {
+                <button class="cancel-button" (click)="resetPersona(role)" [disabled]="personaSaving() === role">{{ personaSaving() === role ? "Restaurando…" : "Restaurar padrão" }}</button>
+              }
+              <button class="cancel-button" (click)="startEditingPersona(role)">Renomear</button>
+            </div>
+          }
+        </div>
+      }
+    }
+  </div>
+
+  <div class="card">
     <div class="card-head">
       <div class="card-title">Projects</div>
     </div>
@@ -132,7 +164,7 @@
               @for (step of d.steps; track step.id) {
                 <div class="step-row">
                   <div class="step-head">
-                    <span class="step-role">{{ roleLabel[step.role] }}</span>
+                    <span class="step-role">{{ roleLabel()[step.role] }}</span>
                     <span class="badge" [class]="'badge-step-' + step.status">{{ stepStatusLabel[step.status] }}</span>
                   </div>
                   @if (step.report) {
@@ -156,7 +188,7 @@
                       @for (role of revisionRoleOptions; track role) {
                         <label class="field-checkbox">
                           <input type="checkbox" [ngModel]="revisionForm()!.roles[role]" (ngModelChange)="toggleRevisionRole(role, $event)" />
-                          <span>{{ roleLabel[role] }}</span>
+                          <span>{{ roleLabel()[role] }}</span>
                         </label>
                       }
                     </div>
@@ -171,6 +203,29 @@
                   </div>
                 </div>
               }
+            }
+
+            @if (canCancel(d.project.status)) {
+              <div class="detail-block">
+                @if (cancelForm()?.projectId !== project.id) {
+                  <button class="danger-outline-button" (click)="openCancelForm(project.id)">Cancelar Project</button>
+                } @else {
+                  <div class="cancel-form">
+                    @if (cancelError()) {
+                      <div class="banner-error">{{ cancelError() }}</div>
+                    }
+                    <p class="hint">Isso encerra o Project DEFINITIVAMENTE — nenhum agente continua trabalhando nele, e não dá pra retomar depois.</p>
+                    <label class="field">
+                      <span>Motivo (opcional)</span>
+                      <textarea [ngModel]="cancelForm()!.reason" (ngModelChange)="updateCancelReason($event)" rows="2" placeholder="por que está cancelando"></textarea>
+                    </label>
+                    <div class="form-actions">
+                      <button class="danger-button" (click)="submitCancel()" [disabled]="cancelSaving()">{{ cancelSaving() ? "Cancelando…" : "Confirmar cancelamento" }}</button>
+                      <button class="cancel-button" (click)="closeCancelForm()" [disabled]="cancelSaving()">Voltar</button>
+                    </div>
+                  </div>
+                }
+              </div>
             }
 
             <div class="detail-block">

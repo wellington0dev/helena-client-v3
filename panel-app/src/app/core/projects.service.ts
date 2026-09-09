@@ -2,7 +2,7 @@ import { HttpClient } from "@angular/common/http";
 import { Injectable, inject } from "@angular/core";
 import { firstValueFrom } from "rxjs";
 
-export type ProjectStatus = "draft" | "planning" | "active" | "paused" | "needs_revision" | "completed";
+export type ProjectStatus = "draft" | "planning" | "active" | "paused" | "needs_revision" | "completed" | "cancelled";
 export type ExecutionMode = "parallel" | "throttled";
 export type ProjectStepRole = "architect" | "designer" | "frontend" | "backend" | "dba" | "qa";
 export type ProjectStepStatus = "ready" | "running" | "done" | "failed";
@@ -91,6 +91,10 @@ export class ProjectsService {
 
     resume(id: string): Promise<OkOrError> {
         return firstValueFrom(this.http.post<OkOrError>(`/projects/${id}/resume`, {}));
+    }
+
+    cancel(id: string, reason?: string): Promise<OkOrError> {
+        return firstValueFrom(this.http.post<OkOrError>(`/projects/${id}/cancel`, { reason }));
     }
 
     listAutonomyPolicies(): Promise<Record<AutonomyDecision, AutonomyMode>> {

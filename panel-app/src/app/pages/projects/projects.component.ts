@@ -1,6 +1,8 @@
 import { HttpErrorResponse } from "@angular/common/http";
 import { Component, computed, inject, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
+import type { AgentRole } from "../../core/agent-personas.service";
+import { AgentPersonasService, DEFAULT_AGENT_NAMES } from "../../core/agent-personas.service";
 import type { AutonomyDecision, AutonomyMode, ProjectDetail, ProjectStepRole, ProjectSummary } from "../../core/projects.service";
 import { ProjectsService } from "../../core/projects.service";
 import { IconComponent } from "../../shared/icon.component";
@@ -12,16 +14,21 @@ const STATUS_LABEL: Record<ProjectSummary["status"], string> = {
     paused: "Pausado",
     needs_revision: "Em revisão",
     completed: "Concluído",
+    cancelled: "Cancelado",
 };
 
-const ROLE_LABEL: Record<ProjectStepRole, string> = {
-    architect: "Arquiteta (Ada)",
-    designer: "Designer (Vera)",
-    frontend: "Frontend (Theo)",
-    backend: "Backend (Bento)",
-    dba: "DBA (Íris)",
-    qa: "QA (Quinn)",
+const TERMINAL_STATUSES = new Set<ProjectSummary["status"]>(["completed", "cancelled"]);
+
+const ROLE_TITLE: Record<ProjectStepRole, string> = {
+    architect: "Arquiteta",
+    designer: "Designer",
+    frontend: "Frontend",
+    backend: "Backend",
+    dba: "DBA",
+    qa: "QA",
 };
+
+const PERSONA_ROLE_ORDER: AgentRole[] = ["architect", "designer", "frontend", "backend", "dba", "qa"];
 
 const STEP_STATUS_LABEL: Record<string, string> = {
     ready: "Na fila",
@@ -39,6 +46,7 @@ const EVENT_KIND_LABEL: Record<string, string> = {
     revision_requested: "Revisão pedida",
     resumed: "Retomado",
     completed: "Concluído",
+    cancelled: "Cancelado",
 };
 
 const AUTONOMY_LABEL: Record<AutonomyDecision, { title: string; hint: string }> = {
@@ -84,14 +92,28 @@ function extractErrorMessage(err: unknown, fallback: string): string {
 })
 export class ProjectsComponent {
     private readonly projects = inject(ProjectsService);
+    private readonly agentPersonasApi = inject(AgentPersonasService);
 
     protected readonly statusLabel = STATUS_LABEL;
-    protected readonly roleLabel = ROLE_LABEL;
     protected readonly stepStatusLabel = STEP_STATUS_LABEL;
     protected readonly eventKindLabel = EVENT_KIND_LABEL;
     protected readonly autonomyLabel = AUTONOMY_LABEL;
     protected readonly revisionRoleOptions = REVISION_ROLES;
     protected readonly autonomyDecisions = AUTONOMY_DECISIONS;
+    protected readonly personaRoleOptions = PERSONA_ROLE_ORDER;
+
+    protected readonly agentPersonas = signal<Record<AgentRole, string>>(DEFAULT_AGENT_NAMES);
+    protected readonly showPersonasPanel = signal(false);
+    protected readonly editingPersonaRole = signal<AgentRole | null>(null);
+    protected personaDraft = "";
+    protected readonly personaSaving = signal<AgentRole | null>(null);
+    protected readonly personaError = signal("");
+
+    /** "Arquiteta (Ada)" etc. — reflete o nome customizado assim que carrega. */
+    protected readonly roleLabel = computed<Record<ProjectStepRole, string>>(() => {
+        const names = this.agentPersonas();
+        return Object.fromEntries(PERSONA_ROLE_ORDER.map((role) => [role, `${ROLE_TITLE[role]} (${names[role]})`])) as Record<ProjectStepRole, string>;
+    });
 
     protected readonly list = signal<ProjectSummary[]>([]);
     protected readonly loaded = signal(false);
@@ -115,6 +137,10 @@ export class ProjectsComponent {
 
     protected readonly resumingId = signal<string | null>(null);
 
+    protected readonly cancelForm = signal<{ projectId: string; reason: string } | null>(null);
+    protected readonly cancelSaving = signal(false);
+    protected readonly cancelError = signal("");
+
     protected readonly autonomyPolicies = signal<Record<AutonomyDecision, AutonomyMode> | null>(null);
     protected readonly autonomySaving = signal<AutonomyDecision | null>(null);
     protected readonly showAutonomyPanel = signal(false);
@@ -127,6 +153,7 @@ export class ProjectsComponent {
     constructor() {
         void this.reload();
         void this.loadAutonomyPolicies();
+        void this.loadAgentPersonas();
     }
 
     private async reload(): Promise<void> {
@@ -146,16 +173,26 @@ export class ProjectsComponent {
         }
     }
 
+    private async loadAgentPersonas(): Promise<void> {
+        try {
+            this.agentPersonas.set(await this.agentPersonasApi.listAll());
+        } catch {
+            // Nomes customizados somem silenciosamente se falhar — os defaults (Ada, Vera...) já cobrem a UI.
+        }
+    }
+
     protected async toggleExpand(project: ProjectSummary): Promise<void> {
         if (this.expandedId() === project.id) {
             this.expandedId.set(null);
             this.detail.set(null);
             this.revisionForm.set(null);
+            this.cancelForm.set(null);
             return;
         }
 
         this.expandedId.set(project.id);
         this.revisionForm.set(null);
+        this.cancelForm.set(null);
         this.detail.set(null);
         this.detailLoading.set(true);
         try {
@@ -289,6 +326,49 @@ export class ProjectsComponent {
         }
     }
 
+    protected canCancel(status: ProjectSummary["status"]): boolean {
+        return !TERMINAL_STATUSES.has(status);
+    }
+
+    protected openCancelForm(projectId: string): void {
+        this.cancelForm.set({ projectId, reason: "" });
+        this.cancelError.set("");
+    }
+
+    protected closeCancelForm(): void {
+        this.cancelForm.set(null);
+        this.cancelError.set("");
+    }
+
+    protected updateCancelReason(reason: string): void {
+        const form = this.cancelForm();
+        if (!form) return;
+        this.cancelForm.set({ ...form, reason });
+    }
+
+    protected async submitCancel(): Promise<void> {
+        const form = this.cancelForm();
+        if (!form) return;
+
+        this.cancelSaving.set(true);
+        this.cancelError.set("");
+        try {
+            const outcome = await this.projects.cancel(form.projectId, form.reason.trim() || undefined);
+            if (!outcome.ok) {
+                this.cancelError.set(outcome.error ?? "Não consegui cancelar este Project.");
+                return;
+            }
+            this.cancelForm.set(null);
+            await this.reload();
+            const project = this.list().find((p) => p.id === form.projectId);
+            if (project) await this.toggleExpand(project);
+        } catch (err) {
+            this.cancelError.set(extractErrorMessage(err, "Não consegui cancelar este Project."));
+        } finally {
+            this.cancelSaving.set(false);
+        }
+    }
+
     protected async toggleAutonomy(decision: AutonomyDecision): Promise<void> {
         const current = this.autonomyPolicies();
         if (!current) return;
@@ -301,6 +381,50 @@ export class ProjectsComponent {
             this.error.set(extractErrorMessage(err, "Não consegui salvar essa preferência."));
         } finally {
             this.autonomySaving.set(null);
+        }
+    }
+
+    protected isPersonaCustomized(role: AgentRole): boolean {
+        return this.agentPersonas()[role] !== DEFAULT_AGENT_NAMES[role];
+    }
+
+    protected startEditingPersona(role: AgentRole): void {
+        this.editingPersonaRole.set(role);
+        this.personaDraft = this.agentPersonas()[role];
+        this.personaError.set("");
+    }
+
+    protected cancelEditingPersona(): void {
+        this.editingPersonaRole.set(null);
+        this.personaError.set("");
+    }
+
+    protected async savePersona(role: AgentRole): Promise<void> {
+        const name = this.personaDraft.trim();
+        if (!name) return;
+
+        this.personaSaving.set(role);
+        this.personaError.set("");
+        try {
+            this.agentPersonas.set(await this.agentPersonasApi.setName(role, name));
+            this.editingPersonaRole.set(null);
+        } catch (err) {
+            this.personaError.set(extractErrorMessage(err, "Não consegui salvar esse nome."));
+        } finally {
+            this.personaSaving.set(null);
+        }
+    }
+
+    protected async resetPersona(role: AgentRole): Promise<void> {
+        this.personaSaving.set(role);
+        this.personaError.set("");
+        try {
+            this.agentPersonas.set(await this.agentPersonasApi.reset(role));
+            this.editingPersonaRole.set(null);
+        } catch (err) {
+            this.personaError.set(extractErrorMessage(err, "Não consegui restaurar o nome padrão."));
+        } finally {
+            this.personaSaving.set(null);
         }
     }
 }

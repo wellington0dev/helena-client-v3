@@ -160,7 +160,8 @@ h1 {
   font-size: 13px;
   cursor: pointer;
 }
-.revision-form {
+.revision-form,
+.cancel-form {
   margin-top: 10px;
   padding: 14px 16px;
   border-radius: 10px;
@@ -168,6 +169,31 @@ h1 {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+.danger-outline-button {
+  align-self: flex-start;
+  background: transparent;
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  border-radius: 7px;
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.danger-button {
+  background: var(--danger);
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.danger-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* ---------- badges ---------- */
@@ -204,10 +230,33 @@ h1 {
   background: var(--warn-soft);
   border-color: transparent;
 }
-.badge-step-failed {
+.badge-step-failed,
+.badge-status-cancelled {
   color: var(--danger);
   background: var(--danger-soft);
   border-color: transparent;
+}
+
+/* ---------- personalizar agentes ---------- */
+.persona-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+.persona-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 13px;
+  color: var(--text);
+  font-family: inherit;
+}
+.persona-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 /* ---------- lista de Projects ---------- */
@@ -334,7 +383,8 @@ h1 {
 }
 
 /* ---------- autonomia ---------- */
-.autonomy-row {
+.autonomy-row,
+.persona-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
