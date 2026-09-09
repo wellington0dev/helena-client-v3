@@ -124,4 +124,26 @@
       }
     </div>
   </div>
+
+  <div class="card">
+    <div class="card-title">Relatar problema ou sugestão</div>
+    <p class="hint">Manda direto pra equipe — sem precisar de e-mail ou outro canal.</p>
+    <div class="feedback-category-group">
+      <button type="button" class="feedback-category-button" [class.active]="feedbackCategory === 'bug'" (click)="setFeedbackCategory('bug')">Erro</button>
+      <button type="button" class="feedback-category-button" [class.active]="feedbackCategory === 'suggestion'" (click)="setFeedbackCategory('suggestion')">Sugestão</button>
+    </div>
+    @if (feedbackError()) {
+      <p class="feedback-error">{{ feedbackError() }}</p>
+    }
+    @if (feedbackSent()) {
+      <p class="feedback-sent">Enviado — obrigado!</p>
+    }
+    <textarea
+      class="feedback-textarea"
+      [(ngModel)]="feedbackMessage"
+      rows="3"
+      [placeholder]="feedbackCategory === 'bug' ? 'o que aconteceu, e o que você esperava que acontecesse' : 'o que você gostaria de ver'"
+    ></textarea>
+    <button class="feedback-submit" (click)="submitFeedback()" [disabled]="feedbackSaving() || !feedbackMessage.trim()">{{ feedbackSaving() ? "Enviando…" : "Enviar" }}</button>
+  </div>
 </div>

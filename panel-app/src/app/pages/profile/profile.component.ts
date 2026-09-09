@@ -3,6 +3,8 @@ import { Component, computed, inject, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { RouterLink } from "@angular/router";
 import { AuthService } from "../../core/auth.service";
+import type { FeedbackCategory } from "../../core/feedback.service";
+import { FeedbackService } from "../../core/feedback.service";
 import { McpConnectionsService } from "../../core/mcp-connections.service";
 import type { ApiTokenSummary, UsageSummary } from "../../core/profile.service";
 import { ProfileService } from "../../core/profile.service";
@@ -72,6 +74,13 @@ export class ProfileComponent {
     protected readonly auth = inject(AuthService);
     private readonly profile = inject(ProfileService);
     private readonly mcpConnections = inject(McpConnectionsService);
+    private readonly feedback = inject(FeedbackService);
+
+    protected feedbackCategory: FeedbackCategory = "bug";
+    protected feedbackMessage = "";
+    protected readonly feedbackSaving = signal(false);
+    protected readonly feedbackError = signal("");
+    protected readonly feedbackSent = signal(false);
 
     protected readonly apiTokens = signal<ApiTokenSummary[]>([]);
     protected readonly apiTokensLoaded = signal(false);
@@ -210,6 +219,29 @@ export class ProfileComponent {
             await this.profile.revokeApiToken(id);
         } catch {
             this.apiTokens.set(prev);
+        }
+    }
+
+    setFeedbackCategory(category: FeedbackCategory): void {
+        this.feedbackCategory = category;
+        this.feedbackSent.set(false);
+        this.feedbackError.set("");
+    }
+
+    async submitFeedback(): Promise<void> {
+        const message = this.feedbackMessage.trim();
+        if (!message) return;
+
+        this.feedbackSaving.set(true);
+        this.feedbackError.set("");
+        try {
+            await this.feedback.submit({ category: this.feedbackCategory, message });
+            this.feedbackMessage = "";
+            this.feedbackSent.set(true);
+        } catch (err) {
+            this.feedbackError.set(extractErrorMessage(err, "Não consegui enviar — tente de novo."));
+        } finally {
+            this.feedbackSaving.set(false);
         }
     }
 }
