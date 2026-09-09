@@ -4,7 +4,7 @@ import { firstValueFrom } from "rxjs";
 
 export type ProjectStatus = "draft" | "planning" | "active" | "paused" | "needs_revision" | "completed" | "cancelled";
 export type ExecutionMode = "parallel" | "throttled";
-export type ProjectStepRole = "architect" | "designer" | "frontend" | "backend" | "dba" | "qa";
+export type ProjectStepRole = "architect" | "designer" | "frontend" | "backend" | "dba" | "security" | "qa";
 export type ProjectStepStatus = "ready" | "running" | "done" | "failed";
 export type AutonomyDecision = "qa_failure" | "revision_scope_change";
 export type AutonomyMode = "auto" | "ask";

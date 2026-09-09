@@ -11,6 +11,7 @@ export const DEFAULT_AGENT_NAMES: Record<AgentRole, string> = {
     frontend: "Theo",
     backend: "Bento",
     dba: "Íris",
+    security: "Nyx",
     qa: "Quinn",
 };
 

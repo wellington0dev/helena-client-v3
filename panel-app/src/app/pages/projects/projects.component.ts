@@ -25,10 +25,11 @@ const ROLE_TITLE: Record<ProjectStepRole, string> = {
     frontend: "Frontend",
     backend: "Backend",
     dba: "DBA",
+    security: "Segurança",
     qa: "QA",
 };
 
-const PERSONA_ROLE_ORDER: AgentRole[] = ["architect", "designer", "frontend", "backend", "dba", "qa"];
+const PERSONA_ROLE_ORDER: AgentRole[] = ["architect", "designer", "frontend", "backend", "dba", "security", "qa"];
 
 const STEP_STATUS_LABEL: Record<string, string> = {
     ready: "Na fila",
@@ -66,7 +67,7 @@ interface RevisionForm {
     note: string;
 }
 
-const REVISION_ROLES: ProjectStepRole[] = ["designer", "frontend", "backend", "dba"];
+const REVISION_ROLES: ProjectStepRole[] = ["designer", "frontend", "backend", "dba", "security"];
 const AUTONOMY_DECISIONS: AutonomyDecision[] = ["qa_failure", "revision_scope_change"];
 
 function extractErrorMessage(err: unknown, fallback: string): string {
@@ -254,7 +255,7 @@ export class ProjectsComponent {
     protected openRevisionForm(projectId: string): void {
         this.revisionForm.set({
             projectId,
-            roles: { architect: false, designer: false, frontend: false, backend: false, dba: false, qa: false },
+            roles: { architect: false, designer: false, frontend: false, backend: false, dba: false, security: false, qa: false },
             note: "",
         });
         this.revisionError.set("");
