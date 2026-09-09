@@ -1,9 +1,45 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { createServer } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { extname, join, normalize } from "node:path";
 import { WebSocketServer } from "ws";
+import { saveSession } from "../cli/session-store.ts";
 import { DIST_DIR, renderPanelPage } from "./page.ts";
 import { getState, onStateChange } from "./status-bus.ts";
+
+/**
+ * O painel (Angular) e o `helena` (CLI) são processos/UIs diferentes do
+ * MESMO `client/` rodando na máquina do dono — mas o JWT do painel só
+ * existe no `localStorage` do NAVEGADOR (origem do backend-v2, ex:
+ * `:4001`), nunca chega neste processo Node sozinho. Pedido explícito do
+ * dono (2026-09-09): depois de logar no painel, `helena` (CLI) na MESMA
+ * máquina deveria achar sessão pronta, sem pedir email/senha de novo.
+ * `AuthService` (panel-app) manda o token pra cá via `fetch` direto (não
+ * pelo `HttpClient`/interceptor, que reescreveria a URL pro backend-v2
+ * remoto) logo após login/register — best-effort, nunca bloqueia o login
+ * se isto falhar (ex: painel servido de outro jeito, sem este processo
+ * `client/` por trás). Reusa o MESMO `session.json` que `cli/session-store.ts`
+ * já lê (`ensureSession` em cli/chat.ts) — nenhum mecanismo novo, só o
+ * relay que faltava entre navegador e processo Node local.
+ */
+function handleCliSession(req: IncomingMessage, res: ServerResponse): void {
+    let body = "";
+    req.on("data", (chunk) => {
+        body += chunk;
+        if (body.length > 10_000) req.destroy(); // JWT nunca chega perto disso — corta cedo um corpo absurdo.
+    });
+    req.on("end", () => {
+        try {
+            const { accessToken } = JSON.parse(body) as { accessToken?: string };
+            if (!accessToken) throw new Error("accessToken ausente.");
+            saveSession(accessToken);
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ ok: true }));
+        } catch {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ ok: false }));
+        }
+    });
+}
 
 const MIME_TYPES: Record<string, string> = {
     ".js": "application/javascript; charset=utf-8",
@@ -37,11 +73,17 @@ function resolveStaticFile(urlPath: string): string | null {
  * painel) — se algum dia a máquina ficar exposta fora da VPN, volte isto
  * pra "127.0.0.1" ou adicione auth aqui.
  */
-export function startPanelServer(port: number, backendUrl: string): void {
+/** Devolve o `http.Server` (nunca usado pelo `main.ts` real, só serve pra testes fecharem o servidor no `after()` — sem isso o socket aberto prende o event loop e `node --test` nunca termina o arquivo). */
+export function startPanelServer(port: number, backendUrl: string): ReturnType<typeof createServer> {
     const server = createServer((req, res) => {
         if (req.url === "/health") {
             res.writeHead(200, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ status: "ok" }));
+            return;
+        }
+
+        if (req.url === "/cli-session" && req.method === "POST") {
+            handleCliSession(req, res);
             return;
         }
 
@@ -73,4 +115,6 @@ export function startPanelServer(port: number, backendUrl: string): void {
     server.listen(port, "0.0.0.0", () => {
         console.log(`[painel] disponível em http://localhost:${port} (e em qualquer IP desta máquina na VPN, porta ${port})`);
     });
+
+    return server;
 }

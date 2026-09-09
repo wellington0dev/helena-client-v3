@@ -37,13 +37,36 @@ export class AuthService {
     async login(email: string, password: string): Promise<void> {
         const res = await firstValueFrom(this.http.post<AuthResult>("/auth/login", { email, password }));
         this.setToken(res.accessToken);
+        this.relayTokenToLocalCli(res.accessToken);
         await this.loadMe();
     }
 
     async register(email: string, password: string, displayName?: string): Promise<void> {
         const res = await firstValueFrom(this.http.post<AuthResult>("/auth/register", { email, password, displayName }));
         this.setToken(res.accessToken);
+        this.relayTokenToLocalCli(res.accessToken);
         await this.loadMe();
+    }
+
+    /**
+     * Pedido explícito do dono (2026-09-09): logar no painel deveria deixar
+     * o `helena` (CLI), rodado depois NA MESMA MÁQUINA, já autenticado —
+     * sem pedir email/senha de novo. `fetch` direto no ORIGIN do painel
+     * (nunca via `this.http`, cujo interceptor reescreveria a URL pro
+     * backend-v2 REMOTO — este relay é local, pro processo `client/` que
+     * está SERVINDO o painel, ver panel/server.ts#handleCliSession).
+     * Best-effort: nunca lança, nunca bloqueia o login — só funciona
+     * quando o painel é servido pelo `client/` local (não faz sentido, e
+     * falha silenciosamente, em qualquer outro cenário de hospedagem.
+     */
+    private relayTokenToLocalCli(accessToken: string): void {
+        fetch(`${window.location.origin}/cli-session`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ accessToken }),
+        }).catch(() => {
+            // Sem processo client/ local por trás deste painel, ou rota inexistente — não é um erro do dono, nunca reporta nada.
+        });
     }
 
     async loadMe(): Promise<CurrentUser> {
