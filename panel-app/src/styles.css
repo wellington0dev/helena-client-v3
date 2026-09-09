@@ -17,6 +17,8 @@
   --warn-soft: oklch(30% 0.05 80);
   --success: oklch(72% 0.16 150);
   --success-soft: oklch(28% 0.05 150);
+  --sidebar-bg: oklch(16% 0.025 255);
+  --danger-border: oklch(45% 0.14 25);
 }
 
 :root[data-theme="light"] {
@@ -37,6 +39,8 @@
   --warn-soft: oklch(93% 0.05 80);
   --success: oklch(48% 0.13 150);
   --success-soft: oklch(93% 0.05 150);
+  --sidebar-bg: oklch(99% 0.003 255);
+  --danger-border: oklch(75% 0.14 25);
 }
 
 html,

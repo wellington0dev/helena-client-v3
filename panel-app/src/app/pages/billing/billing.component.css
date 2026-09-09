@@ -166,7 +166,7 @@ h1 {
 .purchase-card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 16px;
   padding: 22px;
 }
 .purchase-title {

@@ -63,12 +63,12 @@
 
 .sidebar {
   position: relative;
-  width: 220px;
+  width: 264px;
   flex-shrink: 0;
   height: 100%;
-  overflow: hidden;
+  overflow: visible;
   box-sizing: border-box;
-  background: var(--surface);
+  background: var(--sidebar-bg);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -121,6 +121,9 @@
 }
 .nav-item.nav-active {
   background: var(--accent-soft);
+  color: var(--text);
+}
+.nav-item.nav-active app-icon {
   color: var(--accent-text);
 }
 
@@ -261,27 +264,29 @@
   text-align: left;
 }
 
-/* Botão de recolher a sidebar pra "só ícone" — só existe no desktop (a mobile já tem seu próprio drawer/close-button, ver media query no fim do arquivo). */
+/* Botão de recolher a sidebar pra "só ícone" — flutua meio-fora da borda direita (mesmo tratamento do mock), só existe no desktop (a mobile já tem seu próprio drawer/close-button, ver media query no fim do arquivo). */
 .collapse-button {
   display: flex;
   align-items: center;
   justify-content: center;
-  align-self: flex-end;
-  width: 24px;
-  height: 24px;
-  margin: 4px 4px 10px;
-  border-radius: 7px;
+  position: absolute;
+  top: 20px;
+  right: -14px;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
   border: 1px solid var(--border);
-  background: var(--surface-raised);
+  background: var(--surface);
   color: var(--text-muted);
   cursor: pointer;
   flex-shrink: 0;
   padding: 0;
+  z-index: 5;
   transition: transform 0.2s ease;
 }
 
 .sidebar.sidebar-collapsed {
-  width: 72px;
+  width: 76px;
 }
 .sidebar.sidebar-collapsed .nav-item-label,
 .sidebar.sidebar-collapsed .brand-name,
@@ -292,7 +297,6 @@
 }
 .sidebar.sidebar-collapsed .collapse-button {
   transform: rotate(180deg);
-  align-self: center;
 }
 .sidebar.sidebar-collapsed .nav-item,
 .sidebar.sidebar-collapsed .logout-button {
