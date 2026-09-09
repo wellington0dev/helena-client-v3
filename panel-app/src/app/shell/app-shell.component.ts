@@ -37,6 +37,9 @@ export class AppShellComponent {
     /** Sidebar vira um drawer off-canvas abaixo do breakpoint mobile (ver app-shell.component.css) — fechado por padrão, mesmo se a pessoa girar a tela ou navegar; nunca persiste entre sessões, é só estado de UI momentâneo. */
     protected readonly sidebarOpen = signal(false);
 
+    /** Modo "só ícone" da sidebar no desktop — não persiste, é só estado de UI momentâneo (ver toggleSidebarCollapsed). */
+    protected readonly sidebarCollapsed = signal(false);
+
     protected readonly me = computed(() => {
         const user = this.auth.currentUser();
         if (!user) return { initial: "", name: "", email: "" };
@@ -59,6 +62,10 @@ export class AppShellComponent {
 
     closeSidebar(): void {
         this.sidebarOpen.set(false);
+    }
+
+    toggleSidebarCollapsed(): void {
+        this.sidebarCollapsed.update((collapsed) => !collapsed);
     }
 
     fmtWhen(iso: string): string {

@@ -109,7 +109,7 @@ th {
 }
 .download-link {
   background: var(--accent-solid);
-  color: #fff;
+  color: var(--on-accent);
   border-radius: 8px;
   padding: 8px 14px;
   font-size: 12.5px;

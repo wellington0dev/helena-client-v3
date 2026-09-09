@@ -1,38 +1,42 @@
-/* Paleta idêntica ao design importado do Claude Design (Helena Panel.dc.html) — dark é o padrão (ThemeService.readInitial()), light por atributo. */
+/* Paleta atualizada a partir do design importado do Claude Design (Helena AI.dc.html) — dark é o padrão (ThemeService.readInitial()), light por atributo. */
 :root {
-  --bg: #0a1420;
-  --surface: #111d2e;
-  --surface-raised: #16233a;
-  --border: #22314a;
-  --text: #eef3fa;
-  --text-muted: #8fa2bd;
-  --text-faint: #5c6f8c;
-  --accent-solid: #0f93d1;
-  --accent-text: #4cc8ef;
-  --accent-soft: rgba(76, 200, 239, 0.15);
-  --danger: #fb7185;
-  --danger-soft: rgba(251, 113, 133, 0.15);
-  --warn: #fbbf24;
-  --warn-soft: rgba(251, 191, 36, 0.15);
-  --success: #34d399;
+  --bg: oklch(19% 0.025 255);
+  --surface: oklch(23% 0.025 255);
+  --surface-raised: oklch(27% 0.025 255);
+  --border: oklch(32% 0.03 255);
+  --text: oklch(96% 0.005 255);
+  --text-muted: oklch(68% 0.02 255);
+  --text-faint: oklch(50% 0.02 255);
+  --accent-solid: oklch(68% 0.16 220);
+  --accent-text: oklch(72% 0.14 220);
+  --accent-soft: oklch(30% 0.06 220);
+  --on-accent: oklch(14% 0.02 255);
+  --danger: oklch(68% 0.19 25);
+  --danger-soft: oklch(28% 0.06 25);
+  --warn: oklch(78% 0.15 80);
+  --warn-soft: oklch(30% 0.05 80);
+  --success: oklch(72% 0.16 150);
+  --success-soft: oklch(28% 0.05 150);
 }
 
 :root[data-theme="light"] {
-  --bg: #f2f6fb;
-  --surface: #ffffff;
-  --surface-raised: #eef3f9;
-  --border: #dde6f0;
-  --text: #0d1b2c;
-  --text-muted: #5b6b85;
-  --text-faint: #93a3ba;
-  --accent-solid: #0f93d1;
-  --accent-text: #0c6f9e;
-  --accent-soft: rgba(15, 143, 209, 0.1);
-  --danger: #e11d48;
-  --danger-soft: rgba(225, 29, 72, 0.1);
-  --warn: #b45309;
-  --warn-soft: rgba(180, 83, 9, 0.1);
-  --success: #0f9d68;
+  --bg: oklch(97% 0.005 255);
+  --surface: oklch(100% 0 0);
+  --surface-raised: oklch(95% 0.006 255);
+  --border: oklch(89% 0.01 255);
+  --text: oklch(22% 0.02 255);
+  --text-muted: oklch(46% 0.02 255);
+  --text-faint: oklch(62% 0.02 255);
+  --accent-solid: oklch(52% 0.17 225);
+  --accent-text: oklch(52% 0.16 225);
+  --accent-soft: oklch(92% 0.04 225);
+  --on-accent: oklch(99% 0 0);
+  --danger: oklch(52% 0.19 25);
+  --danger-soft: oklch(94% 0.06 25);
+  --warn: oklch(52% 0.13 80);
+  --warn-soft: oklch(93% 0.05 80);
+  --success: oklch(48% 0.13 150);
+  --success-soft: oklch(93% 0.05 150);
 }
 
 html,
@@ -43,7 +47,7 @@ body {
 }
 
 body {
-  font-family: "Public Sans", sans-serif;
+  font-family: "Plus Jakarta Sans", sans-serif;
   background: var(--bg);
   color: var(--text);
   -webkit-font-smoothing: antialiased;

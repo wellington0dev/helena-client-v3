@@ -3,7 +3,7 @@
   max-width: 860px;
 }
 h1 {
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Sora", sans-serif;
   font-size: 24px;
   font-weight: 700;
   margin: 0 0 4px;
@@ -167,7 +167,7 @@ h1 {
 }
 .save-button {
   background: var(--accent-solid);
-  color: #fff;
+  color: var(--on-accent);
   border: none;
   border-radius: 7px;
   padding: 8px 16px;

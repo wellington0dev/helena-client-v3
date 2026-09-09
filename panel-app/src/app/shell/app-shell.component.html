@@ -10,7 +10,7 @@
     <div class="backdrop" (click)="closeSidebar()"></div>
   }
 
-  <aside class="sidebar" [class.sidebar-open]="sidebarOpen()">
+  <aside class="sidebar" [class.sidebar-open]="sidebarOpen()" [class.sidebar-collapsed]="sidebarCollapsed()">
     <div class="brand">
       <div class="brand-mark">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -26,9 +26,9 @@
 
     <nav class="nav">
       @for (item of navItems; track item.path) {
-        <a [routerLink]="item.path" routerLinkActive="nav-active" (click)="closeSidebar()" class="nav-item">
+        <a [routerLink]="item.path" routerLinkActive="nav-active" (click)="closeSidebar()" class="nav-item" [title]="item.label">
           <app-icon [name]="item.icon" />
-          {{ item.label }}
+          <span class="nav-item-label">{{ item.label }}</span>
         </a>
       }
     </nav>
@@ -56,6 +56,10 @@
       </div>
     </div>
 
+    <button (click)="toggleSidebarCollapsed()" class="collapse-button" [title]="sidebarCollapsed() ? 'Expandir menu' : 'Recolher menu'">
+      <app-icon name="chevron-left" />
+    </button>
+
     <div class="account">
       <div class="account-row">
         <div class="avatar">{{ me().initial }}</div>
@@ -67,9 +71,9 @@
           <app-icon [name]="theme.theme() === 'dark' ? 'moon' : 'sun'" />
         </button>
       </div>
-      <button (click)="auth.logout()" class="logout-button">
+      <button (click)="auth.logout()" class="logout-button" title="Sair">
         <app-icon name="logout" />
-        Sair
+        <span class="logout-label">Sair</span>
       </button>
     </div>
   </aside>

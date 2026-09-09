@@ -34,7 +34,7 @@
   padding: 0;
 }
 .topbar-brand {
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Sora", sans-serif;
   font-weight: 700;
   font-size: 15px;
   color: var(--text);
@@ -62,6 +62,7 @@
 }
 
 .sidebar {
+  position: relative;
   width: 220px;
   flex-shrink: 0;
   height: 100%;
@@ -72,6 +73,7 @@
   display: flex;
   flex-direction: column;
   padding: 20px 14px;
+  transition: width 0.2s ease;
 }
 
 .brand {
@@ -92,7 +94,7 @@
   flex-shrink: 0;
 }
 .brand-name {
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Sora", sans-serif;
   font-weight: 700;
   font-size: 16.5px;
   letter-spacing: -0.02em;
@@ -259,6 +261,47 @@
   text-align: left;
 }
 
+/* Botão de recolher a sidebar pra "só ícone" — só existe no desktop (a mobile já tem seu próprio drawer/close-button, ver media query no fim do arquivo). */
+.collapse-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-end;
+  width: 24px;
+  height: 24px;
+  margin: 4px 4px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  transition: transform 0.2s ease;
+}
+
+.sidebar.sidebar-collapsed {
+  width: 72px;
+}
+.sidebar.sidebar-collapsed .nav-item-label,
+.sidebar.sidebar-collapsed .brand-name,
+.sidebar.sidebar-collapsed .account-info,
+.sidebar.sidebar-collapsed .logout-label,
+.sidebar.sidebar-collapsed .conversations {
+  display: none;
+}
+.sidebar.sidebar-collapsed .collapse-button {
+  transform: rotate(180deg);
+  align-self: center;
+}
+.sidebar.sidebar-collapsed .nav-item,
+.sidebar.sidebar-collapsed .logout-button {
+  justify-content: center;
+}
+.sidebar.sidebar-collapsed .account-row {
+  justify-content: center;
+}
+
 .content {
   flex: 1;
   min-width: 0;
@@ -302,6 +345,24 @@
   }
   .sidebar.sidebar-open {
     transform: translateX(0);
+  }
+  /* Modo "só ícone" é um recurso de desktop — no drawer mobile a sidebar sempre mostra tudo. */
+  .sidebar.sidebar-collapsed {
+    width: 260px;
+  }
+  .sidebar.sidebar-collapsed .nav-item-label,
+  .sidebar.sidebar-collapsed .brand-name,
+  .sidebar.sidebar-collapsed .logout-label {
+    display: inline;
+  }
+  .sidebar.sidebar-collapsed .account-info {
+    display: block;
+  }
+  .sidebar.sidebar-collapsed .conversations {
+    display: flex;
+  }
+  .collapse-button {
+    display: none;
   }
   .content {
     height: auto;

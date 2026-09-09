@@ -8,7 +8,7 @@
   }
 }
 h1 {
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Sora", sans-serif;
   font-size: 24px;
   font-weight: 700;
   margin: 0 0 4px;
@@ -48,7 +48,7 @@ h1 {
   margin-bottom: 8px;
 }
 .balance-value {
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Sora", sans-serif;
   font-size: 34px;
   font-weight: 700;
   color: var(--text);
@@ -131,7 +131,7 @@ h1 {
   text-align: center;
 }
 .pix-payload {
-  font-family: monospace;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: 11px;
   color: var(--text-muted);
   background: var(--bg);
@@ -155,7 +155,7 @@ h1 {
   display: block;
   text-align: center;
   background: var(--accent-solid);
-  color: #fff;
+  color: var(--on-accent);
   border-radius: 9px;
   padding: 11px;
   font-size: 13px;
@@ -201,7 +201,7 @@ input {
 .submit {
   width: 100%;
   background: var(--accent-solid);
-  color: #fff;
+  color: var(--on-accent);
   border: none;
   border-radius: 9px;
   padding: 12px;

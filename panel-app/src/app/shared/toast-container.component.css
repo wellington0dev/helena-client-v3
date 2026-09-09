@@ -1,10 +1,10 @@
 .toast-stack {
   position: fixed;
-  top: 16px;
+  bottom: 16px;
   right: 16px;
   z-index: 100;
   display: flex;
-  flex-direction: column;
+  flex-direction: column-reverse;
   gap: 8px;
   max-width: 360px;
 }
@@ -20,17 +20,20 @@
   color: var(--text);
   font-size: 13px;
   line-height: 1.5;
-  animation: toast-in 0.15s ease-out;
+  animation: toast-in 0.18s ease-out;
 }
 .toast-success {
+  background: var(--success-soft);
   border-color: var(--success);
   color: var(--success);
 }
 .toast-warn {
+  background: var(--warn-soft);
   border-color: var(--warn);
   color: var(--warn);
 }
 .toast-danger {
+  background: var(--danger-soft);
   border-color: var(--danger);
   color: var(--danger);
 }
@@ -49,11 +52,11 @@
 @keyframes toast-in {
   from {
     opacity: 0;
-    transform: translateY(-6px);
+    transform: translateX(24px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateX(0);
   }
 }
 @media (max-width: 640px) {
