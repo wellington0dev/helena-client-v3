@@ -120,6 +120,11 @@ export class ProjectsService {
         return firstValueFrom(this.http.post<OkOrError>(`/projects/${id}/cancel`, { reason }));
     }
 
+    /** Apaga PERMANENTEMENTE — diferente de cancel (só encerra, mantém histórico). Exige status terminal (completed/cancelled). */
+    remove(id: string): Promise<OkOrError> {
+        return firstValueFrom(this.http.delete<OkOrError>(`/projects/${id}`));
+    }
+
     listAutonomyPolicies(): Promise<Record<AutonomyDecision, AutonomyMode>> {
         return firstValueFrom(this.http.get<Record<AutonomyDecision, AutonomyMode>>("/projects/autonomy-policies"));
     }

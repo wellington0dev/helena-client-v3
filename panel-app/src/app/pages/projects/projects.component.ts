@@ -149,6 +149,10 @@ export class ProjectsComponent {
     protected readonly cancelSaving = signal(false);
     protected readonly cancelError = signal("");
 
+    protected readonly deleteForm = signal<{ projectId: string } | null>(null);
+    protected readonly deleteSaving = signal(false);
+    protected readonly deleteError = signal("");
+
     protected readonly autonomyPolicies = signal<Record<AutonomyDecision, AutonomyMode> | null>(null);
     protected readonly autonomySaving = signal<AutonomyDecision | null>(null);
     protected readonly showAutonomyPanel = signal(false);
@@ -195,12 +199,14 @@ export class ProjectsComponent {
             this.detail.set(null);
             this.revisionForm.set(null);
             this.cancelForm.set(null);
+            this.deleteForm.set(null);
             return;
         }
 
         this.expandedId.set(project.id);
         this.revisionForm.set(null);
         this.cancelForm.set(null);
+        this.deleteForm.set(null);
         this.detail.set(null);
         this.detailLoading.set(true);
         try {
@@ -374,6 +380,44 @@ export class ProjectsComponent {
             this.cancelError.set(extractErrorMessage(err, "Não consegui cancelar este Project."));
         } finally {
             this.cancelSaving.set(false);
+        }
+    }
+
+    /** Só Project terminal (completed/cancelled) — o oposto de canCancel. Apagar um Project ainda em andamento derrubaria o chão de um agente em pleno turno. */
+    protected canDelete(status: ProjectSummary["status"]): boolean {
+        return TERMINAL_STATUSES.has(status);
+    }
+
+    protected openDeleteForm(projectId: string): void {
+        this.deleteForm.set({ projectId });
+        this.deleteError.set("");
+    }
+
+    protected closeDeleteForm(): void {
+        this.deleteForm.set(null);
+        this.deleteError.set("");
+    }
+
+    protected async submitDelete(): Promise<void> {
+        const form = this.deleteForm();
+        if (!form) return;
+
+        this.deleteSaving.set(true);
+        this.deleteError.set("");
+        try {
+            const outcome = await this.projects.remove(form.projectId);
+            if (!outcome.ok) {
+                this.deleteError.set(outcome.error ?? "Não consegui apagar este Project.");
+                return;
+            }
+            this.deleteForm.set(null);
+            this.expandedId.set(null);
+            this.detail.set(null);
+            await this.reload();
+        } catch (err) {
+            this.deleteError.set(extractErrorMessage(err, "Não consegui apagar este Project."));
+        } finally {
+            this.deleteSaving.set(false);
         }
     }
 
