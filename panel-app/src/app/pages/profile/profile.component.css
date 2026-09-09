@@ -282,48 +282,6 @@ h1 {
   cursor: pointer;
 }
 
-.usage-card {
-  padding: 20px 22px;
-}
-.usage-summary {
-  font-size: 12.5px;
-  color: var(--text-muted);
-  margin-bottom: 16px;
-}
-.usage-bars {
-  display: flex;
-  align-items: flex-end;
-  gap: 4px;
-  height: 100px;
-  margin-bottom: 20px;
-}
-.usage-bar {
-  flex: 1;
-  background: var(--accent-solid);
-  min-height: 2px;
-  border-radius: 2px 2px 0 0;
-}
-.channel-bars {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.channel-bar-head {
-  display: flex;
-  justify-content: space-between;
-  font-size: 12.5px;
-  margin-bottom: 4px;
-}
-.channel-bar-head span {
-  color: var(--text-muted);
-  font-weight: 600;
-}
-.channel-bar-track {
-  height: 6px;
-  border-radius: 3px;
-  background: var(--surface-raised);
-  overflow: hidden;
-}
 .feedback-category-group {
   display: flex;
   gap: 8px;
@@ -382,8 +340,3 @@ h1 {
   color: var(--success);
 }
 
-.channel-bar-fill {
-  height: 100%;
-  background: var(--accent-solid);
-  border-radius: 3px;
-}

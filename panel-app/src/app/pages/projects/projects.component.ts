@@ -103,6 +103,8 @@ export class ProjectsComponent {
 
     protected readonly statusLabel = STATUS_LABEL;
     protected readonly stepStatusLabel = STEP_STATUS_LABEL;
+    /** Só o título do papel, sem o nome customizado — o rastreador horizontal não tem espaço pra "Arquiteta (Ada)" embaixo de cada círculo. */
+    protected readonly roleTitle = ROLE_TITLE;
     protected readonly eventKindLabel = EVENT_KIND_LABEL;
     protected readonly autonomyLabel = AUTONOMY_LABEL;
     protected readonly revisionRoleOptions = REVISION_ROLES;

@@ -21,6 +21,7 @@ export const routes: Routes = [
             { path: "integracoes", loadComponent: () => import("./pages/mcp-guide/mcp-guide.component").then((m) => m.McpGuideComponent) },
             { path: "perfil", loadComponent: () => import("./pages/profile/profile.component").then((m) => m.ProfileComponent) },
             { path: "cobranca", loadComponent: () => import("./pages/billing/billing.component").then((m) => m.BillingComponent) },
+            { path: "uso", loadComponent: () => import("./pages/usage/usage.component").then((m) => m.UsageComponent) },
             { path: "", pathMatch: "full", redirectTo: "chat" },
         ],
     },

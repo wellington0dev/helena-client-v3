@@ -104,27 +104,6 @@
     }
   </div>
 
-  <div class="card usage-card">
-    <div class="card-title">Consumo (30 dias)</div>
-    <div class="usage-summary">{{ usageSummaryLabel() }}</div>
-    <div class="usage-bars">
-      @for (bar of usageBars(); track $index) {
-        <div class="usage-bar" [title]="bar.title" [style.height.%]="bar.heightPct"></div>
-      }
-    </div>
-    <div class="channel-bars">
-      @if (channelBars().length === 0) {
-        <div class="hint-faint">Nenhuma chamada registrada ainda.</div>
-      }
-      @for (ch of channelBars(); track ch.label) {
-        <div>
-          <div class="channel-bar-head"><span>{{ ch.label }}</span><strong>{{ ch.value }}</strong></div>
-          <div class="channel-bar-track"><div class="channel-bar-fill" [style.width.%]="ch.widthPct"></div></div>
-        </div>
-      }
-    </div>
-  </div>
-
   <div class="card">
     <div class="card-title">Relatar problema ou sugestão</div>
     <p class="hint">Manda direto pra equipe — sem precisar de e-mail ou outro canal.</p>

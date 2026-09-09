@@ -6,7 +6,7 @@ import { AuthService } from "../../core/auth.service";
 import type { FeedbackCategory } from "../../core/feedback.service";
 import { FeedbackService } from "../../core/feedback.service";
 import { McpConnectionsService } from "../../core/mcp-connections.service";
-import type { ApiTokenSummary, UsageSummary } from "../../core/profile.service";
+import type { ApiTokenSummary } from "../../core/profile.service";
 import { ProfileService } from "../../core/profile.service";
 import { IconComponent } from "../../shared/icon.component";
 
@@ -28,18 +28,6 @@ interface OwnerRow {
     error: string;
 }
 
-interface UsageBar {
-    heightPct: number;
-    title: string;
-}
-interface ChannelBar {
-    label: string;
-    value: number;
-    widthPct: number;
-}
-
-const CHANNEL_LABELS: Record<string, string> = { panel: "Painel", whatsapp: "WhatsApp", telegram: "Telegram", cli: "CLI" };
-
 function pad(n: number): string {
     return n < 10 ? `0${n}` : `${n}`;
 }
@@ -55,15 +43,7 @@ function fmtWhen(iso?: string | null): string {
     if (diffH < 24) return `${diffH}h atrás`;
     return `${Math.round(diffH / 24)}d atrás`;
 }
-function dayKey(d: Date): string {
-    return d.toISOString().slice(0, 10);
-}
-function dayLabel(key: string): string {
-    const d = new Date(`${key}T00:00:00Z`);
-    return `${pad(d.getUTCDate())}/${pad(d.getUTCMonth() + 1)}`;
-}
-
-/** Identidade, telemetria, vínculo de canais, tokens de API e uso (30 dias) — tudo do próprio usuário logado. */
+/** Identidade, telemetria, vínculo de canais e tokens de API — tudo do próprio usuário logado (uso/consumo agora tem página própria, ver pages/usage). */
 @Component({
     selector: "app-profile",
     imports: [FormsModule, RouterLink, IconComponent],
@@ -85,8 +65,6 @@ export class ProfileComponent {
     protected readonly apiTokens = signal<ApiTokenSummary[]>([]);
     protected readonly apiTokensLoaded = signal(false);
     protected readonly newTokenValue = signal("");
-
-    protected readonly usage = signal<UsageSummary | null>(null);
 
     /** Só pra alimentar `hasEnabledMcpConnection` — ver aviso no card de "Sempre permitir comandos". */
     private readonly hasEnabledMcp = signal(false);
@@ -118,38 +96,11 @@ export class ProfileComponent {
 
     protected readonly tokensEmpty = computed(() => this.apiTokensLoaded() && this.apiTokens().length === 0);
 
-    protected readonly usageSummaryLabel = computed(() => {
-        const usage = this.usage();
-        if (!usage) return "carregando…";
-        return `${usage.totalCalls} chamadas · primeira em ${fmtDate(usage.firstCallAt)} · última em ${fmtWhen(usage.lastCallAt)}`;
-    });
-
-    protected readonly usageBars = computed<UsageBar[]>(() => {
-        const usage = this.usage();
-        const byDate = new Map((usage?.callsByDay ?? []).map((d) => [d.date.slice(0, 10), d.calls]));
-        const today = new Date();
-        const last30 = Array.from({ length: 30 }, (_, i) => {
-            const d = new Date(today.getTime() - (29 - i) * 86400000);
-            const key = dayKey(d);
-            return { date: key, calls: byDate.get(key) ?? 0 };
-        });
-        const max = Math.max(...last30.map((d) => d.calls), 1);
-        return last30.map((d) => ({ heightPct: Math.max(3, Math.round((d.calls / max) * 100)), title: `${dayLabel(d.date)}: ${d.calls}` }));
-    });
-
-    protected readonly channelBars = computed<ChannelBar[]>(() => {
-        const usage = this.usage();
-        const byChannel = usage?.callsByChannel ?? {};
-        const max = Math.max(...Object.values(byChannel), 1);
-        return Object.entries(byChannel).map(([k, v]) => ({ label: CHANNEL_LABELS[k] ?? k, value: v, widthPct: Math.round((v / max) * 100) }));
-    });
-
     constructor() {
         void this.profile.listApiTokens().then((tokens) => {
             this.apiTokens.set(tokens);
             this.apiTokensLoaded.set(true);
         });
-        void this.profile.usage().then((usage) => this.usage.set(usage));
         void this.mcpConnections.list().then((connections) => this.hasEnabledMcp.set(connections.some((c) => c.enabled)));
     }
 

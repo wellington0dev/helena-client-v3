@@ -151,7 +151,7 @@ a:hover {
 .bubble .file-preview-card {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   max-width: 100%;
   margin: 4px 0;
   padding: 8px 12px;
@@ -162,9 +162,25 @@ a:hover {
 .bubble .file-preview-card:hover {
   background: rgba(0, 0, 0, 0.22);
 }
+.bubble .file-preview-card[data-kind]:not([data-kind="image"])::before {
+  content: attr(data-kind);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 22px;
+  padding: 0 4px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.2);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
 .bubble .file-preview-icon {
-  font-size: 1.1em;
-  line-height: 1;
+  display: none;
 }
 .bubble .file-preview-name {
   overflow: hidden;

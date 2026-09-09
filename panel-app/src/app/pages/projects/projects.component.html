@@ -164,16 +164,26 @@
                 <div class="detail-label">Agentes</div>
                 <a class="open-detail-link" [routerLink]="['/projetos', project.id]">Conversar com os agentes →</a>
               </div>
-              @for (step of d.steps; track step.id) {
-                <div class="step-row">
-                  <div class="step-head">
-                    <span class="step-role">{{ roleLabel()[step.role] }}</span>
-                    <span class="badge" [class]="'badge-step-' + step.status">{{ stepStatusLabel[step.status] }}</span>
+              <div class="step-tracker">
+                @for (step of d.steps; track step.id; let last = $last) {
+                  <div class="tracker-item">
+                    <div class="tracker-node" [class]="'tracker-node-' + step.status" [title]="stepStatusLabel[step.status]">
+                      @if (step.status === 'done') {
+                        <app-icon name="check" />
+                      }
+                    </div>
+                    <div class="tracker-role">{{ roleTitle[step.role] }}</div>
+                    <div class="tracker-status">{{ stepStatusLabel[step.status] }}</div>
                   </div>
-                  @if (step.report) {
-                    <p class="detail-text">{{ step.report }}</p>
+                  @if (!last) {
+                    <div class="tracker-line" [class.tracker-line-done]="step.status === 'done'"></div>
                   }
-                </div>
+                }
+              </div>
+              @for (step of d.steps; track step.id) {
+                @if (step.report) {
+                  <p class="detail-text"><strong>{{ roleTitle[step.role] }}:</strong> {{ step.report }}</p>
+                }
               }
             </div>
 
@@ -251,9 +261,10 @@
             }
 
             <div class="detail-block">
-              <div class="detail-label">Histórico</div>
+              <div class="detail-label">Linha do tempo</div>
               @for (event of d.events; track event.id) {
                 <div class="event-row">
+                  <span class="event-dot"></span>
                   <span class="event-kind">{{ eventKindLabel[event.kind] ?? event.kind }}</span>
                   <span class="event-note">{{ event.note }}</span>
                 </div>

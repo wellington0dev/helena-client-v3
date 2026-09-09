@@ -26,12 +26,13 @@ export class AppShellComponent {
 
     protected readonly navItems: NavItem[] = [
         { path: "/chat", label: "Chat", icon: "chat" },
-        { path: "/projetos", label: "Projects", icon: "layers" },
+        { path: "/projetos", label: "Projetos", icon: "layers" },
         { path: "/canais", label: "Canais", icon: "channels" },
         { path: "/contatos", label: "Contatos", icon: "contacts" },
-        { path: "/integracoes", label: "Integrações", icon: "plug" },
-        { path: "/cobranca", label: "Cobrança", icon: "billing" },
+        { path: "/integracoes", label: "Conexões MCP", icon: "plug" },
         { path: "/perfil", label: "Perfil", icon: "profile" },
+        { path: "/cobranca", label: "Créditos", icon: "billing" },
+        { path: "/uso", label: "Uso", icon: "chart" },
     ];
 
     /** Sidebar vira um drawer off-canvas abaixo do breakpoint mobile (ver app-shell.component.css) — fechado por padrão, mesmo se a pessoa girar a tela ou navegar; nunca persiste entre sessões, é só estado de UI momentâneo. */

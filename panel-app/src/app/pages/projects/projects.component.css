@@ -224,14 +224,14 @@ h1 {
   background: var(--success-soft);
   border-color: transparent;
 }
-.badge-status-paused,
-.badge-status-needs_revision {
+.badge-status-paused {
   color: var(--warn);
   background: var(--warn-soft);
   border-color: transparent;
 }
 .badge-step-failed,
-.badge-status-cancelled {
+.badge-status-cancelled,
+.badge-status-needs_revision {
   color: var(--danger);
   background: var(--danger-soft);
   border-color: transparent;
@@ -321,31 +321,83 @@ h1 {
   white-space: pre-wrap;
 }
 
-.step-row {
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: var(--surface-raised);
+/* Trilha horizontal de círculos conectados por papel — mesmo tratamento do design importado (ver docs/comparativo). Cada nó é um step real (ProjectStepSummary), a linha entre dois nós fica "concluída" (verde) só quando o step ANTERIOR terminou. */
+.step-tracker {
+  display: flex;
+  align-items: flex-start;
+  overflow-x: auto;
+  padding: 10px 4px 6px;
+}
+.tracker-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  flex-shrink: 0;
+  width: 92px;
 }
-.step-head {
+.tracker-node {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  justify-content: center;
+  border: 2px solid var(--border);
+  background: var(--surface);
+  color: var(--text-faint);
+  flex-shrink: 0;
 }
-.step-role {
-  font-size: 13px;
-  font-weight: 600;
+.tracker-node-done {
+  border-color: var(--success);
+  background: var(--success-soft);
+  color: var(--success);
+}
+.tracker-node-running {
+  border-color: var(--accent-solid);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.tracker-node-failed {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.tracker-role {
+  margin-top: 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-align: center;
+}
+.tracker-status {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  text-align: center;
+}
+.tracker-line {
+  flex: 1;
+  min-width: 16px;
+  height: 2px;
+  background: var(--border);
+  margin-top: 17px;
+}
+.tracker-line-done {
+  background: var(--success);
 }
 
 .event-row {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   align-items: baseline;
   font-size: 12.5px;
   padding: 4px 0;
+}
+.event-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-solid);
+  flex-shrink: 0;
+  align-self: center;
 }
 .event-kind {
   font-weight: 700;
