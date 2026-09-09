@@ -34,17 +34,48 @@ const backendUrl = config.backendUrl;
 const invocationCwd = process.env.HELENA_CLI_CWD || process.cwd();
 const machineName = os.hostname();
 
-/** Prompt de senha sem eco na tela — técnica padrão sem dependência nova: suprime o que o readline escreveria de volta, exceto o próprio prompt e a quebra de linha final. */
-async function questionHidden(rl: Interface, query: string): Promise<string> {
-    const rlInternal = rl as unknown as { _writeToOutput?: (s: string) => void; output: NodeJS.WritableStream };
-    const original = rlInternal._writeToOutput?.bind(rlInternal);
-    rlInternal._writeToOutput = (stringToWrite: string) => {
-        if (stringToWrite === query || stringToWrite === "\r\n" || stringToWrite === "\n") rlInternal.output.write(stringToWrite);
-    };
+/** Só sequência de escape ANSI (mover cursor, limpar linha/tela) — nunca contém o texto digitado, pode passar direto. */
+const ANSI_ESCAPE_ONLY = /^(\x1b\[[0-9;]*[A-Za-z])+$/;
+
+/**
+ * Prompt de senha MASCARADA (pedido explícito do dono, 2026-09-09) — cada
+ * tecla vira um "*" na tela.
+ *
+ * Achado ao vivo enquanto implementava isto (testado com um pty de
+ * verdade, via `python3 -c "import pty..."`, não só typecheck): a versão
+ * anterior (`questionHidden`, e a que eu tinha escrito primeiro pra isto)
+ * dependia de sobrescrever `rl._writeToOutput` — uma propriedade PRIVADA
+ * do readline que existia em versões antigas do Node, mas SUMIU na versão
+ * deste projeto (`node --version` = v26.8.1; `Object.getOwnPropertyNames
+ * (Object.getPrototypeOf(rl))` só tem `constructor`/`question`). Ou seja:
+ * a senha vinha sendo ecoada em TEXTO PURO na tela há tempos — a
+ * sobrescrita nunca fazia nada, silenciosamente.
+ *
+ * Fix de verdade: intercepta no nível do STREAM (`process.stdout.write`),
+ * não da instância do readline — funciona não importa a versão interna,
+ * porque QUALQUER eco do readline (raw mode, TTY) tem que passar pelo
+ * `write()` do stdout mais cedo ou mais tarde. Nunca confia no CONTEÚDO
+ * do que o readline mandou escrever (pode ser o caractere de verdade) —
+ * só usa como gatilho pra redesenhar a linha do zero com `rl.line.length`
+ * asteriscos, a única fonte de verdade sobre quanto já foi digitado.
+ * Sequência pura de escape ANSI passa direto (nunca carrega texto); `\r`/
+ * `\n`/`\r\n` isolados (Enter) também — qualquer outra coisa é tratada
+ * como "pode ter texto real dentro" e nunca é repassada como está.
+ */
+async function questionMasked(rl: Interface, query: string): Promise<string> {
+    const originalWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = ((chunk: unknown, ...args: unknown[]) => {
+        const str = chunk instanceof Buffer ? chunk.toString() : String(chunk);
+        if (ANSI_ESCAPE_ONLY.test(str) || str === "\r" || str === "\n" || str === "\r\n") {
+            return (originalWrite as (...a: unknown[]) => boolean)(chunk, ...args);
+        }
+        return originalWrite(`\r\x1b[K${query}${"*".repeat((rl as unknown as { line: string }).line.length)}`);
+    }) as typeof process.stdout.write;
+
     try {
         return await rl.question(query);
     } finally {
-        if (original) rlInternal._writeToOutput = original;
+        process.stdout.write = originalWrite;
         process.stdout.write("\n");
     }
 }
@@ -55,7 +86,7 @@ async function interactiveLogin(): Promise<string> {
     try {
         console.log(`Login na Helena (${backendUrl})`);
         const email = await rl.question("Email: ");
-        const password = await questionHidden(rl, "Senha: ");
+        const password = await questionMasked(rl, "Senha: ");
         const token = await login(backendUrl, email.trim(), password);
         saveSession(token);
         return token;
