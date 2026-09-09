@@ -31,7 +31,7 @@
       <div class="field-row">
         <label class="field">
           <span>Teto de custo em tokens (opcional)</span>
-          <input [(ngModel)]="createCostCapValue" type="number" min="0" placeholder="vazio = sem teto" />
+          <input [(ngModel)]="createCostCapValue" type="number" min="1" placeholder="vazio = sem teto" />
         </label>
         <label class="field-checkbox field-checkbox-standalone">
           <input type="checkbox" [(ngModel)]="createGitPushAllowed" />
@@ -160,7 +160,10 @@
             }
 
             <div class="detail-block">
-              <div class="detail-label">Agentes</div>
+              <div class="card-head">
+                <div class="detail-label">Agentes</div>
+                <a class="open-detail-link" [routerLink]="['/projetos', project.id]">Conversar com os agentes →</a>
+              </div>
               @for (step of d.steps; track step.id) {
                 <div class="step-row">
                   <div class="step-head">

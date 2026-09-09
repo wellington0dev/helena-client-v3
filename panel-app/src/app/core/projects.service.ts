@@ -68,6 +68,29 @@ export interface OkOrError {
     error?: string;
 }
 
+export interface StepMessagePart {
+    text?: string;
+    reasoning?: string;
+    toolRequest?: { name: string; input?: unknown };
+    toolResponse?: { name: string; output?: unknown };
+}
+
+export interface StepMessage {
+    role: "system" | "user" | "model" | "tool";
+    parts: StepMessagePart[];
+}
+
+export interface StepTranscript {
+    status?: string;
+    messages: StepMessage[];
+    error?: string;
+}
+
+export interface AgentReplyOutcome {
+    reply?: string;
+    error?: string;
+}
+
 /** Consome `ProjectsController` (backend-v2, `src/dev-team/projects.controller.ts`) — ver docs/agent-team-architecture.md §4/§8. */
 @Injectable({ providedIn: "root" })
 export class ProjectsService {
@@ -103,5 +126,13 @@ export class ProjectsService {
 
     setAutonomyPolicy(decision: AutonomyDecision, mode: AutonomyMode): Promise<Record<AutonomyDecision, AutonomyMode>> {
         return firstValueFrom(this.http.patch<Record<AutonomyDecision, AutonomyMode>>(`/projects/autonomy-policies/${decision}`, { mode }));
+    }
+
+    getStepMessages(id: string, role: ProjectStepRole): Promise<StepTranscript> {
+        return firstValueFrom(this.http.get<StepTranscript>(`/projects/${id}/steps/${role}/messages`));
+    }
+
+    sendStepMessage(id: string, role: ProjectStepRole, message: string): Promise<AgentReplyOutcome> {
+        return firstValueFrom(this.http.post<AgentReplyOutcome>(`/projects/${id}/steps/${role}/message`, { message }));
     }
 }

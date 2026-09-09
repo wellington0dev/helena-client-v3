@@ -1,6 +1,7 @@
 import { HttpErrorResponse } from "@angular/common/http";
 import { Component, computed, inject, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
+import { RouterLink } from "@angular/router";
 import type { AgentRole } from "../../core/agent-personas.service";
 import { AgentPersonasService, DEFAULT_AGENT_NAMES } from "../../core/agent-personas.service";
 import type { AutonomyDecision, AutonomyMode, ProjectDetail, ProjectStepRole, ProjectSummary } from "../../core/projects.service";
@@ -71,7 +72,12 @@ const REVISION_ROLES: ProjectStepRole[] = ["designer", "frontend", "backend", "d
 const AUTONOMY_DECISIONS: AutonomyDecision[] = ["qa_failure", "revision_scope_change"];
 
 function extractErrorMessage(err: unknown, fallback: string): string {
-    if (err instanceof HttpErrorResponse && typeof err.error?.message === "string") return err.error.message;
+    if (err instanceof HttpErrorResponse) {
+        const message = err.error?.message;
+        // ValidationPipe (class-validator) devolve um ARRAY de mensagens, não uma string — achado real ao validar costCapValue: sem isto, qualquer rejeição de validação mostrava só o fallback genérico.
+        if (typeof message === "string") return message;
+        if (Array.isArray(message) && message.every((m) => typeof m === "string")) return message.join(" — ");
+    }
     return err instanceof Error ? err.message : fallback;
 }
 
@@ -87,7 +93,7 @@ function extractErrorMessage(err: unknown, fallback: string): string {
  */
 @Component({
     selector: "app-projects",
-    imports: [FormsModule, IconComponent],
+    imports: [FormsModule, IconComponent, RouterLink],
     templateUrl: "./projects.component.html",
     styleUrl: "./projects.component.css",
 })
@@ -127,7 +133,8 @@ export class ProjectsComponent {
     protected readonly creating = signal(false);
     protected createSpec = "";
     protected createMachine = "";
-    protected createCostCapValue = "";
+    // `type="number"` no template — NumberValueAccessor do Angular liga isto como number|null, nunca string (bug real ao vivo: chamar .trim() aqui quebrava com "this.createCostCapValue.trim is not a function").
+    protected createCostCapValue: number | null = null;
     protected createGitPushAllowed = false;
     protected readonly createSaving = signal(false);
     protected readonly createError = signal("");
@@ -209,7 +216,7 @@ export class ProjectsComponent {
         this.creating.set(true);
         this.createSpec = "";
         this.createMachine = "";
-        this.createCostCapValue = "";
+        this.createCostCapValue = null;
         this.createGitPushAllowed = false;
         this.createError.set("");
     }
@@ -226,7 +233,7 @@ export class ProjectsComponent {
         this.createSaving.set(true);
         this.createError.set("");
         try {
-            const costCapValue = this.createCostCapValue.trim() ? Number(this.createCostCapValue) : undefined;
+            const costCapValue = this.createCostCapValue ?? undefined;
             const outcome = await this.projects.create({
                 spec,
                 machine: this.createMachine.trim() || undefined,
