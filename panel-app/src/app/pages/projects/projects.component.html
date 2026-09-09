@@ -1,12 +1,12 @@
 <div class="page">
   <div class="page-head">
     <div>
-      <h1>Projects</h1>
+      <h1>Projetos</h1>
       <p class="subtitle">A equipe de agentes de desenvolvimento — Arquiteta, Designer, Frontend, Backend, DBA, Segurança e QA</p>
     </div>
     <button class="new-button" (click)="openCreateForm()">
       <app-icon name="plus" />
-      Novo Project
+      Novo projeto
     </button>
   </div>
 
@@ -16,7 +16,7 @@
 
   @if (creating()) {
     <div class="card create-card">
-      <div class="card-title">Novo Project</div>
+      <div class="card-title">Novo projeto</div>
       @if (createError()) {
         <div class="banner-error">{{ createError() }}</div>
       }
@@ -108,11 +108,11 @@
 
   <div class="card">
     <div class="card-head">
-      <div class="card-title">Projects</div>
+      <div class="card-title">Projetos</div>
     </div>
 
     @if (loaded() && list().length === 0) {
-      <p class="hint">Nenhum Project ainda — peça pra Helena num pedido de desenvolvimento de verdade, ou clique em "Novo Project".</p>
+      <p class="hint">Nenhum projeto ainda — peça pra Helena num pedido de desenvolvimento de verdade, ou clique em "Novo projeto".</p>
     }
 
     @for (project of list(); track project.id) {

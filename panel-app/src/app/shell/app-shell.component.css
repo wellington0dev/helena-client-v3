@@ -92,6 +92,10 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  font-family: "Sora", sans-serif;
+  font-weight: 800;
+  font-size: 14px;
+  color: var(--on-accent);
 }
 .brand-name {
   font-family: "Sora", sans-serif;

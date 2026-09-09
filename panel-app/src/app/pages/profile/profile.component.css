@@ -119,6 +119,7 @@ h1 {
 }
 .toggle.toggle-on .knob {
   left: 20px;
+  background: var(--on-accent);
 }
 .hint {
   margin: 0;

@@ -486,4 +486,5 @@ h1 {
 }
 .toggle.toggle-on .knob {
   left: 20px;
+  background: var(--on-accent);
 }

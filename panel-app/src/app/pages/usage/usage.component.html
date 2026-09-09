@@ -20,7 +20,9 @@
       @for (bar of weekBars(); track $index) {
         <div class="week-col">
           <div class="week-bar-track">
-            <div class="week-bar" [style.height.%]="bar.heightPct" [title]="bar.calls + ' chamadas'"></div>
+            <div class="week-bar" [style.height.%]="bar.heightPct" [title]="bar.calls + ' chamadas'">
+              <span class="week-value">{{ bar.calls }}</span>
+            </div>
           </div>
           <div class="week-label">{{ bar.label }}</div>
         </div>

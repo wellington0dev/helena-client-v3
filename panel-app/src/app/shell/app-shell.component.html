@@ -3,7 +3,7 @@
     <button (click)="toggleSidebar()" class="menu-button" title="Menu" aria-label="Abrir menu">
       <app-icon name="menu" />
     </button>
-    <span class="topbar-brand">Helena</span>
+    <span class="topbar-brand">Helena AI</span>
   </header>
 
   @if (sidebarOpen()) {
@@ -12,13 +12,8 @@
 
   <aside class="sidebar" [class.sidebar-open]="sidebarOpen()" [class.sidebar-collapsed]="sidebarCollapsed()">
     <div class="brand">
-      <div class="brand-mark">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="9" stroke="white" stroke-width="2" />
-          <path d="M9 10h.01M15 10h.01M9 14c.8.7 1.9 1 3 1s2.2-.3 3-1" stroke="white" stroke-width="2" stroke-linecap="round" />
-        </svg>
-      </div>
-      <span class="brand-name">Helena</span>
+      <div class="brand-mark">H</div>
+      <span class="brand-name">Helena AI</span>
       <button (click)="closeSidebar()" class="close-button" title="Fechar menu" aria-label="Fechar menu">
         <app-icon name="close" />
       </button>
