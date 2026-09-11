@@ -196,3 +196,60 @@ h1 {
   font-size: 13px;
   cursor: pointer;
 }
+
+.contact-history {
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--surface-raised);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.history-messages {
+  max-height: 360px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 2px;
+}
+.history-empty,
+.history-loading {
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 13px;
+  padding: 10px 0;
+}
+.load-older {
+  align-self: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.message-row {
+  display: flex;
+  justify-content: flex-start;
+}
+.message-row-user {
+  justify-content: flex-end;
+}
+.bubble {
+  max-width: 78%;
+  background: var(--surface);
+  color: var(--text);
+  padding: 9px 13px;
+  border-radius: 14px 14px 14px 4px;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.bubble-user {
+  background: var(--accent-solid);
+  color: var(--on-accent);
+  border-radius: 14px 14px 4px 14px;
+}

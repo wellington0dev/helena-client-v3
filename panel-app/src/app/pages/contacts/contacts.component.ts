@@ -1,15 +1,26 @@
 import { HttpErrorResponse } from "@angular/common/http";
 import { Component, computed, inject, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
+import { DomSanitizer, type SafeHtml } from "@angular/platform-browser";
+import { API_BASE_URL } from "../../core/api-base.token";
+import type { HistoryEntry } from "../../core/chat.service";
 import type { ContactSummary, GrantableTool, UpdateContactInput } from "../../core/contacts.service";
 import { ContactsService } from "../../core/contacts.service";
 import { IconComponent } from "../../shared/icon.component";
+import { renderMessageHtml } from "../../shared/markdown-html";
 
 interface ContactForm {
     id: string;
     name: string;
     notes: string;
     grantedTools: Record<GrantableTool, boolean>;
+}
+
+interface ContactHistoryState {
+    contactId: string;
+    entries: HistoryEntry[];
+    total: number;
+    loaded: number;
 }
 
 const GRANTABLE_OPTIONS: { key: GrantableTool; label: string }[] = [
@@ -49,6 +60,8 @@ function extractErrorMessage(err: unknown, fallback: string): string {
 })
 export class ContactsComponent {
     private readonly contacts = inject(ContactsService);
+    private readonly sanitizer = inject(DomSanitizer);
+    private readonly apiBaseUrl = inject(API_BASE_URL);
 
     protected readonly grantableOptions = GRANTABLE_OPTIONS;
 
@@ -60,6 +73,11 @@ export class ContactsComponent {
     /** `null` = nenhum contato selecionado pra edição. */
     protected readonly form = signal<ContactForm | null>(null);
     protected readonly editingContact = computed(() => this.list().find((c) => c.id === this.form()?.id));
+
+    /** `null` = nenhuma conversa aberta pra visualização (só leitura — quem responde de verdade é a Helena, não o dono por aqui). */
+    protected readonly history = signal<ContactHistoryState | null>(null);
+    protected readonly historyLoading = signal(false);
+    protected readonly historyError = signal("");
 
     constructor() {
         void this.reload();
@@ -81,11 +99,48 @@ export class ContactsComponent {
 
     openEditForm(contact: ContactSummary): void {
         this.error.set("");
+        this.history.set(null); // só um painel aberto por vez, evita os dois competindo por espaço no card.
         this.form.set(toForm(contact));
     }
 
     closeForm(): void {
         this.form.set(null);
+    }
+
+    async openHistory(contact: ContactSummary): Promise<void> {
+        this.historyError.set("");
+        this.form.set(null);
+        this.history.set({ contactId: contact.id, entries: [], total: 0, loaded: 0 });
+        await this.loadHistoryPage(contact.id, 0, true);
+    }
+
+    closeHistory(): void {
+        this.history.set(null);
+    }
+
+    private async loadHistoryPage(contactId: string, offset: number, replace: boolean): Promise<void> {
+        this.historyLoading.set(true);
+        try {
+            const page = await this.contacts.history(contactId, offset);
+            this.history.update((h) => {
+                if (!h || h.contactId !== contactId) return h; // painel foi fechado (ou trocou de contato) enquanto a página carregava.
+                return { contactId, entries: [...page.entries, ...(replace ? [] : h.entries)], total: page.total, loaded: offset + page.entries.length };
+            });
+        } catch (err) {
+            this.historyError.set(extractErrorMessage(err, "Falha ao carregar a conversa."));
+        } finally {
+            this.historyLoading.set(false);
+        }
+    }
+
+    loadOlderHistory(): void {
+        const current = this.history();
+        if (!current) return;
+        void this.loadHistoryPage(current.contactId, current.loaded, false);
+    }
+
+    renderedText(text: string): SafeHtml {
+        return this.sanitizer.bypassSecurityTrustHtml(renderMessageHtml(text, this.apiBaseUrl));
     }
 
     updateForm(patch: Partial<Omit<ContactForm, "grantedTools">>): void {
@@ -123,6 +178,7 @@ export class ContactsComponent {
         const prev = this.list();
         this.list.update((rows) => rows.filter((row) => row.id !== contact.id));
         if (this.form()?.id === contact.id) this.form.set(null);
+        if (this.history()?.contactId === contact.id) this.history.set(null);
         try {
             await this.contacts.delete(contact.id);
         } catch (err) {

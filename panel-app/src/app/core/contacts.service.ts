@@ -1,6 +1,7 @@
 import { HttpClient } from "@angular/common/http";
 import { Injectable, inject } from "@angular/core";
 import { firstValueFrom } from "rxjs";
+import { CHAT_PAGE_SIZE, type PaginatedHistory } from "./chat.service";
 
 /** Categorias liberáveis pra um contato de confiança, sem virar dono — espelha GRANTABLE_TOOLS do backend-v2 (contacts/grantable-tools.ts). */
 export type GrantableTool = "notes" | "tasks" | "events";
@@ -43,5 +44,10 @@ export class ContactsService {
     async delete(id: string): Promise<boolean> {
         const res = await firstValueFrom(this.http.delete<{ deleted: boolean }>(`/contacts/${id}`));
         return res.deleted;
+    }
+
+    /** Mesmo contrato de ChatService#history — offset:0 é sempre a página mais recente. */
+    history(id: string, offset: number): Promise<PaginatedHistory> {
+        return firstValueFrom(this.http.get<PaginatedHistory>(`/contacts/${id}/history?limit=${CHAT_PAGE_SIZE}&offset=${offset}`));
     }
 }

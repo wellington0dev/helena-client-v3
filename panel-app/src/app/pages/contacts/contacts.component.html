@@ -24,6 +24,9 @@
           <div class="contact-id">{{ contact.contactId }}</div>
         </div>
         <div class="contact-actions">
+          <button class="icon-button" (click)="openHistory(contact)" title="Ver conversa">
+            <app-icon name="chat" />
+          </button>
           <button class="icon-button" (click)="openEditForm(contact)" title="Editar">
             <app-icon name="edit" />
           </button>
@@ -32,6 +35,33 @@
           </button>
         </div>
       </div>
+
+      @if (history()?.contactId === contact.id) {
+        <div class="contact-history">
+          @if (historyError()) {
+            <div class="banner-error">{{ historyError() }}</div>
+          }
+          @if (history()!.loaded < history()!.total) {
+            <button class="load-older" (click)="loadOlderHistory()">Carregar mensagens anteriores</button>
+          }
+          @if (!historyLoading() && history()!.entries.length === 0) {
+            <div class="history-empty">Nenhuma mensagem ainda com {{ contact.name }}.</div>
+          }
+          <div class="history-messages">
+            @for (msg of history()!.entries; track msg.id) {
+              <div class="message-row" [class.message-row-user]="msg.role === 'user'">
+                <div class="bubble" [class.bubble-user]="msg.role === 'user'" [innerHTML]="renderedText(msg.text)"></div>
+              </div>
+            }
+          </div>
+          @if (historyLoading()) {
+            <div class="history-loading">Carregando…</div>
+          }
+          <div class="form-actions">
+            <button class="cancel-button" (click)="closeHistory()">Fechar</button>
+          </div>
+        </div>
+      }
 
       @if (form()?.id === contact.id) {
         <div class="contact-form">
