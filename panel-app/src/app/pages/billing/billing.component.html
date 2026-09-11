@@ -11,12 +11,18 @@
   }
 
   @if (balance(); as bal) {
-    <div class="balance-card">
-      <div class="balance-label">Saldo atual</div>
-      <div class="balance-value" [class.balance-zero]="bal.balance === 0">{{ balanceLabel() }} <span>tokens</span></div>
-      <div class="balance-meta">
-        <span>Concedido: <strong>{{ totalGrantedLabel() }}</strong></span>
-        <span>Comprado: <strong>{{ totalPurchasedLabel() }}</strong></span>
+    <div class="tiles">
+      <div class="tile tile-primary">
+        <div class="tile-label">Saldo atual</div>
+        <div class="tile-value" [class.balance-zero]="bal.balance === 0">{{ balanceLabel() }}</div>
+      </div>
+      <div class="tile">
+        <div class="tile-label">Total concedido</div>
+        <div class="tile-value">{{ totalGrantedLabel() }}</div>
+      </div>
+      <div class="tile">
+        <div class="tile-label">Total comprado</div>
+        <div class="tile-value">{{ totalPurchasedLabel() }}</div>
       </div>
     </div>
   }
