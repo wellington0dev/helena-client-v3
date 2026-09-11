@@ -1,5 +1,6 @@
 import { HttpClient } from "@angular/common/http";
 import { ErrorHandler, Injectable, inject } from "@angular/core";
+import pkg from "../../../package.json";
 import { AuthService } from "./auth.service";
 
 /**
@@ -21,6 +22,14 @@ import { AuthService } from "./auth.service";
  * fora, 403 sem consentimento) virar outro erro sem tratamento — sempre
  * `.subscribe({ error: () => {} })`, nunca deixa a Promise/Observable
  * rejeitar sem handler.
+ *
+ * Achado em revisão (2026-09-11): `appVersion`/`context` nunca eram
+ * mandados — todo log de erro chegava no painel admin com "appVersion: —"
+ * e sem stack visível pra alguns tipos de erro (ex: falha de import
+ * dinâmico do próprio Angular Router, que às vezes não carrega stack
+ * nenhuma do motor do navegador). `context` aqui é SÓ `url`/`userAgent` —
+ * nunca conteúdo de mensagem nem dado inserido pela pessoa, mesma regra
+ * de privacidade do resto da feature de telemetria.
  */
 @Injectable()
 export class TelemetryErrorHandler implements ErrorHandler {
@@ -44,6 +53,15 @@ export class TelemetryErrorHandler implements ErrorHandler {
         this.lastMessage = message;
         this.reportedCount++;
 
-        this.http.post("/telemetry/logs", { level: "error", message: message.slice(0, 4000), stack: stack?.slice(0, 20000), source: "panel" }).subscribe({ error: () => {} });
+        this.http
+            .post("/telemetry/logs", {
+                level: "error",
+                message: message.slice(0, 4000),
+                stack: stack?.slice(0, 20000),
+                source: "panel",
+                appVersion: pkg.version,
+                context: { url: location.href, userAgent: navigator.userAgent },
+            })
+            .subscribe({ error: () => {} });
     }
 }

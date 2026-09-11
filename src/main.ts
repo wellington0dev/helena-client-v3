@@ -4,6 +4,7 @@ import { startWhatsapp, stopWhatsapp } from "./channels/whatsapp.ts";
 import { startTelegram } from "./channels/telegram.ts";
 import { startMachineAgent } from "./machine-agent.ts";
 import { startOutboundPoller } from "./outbound-poller.ts";
+import { reportError } from "./telemetry.ts";
 
 /**
  * Entrypoint único do client/ — sobe o painel local SEMPRE (mesmo sem
@@ -21,6 +22,16 @@ startWhatsapp();
 startTelegram();
 startMachineAgent(config.backendUrl, config.backendApiToken);
 startOutboundPoller();
+
+/**
+ * Único ponto de captura de erro NÃO tratado do processo inteiro (ver
+ * telemetry.ts) — cobre qualquer coisa que escapou de um catch específico
+ * em qualquer canal/módulo, sem precisar espalhar reportError em cada
+ * arquivo. Nunca chama process.exit aqui: um WhatsApp/Telegram flakiness
+ * já teria seu próprio catch; isto é só a rede de segurança final.
+ */
+process.on("uncaughtException", (err) => reportError(err, "client:uncaughtException"));
+process.on("unhandledRejection", (reason) => reportError(reason, "client:unhandledRejection"));
 
 /**
  * `systemctl restart` (rodado pelo update.sh a cada atualização) manda

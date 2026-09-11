@@ -3,6 +3,7 @@ import { config } from "./config.ts";
 import { listFiles, readFile, searchFiles, writeFile, type FileEdit } from "./local-files.ts";
 import { runCommand } from "./local-shell.ts";
 import { updateMachineAgent } from "./panel/status-bus.ts";
+import { reportTelemetry } from "./telemetry.ts";
 
 /**
  * Protocolo de `/ws/agent` no backend-v2 — mesmo shape de
@@ -188,7 +189,9 @@ export function startMachineAgent(backendUrl: string, apiToken: string): void {
         });
 
         socket.addEventListener("error", (event) => {
-            console.error("[machine-agent] erro de conexão:", (event as ErrorEvent).message ?? event);
+            const message = (event as ErrorEvent).message ?? String(event);
+            console.error("[machine-agent] erro de conexão:", message);
+            void reportTelemetry("warn", `machine-agent: erro de conexão WS — ${message}`, { source: "machine-agent" });
         });
     }
 

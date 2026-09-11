@@ -4,6 +4,7 @@ import { createInterface, type Interface } from "node:readline/promises";
 import React from "react";
 import { render } from "ink";
 import { config } from "../config.ts";
+import { reportError } from "../telemetry.ts";
 import { login } from "./backend.ts";
 import { clearSession, loadSession, saveSession } from "./session-store.ts";
 import { App, type HistoryItem, type SessionOutcome } from "./ink/app.ts";
@@ -121,8 +122,12 @@ function runInkSession(token: string, initialHistory: HistoryItem[], initialSess
     });
 }
 
+/** Mutável de propósito — os handlers de erro global abaixo (registrados uma vez, fora de `main()`) precisam do JWT mais recente pra conseguir chamar `/telemetry/logs`, e o token muda a cada relogin. */
+let currentToken: string | undefined;
+
 async function main(): Promise<void> {
     let token = await ensureSession();
+    currentToken = token;
     console.log(`Conectado a ${backendUrl} (${invocationCwd}) — digite sua mensagem (Ctrl+C pra sair).\n`);
 
     let history: HistoryItem[] = [];
@@ -141,7 +146,12 @@ async function main(): Promise<void> {
         clearSession();
         console.log("\n[sessão expirada — relogue]");
         token = await interactiveLogin();
+        currentToken = token;
     }
 }
+
+/** Antes de logar, ainda não há `currentToken` — reportError já ignora silenciosamente sem token nenhum (ver telemetry.ts), então é seguro registrar isto já no topo do módulo. */
+process.on("uncaughtException", (err) => reportError(err, "cli:uncaughtException", currentToken));
+process.on("unhandledRejection", (reason) => reportError(reason, "cli:unhandledRejection", currentToken));
 
 main();
