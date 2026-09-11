@@ -4,6 +4,7 @@ import Spinner from "ink-spinner";
 import TextInput from "ink-text-input";
 import chalk from "chalk";
 import { resolveInterrupt, sendMessage, UnauthorizedError, type PendingConfirmation, type SendMessageResult } from "../backend.ts";
+import { formatToolCall, formatToolResult } from "./format-tool-call.ts";
 import { connectProgress, type ChatProgressEvent } from "./progress-client.ts";
 import { renderMarkdownAnsi } from "./render-markdown.ts";
 
@@ -13,11 +14,12 @@ const h = React.createElement;
 /** `Static` é genérico (`Static<T>`), mas `createElement` não tem como instanciar esse genérico explicitamente sem JSX — este alias tipado resolve pro nosso único uso (histórico de `HistoryItem`). */
 const HistoryStatic = Static as unknown as (props: { items: HistoryItem[]; children: (item: HistoryItem, index: number) => React.ReactNode }) => React.ReactElement;
 
-export interface HistoryItem {
-    id: string;
-    role: "user" | "assistant";
-    text: string;
-}
+export type HistoryItem =
+    | { id: string; role: "user" | "assistant"; text: string }
+    /** Chamada de tool — aparece na hora (ver ChatProgressEvent#tool_call), padrão Claude Code: `● Bash(comando)`. Nunca é editada depois de criada (ver comentário sobre <Static> abaixo) — o resultado, quando existir, é uma entrada NOVA (tool_result), nunca uma mutação desta. */
+    | { id: string; role: "tool_call"; name: string; input: unknown }
+    /** Resultado de UMA tool — só existe depois que o turno inteiro termina (`SendMessageResult#toolActivity`, ver backend.ts), então sempre aparece em lote, depois de todas as chamadas ao vivo do mesmo turno — nunca intercalado 1-a-1 (o Agent Beta do Genkit não expõe resultado durante o streaming, só no fim). */
+    | { id: string; role: "tool_result"; name: string; output: unknown };
 
 export type SessionOutcome = { type: "exit" } | { type: "relogin"; history: HistoryItem[]; sessionId?: string };
 
@@ -32,11 +34,23 @@ export interface AppProps {
 }
 
 let nextId = 0;
-function historyItem(role: HistoryItem["role"], text: string): HistoryItem {
+function historyItem(role: "user" | "assistant", text: string): HistoryItem {
     return { id: `h${nextId++}`, role, text };
+}
+function toolCallItem(name: string, input: unknown): HistoryItem {
+    return { id: `h${nextId++}`, role: "tool_call", name, input };
+}
+function toolResultItem(name: string, output: unknown): HistoryItem {
+    return { id: `h${nextId++}`, role: "tool_result", name, output };
 }
 
 function HistoryLine({ item }: { item: HistoryItem }): React.ReactElement {
+    if (item.role === "tool_call") {
+        return h(Box, null, h(Text, { color: "gray" }, "● ", formatToolCall(item.name, item.input)));
+    }
+    if (item.role === "tool_result") {
+        return h(Box, { flexDirection: "column", marginBottom: 1, paddingLeft: 2 }, h(Text, { color: "gray", dimColor: true }, "⎿ ", formatToolResult(item.name, item.output)));
+    }
     const label = item.role === "user" ? chalk.cyan.bold("Você") : chalk.magenta.bold("Helena");
     const body = item.role === "assistant" ? renderMarkdownAnsi(item.text) : item.text;
     return h(Box, { flexDirection: "column", marginBottom: 1 }, h(Text, null, `${label}:`), h(Text, null, body));
@@ -95,8 +109,12 @@ export function App(props: AppProps): React.ReactElement {
     React.useEffect(() => {
         return connectProgress(backendUrl, token, (event: ChatProgressEvent) => {
             if (!sendingRef.current) return;
-            if (event.type === "tool_call") setStatusLine(`Chamando ferramenta: ${event.tool}...`);
-            else if (event.type === "turn_start") setStatusLine("Helena está pensando...");
+            if (event.type === "tool_call") {
+                // Vira uma entrada PERMANENTE do histórico na hora (padrão Claude Code) — antes só
+                // sobrescrevia a linha de status, que sumia sem deixar rastro assim que o turno acabava.
+                setHistory((prev) => [...prev, toolCallItem(event.tool, event.input)]);
+                setStatusLine("Helena está trabalhando...");
+            } else if (event.type === "turn_start") setStatusLine("Helena está pensando...");
         });
     }, [backendUrl, token]);
 
@@ -113,7 +131,10 @@ export function App(props: AppProps): React.ReactElement {
         try {
             const result = await action();
             setSessionId(result.sessionId);
-            setHistory((prev) => [...prev, historyItem("assistant", result.text)]);
+            // Resultado de tool só existe DEPOIS que o turno inteiro termina (ver toolActivity em backend.ts)
+            // — entra em lote aqui, depois de todas as chamadas ao vivo já mostradas, antes da resposta final.
+            const toolResults = (result.toolActivity ?? []).map((entry) => toolResultItem(entry.name, entry.output));
+            setHistory((prev) => [...prev, ...toolResults, historyItem("assistant", result.text)]);
             setPending(result.pending?.[0]);
         } catch (err) {
             if (err instanceof UnauthorizedError) {

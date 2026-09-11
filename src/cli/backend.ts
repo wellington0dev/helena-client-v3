@@ -14,10 +14,18 @@ export interface PendingConfirmation {
     input: unknown;
 }
 
+/** Chamada + resultado de UMA tool do turno — ver extract-tool-activity.ts no backend-v2. Só vem preenchido pra conversa do próprio dono (nunca contato externo/grupo, que nem usa este CLI). */
+export interface ToolActivityEntry {
+    name: string;
+    input?: unknown;
+    output?: unknown;
+}
+
 export interface SendMessageResult {
     sessionId: string;
     text: string;
     pending?: PendingConfirmation[];
+    toolActivity?: ToolActivityEntry[];
 }
 
 /** Distinta de um erro genérico pra chat.ts saber quando vale a pena relogar em vez de só mostrar o erro. */
