@@ -5,11 +5,20 @@
  * o Node 22, sem depender do pacote `ws`).
  */
 
+export type ProjectStepRole = "architect" | "designer" | "frontend" | "backend" | "dba" | "security" | "qa";
+export type ProjectStepStatus = "ready" | "running" | "done" | "failed";
+
 export type ChatProgressEvent =
     | { type: "turn_start"; sessionId?: string; at: string }
     | { type: "tool_call"; sessionId?: string; tool: string; input?: unknown; at: string }
     | { type: "turn_end"; sessionId?: string; at: string }
-    | { type: "turn_error"; sessionId?: string; message: string; at: string };
+    | { type: "turn_error"; sessionId?: string; message: string; at: string }
+    /** Conclusão de um comando `shell` rodado com `background:true` — ver ShellJobNotifierService no backend-v2. */
+    | { type: "job_done"; jobId: string; ok: boolean; summary: string; at: string }
+    /** Marco de um Project da equipe de dev (pausou, concluiu) — ver ProjectEventNotifierService no backend-v2. */
+    | { type: "project_event"; projectId: string; kind: string; summary: string; at: string }
+    /** Progresso de UM step (mudou de status) — ver ProjectStepProgressNotifierService no backend-v2. */
+    | { type: "project_step"; projectId: string; role: ProjectStepRole; status: ProjectStepStatus; at: string };
 
 /** Conecta uma vez e chama `onEvent` pra cada evento — nunca lança (falha de conexão só significa "sem indicador ao vivo", o chat continua funcionando via REST normalmente). Devolve uma função pra fechar a conexão. */
 export function connectProgress(backendUrl: string, token: string, onEvent: (event: ChatProgressEvent) => void): () => void {
