@@ -21,11 +21,19 @@ export interface ToolActivityEntry {
     output?: unknown;
 }
 
+/** Tokens/duração da chamada de IA deste turno — ver SendMessageResult#usage no backend-v2. */
+export interface TurnUsage {
+    inputTokens?: number;
+    outputTokens?: number;
+    durationMs: number;
+}
+
 export interface SendMessageResult {
     sessionId: string;
     text: string;
     pending?: PendingConfirmation[];
     toolActivity?: ToolActivityEntry[];
+    usage?: TurnUsage;
 }
 
 /** Distinta de um erro genérico pra chat.ts saber quando vale a pena relogar em vez de só mostrar o erro. */

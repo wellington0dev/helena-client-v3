@@ -3,8 +3,9 @@ import { Box, Static, Text, useInput } from "ink";
 import Spinner from "ink-spinner";
 import TextInput from "ink-text-input";
 import chalk from "chalk";
-import { resolveInterrupt, sendMessage, UnauthorizedError, type PendingConfirmation, type SendMessageResult } from "../backend.ts";
+import { resolveInterrupt, sendMessage, UnauthorizedError, type PendingConfirmation, type SendMessageResult, type TurnUsage } from "../backend.ts";
 import { formatToolCall, formatToolResult } from "./format-tool-call.ts";
+import { formatUsageLine } from "./format-usage.ts";
 import { connectProgress, type ChatProgressEvent } from "./progress-client.ts";
 import { formatProjectChecklist, formatProjectSummary, type ProjectStepsByRole } from "./project-progress.ts";
 import { renderMarkdownAnsi } from "./render-markdown.ts";
@@ -22,7 +23,9 @@ export type HistoryItem =
     /** Resultado de UMA tool — só existe depois que o turno inteiro termina (`SendMessageResult#toolActivity`, ver backend.ts), então sempre aparece em lote, depois de todas as chamadas ao vivo do mesmo turno — nunca intercalado 1-a-1 (o Agent Beta do Genkit não expõe resultado durante o streaming, só no fim). */
     | { id: string; role: "tool_result"; name: string; output: unknown }
     /** Aviso empurrado FORA de qualquer turno de chat em andamento — marco de Project da equipe de dev (pausou/concluiu) ou conclusão de shell em segundo plano (ver ChatProgressEvent#project_event/job_done). Nunca gated por "sending": pode chegar a qualquer momento, mesmo sem o dono ter mandado nada agora. */
-    | { id: string; role: "notice"; text: string; tone: "success" | "warn" | "danger" };
+    | { id: string; role: "notice"; text: string; tone: "success" | "warn" | "danger" }
+    /** Linha discreta de custo do turno (tokens/duração) — ver SendMessageResult#usage. Sempre logo ABAIXO do texto do turno a que pertence, nunca Static-reordenada pra outro lugar. */
+    | { id: string; role: "usage"; usage: TurnUsage };
 
 export type SessionOutcome = { type: "exit" } | { type: "relogin"; history: HistoryItem[]; sessionId?: string };
 
@@ -49,6 +52,9 @@ function toolResultItem(name: string, output: unknown): HistoryItem {
 function noticeItem(text: string, tone: "success" | "warn" | "danger"): HistoryItem {
     return { id: `h${nextId++}`, role: "notice", text, tone };
 }
+function usageItem(usage: TurnUsage): HistoryItem {
+    return { id: `h${nextId++}`, role: "usage", usage };
+}
 
 function HistoryLine({ item }: { item: HistoryItem }): React.ReactElement {
     if (item.role === "tool_call") {
@@ -60,6 +66,9 @@ function HistoryLine({ item }: { item: HistoryItem }): React.ReactElement {
     if (item.role === "notice") {
         const color = item.tone === "success" ? "green" : item.tone === "danger" ? "red" : "yellow";
         return h(Box, { marginBottom: 1 }, h(Text, { color }, item.text));
+    }
+    if (item.role === "usage") {
+        return h(Box, { marginBottom: 1 }, h(Text, { color: "gray", dimColor: true }, formatUsageLine(item.usage)));
     }
     const label = item.role === "user" ? chalk.cyan.bold("Você") : chalk.magenta.bold("Helena");
     const body = item.role === "assistant" ? renderMarkdownAnsi(item.text) : item.text;
@@ -190,7 +199,7 @@ export function App(props: AppProps): React.ReactElement {
             // Resultado de tool só existe DEPOIS que o turno inteiro termina (ver toolActivity em backend.ts)
             // — entra em lote aqui, depois de todas as chamadas ao vivo já mostradas, antes da resposta final.
             const toolResults = (result.toolActivity ?? []).map((entry) => toolResultItem(entry.name, entry.output));
-            setHistory((prev) => [...prev, ...toolResults, historyItem("assistant", result.text)]);
+            setHistory((prev) => [...prev, ...toolResults, historyItem("assistant", result.text), ...(result.usage ? [usageItem(result.usage)] : [])]);
             setPending(result.pending?.[0]);
         } catch (err) {
             if (err instanceof UnauthorizedError) {
