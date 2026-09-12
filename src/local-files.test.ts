@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { listFiles, readFile, searchFiles, writeFile } from "./local-files.ts";
+import { deleteFile, listFiles, readFile, searchFiles, writeFile } from "./local-files.ts";
 
 function tempDir(): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), "helena-local-files-test-"));
@@ -160,4 +160,21 @@ test("writeFile: add cria arquivo novo quando ele ainda não existe", () => {
 
     assert.equal(result.ok, true);
     assert.equal(fs.readFileSync(filePath, "utf8"), "export const x = 1;\n");
+});
+
+test("deleteFile: apaga um arquivo existente de verdade", () => {
+    const dir = tempDir();
+    const filePath = path.join(dir, "apagar.ts");
+    fs.writeFileSync(filePath, "conteudo");
+
+    const result = deleteFile(filePath);
+
+    assert.equal(result.ok, true);
+    assert.equal(fs.existsSync(filePath), false);
+});
+
+test("deleteFile: arquivo inexistente devolve error, sem lançar", () => {
+    const result = deleteFile(path.join(os.tmpdir(), "nao-existe-12345.ts"));
+    assert.equal(result.ok, false);
+    assert.match(result.error!, /Não consegui apagar/);
 });

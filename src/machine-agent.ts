@@ -1,6 +1,6 @@
 import os from "node:os";
 import { config } from "./config.ts";
-import { listFiles, readFile, searchFiles, writeFile, type FileEdit } from "./local-files.ts";
+import { deleteFile, listFiles, readFile, searchFiles, writeFile, type FileEdit } from "./local-files.ts";
 import { runCommand } from "./local-shell.ts";
 import { updateMachineAgent } from "./panel/status-bus.ts";
 import { reportTelemetry } from "./telemetry.ts";
@@ -70,12 +70,15 @@ const RECONNECT_DELAY_MS = 5_000;
  * escrita estruturada, nunca via heredoc de shell. `device`/`network`/`gh`/
  * `browser`/`file-transfer` eram do backend single-owner, não portadas
  * (ver docs/architecture-v2.md §6) — `git`/`gh` não precisam de capability
- * própria, já rodam via `shell` (ver o mesmo §1.2). Fixa, sem env var pra
- * configurar — YAGNI enquanto o conjunto não mudar por tenant.
+ * própria, já rodam via `shell` (ver o mesmo §1.2). `delete_file` é só pra
+ * `undo_last_write` desfazer um write que CRIOU um arquivo (sem pré-imagem
+ * pra restaurar) — nunca uma tool exposta direto ao modelo (ver
+ * local-files.ts). Fixa, sem env var pra configurar — YAGNI enquanto o
+ * conjunto não mudar por tenant.
  */
-const CAPABILITIES = ["shell", "list_files", "read_file", "search_files", "write_file"];
+const CAPABILITIES = ["shell", "list_files", "read_file", "search_files", "write_file", "delete_file"];
 
-/** As 4 capabilities de arquivo são síncronas e locais (sem I/O de rede) — cabem no mesmo `exec`/`exec-result` de sempre, sem precisar do caminho `exec-background`. */
+/** As 5 capabilities de arquivo são síncronas e locais (sem I/O de rede) — cabem no mesmo `exec`/`exec-result` de sempre, sem precisar do caminho `exec-background`. */
 function dispatchCapability(capability: string, payload: unknown): unknown {
     switch (capability) {
         case "list_files": {
@@ -93,6 +96,10 @@ function dispatchCapability(capability: string, payload: unknown): unknown {
         case "write_file": {
             const { path, edits } = payload as { path: string; edits: FileEdit[] };
             return writeFile(path, edits);
+        }
+        case "delete_file": {
+            const { path } = payload as { path: string };
+            return deleteFile(path);
         }
         default:
             throw new Error(`capability desconhecida: "${capability}"`);

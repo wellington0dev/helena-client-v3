@@ -227,3 +227,26 @@ export function writeFile(filePath: string, edits: FileEdit[]): WriteFileResult 
 
     return writeWhole(resolved, filePath, lines.join("\n"));
 }
+
+export interface DeleteFileResult {
+    ok: boolean;
+    error?: string;
+}
+
+/**
+ * Capability nova, só pra `undo_last_write` (backend-v2
+ * dev-team-write.tools.ts) desfazer um `write_file` que CRIOU um arquivo
+ * novo (sem pré-imagem pra restaurar, a única saída é apagar) — nunca
+ * exposta como tool solta pro modelo, de propósito: um `delete_file`
+ * genérico dado direto ao agente de dev seria uma superfície de risco à
+ * toa que ninguém pediu.
+ */
+export function deleteFile(filePath: string): DeleteFileResult {
+    const resolved = resolvePath(filePath);
+    try {
+        fs.unlinkSync(resolved);
+        return { ok: true };
+    } catch (err) {
+        return { ok: false, error: `Não consegui apagar "${filePath}": ${describe(err)}` };
+    }
+}
