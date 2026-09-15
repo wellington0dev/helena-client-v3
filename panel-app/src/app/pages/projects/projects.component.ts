@@ -32,6 +32,10 @@ const ROLE_TITLE: Record<ProjectStepRole, string> = {
 
 const PERSONA_ROLE_ORDER: AgentRole[] = ["architect", "designer", "frontend", "backend", "dba", "security", "qa"];
 
+function capitalize(role: string): string {
+    return role.length > 0 ? role[0]!.toUpperCase() + role.slice(1) : role;
+}
+
 const STEP_STATUS_LABEL: Record<string, string> = {
     ready: "Na fila",
     running: "Rodando",
@@ -105,6 +109,11 @@ export class ProjectsComponent {
     protected readonly stepStatusLabel = STEP_STATUS_LABEL;
     /** Só o título do papel, sem o nome customizado — o rastreador horizontal não tem espaço pra "Arquiteta (Ada)" embaixo de cada círculo. */
     protected readonly roleTitle = ROLE_TITLE;
+
+    /** Fallback pra um papel DINÂMICO (inventado na hora, não um dos 7 clássicos — ver §14 do doc de arquitetura do backend-v2): capitaliza o próprio rótulo em vez de mostrar "undefined". */
+    protected roleTitleFor(role: ProjectStepRole): string {
+        return ROLE_TITLE[role] ?? capitalize(role);
+    }
     protected readonly eventKindLabel = EVENT_KIND_LABEL;
     protected readonly autonomyLabel = AUTONOMY_LABEL;
     protected readonly revisionRoleOptions = REVISION_ROLES;

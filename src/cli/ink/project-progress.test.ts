@@ -24,3 +24,13 @@ test("formatProjectSummary: conta done E failed como terminados", () => {
 test("formatProjectSummary: nenhum step terminado ainda", () => {
     assert.equal(formatProjectSummary({ frontend: "ready" }), "0 de 1 terminados");
 });
+
+test("formatProjectChecklist: papel DINÂMICO (não um dos clássicos) aparece capitalizado, depois dos clássicos", () => {
+    const lines = formatProjectChecklist({ frontend: "done", mobile: "running" });
+    assert.deepEqual(lines, ["✓ Frontend (concluído)", "◐ Mobile (rodando)"]);
+});
+
+test("formatProjectChecklist: só papéis dinâmicos, sem nenhum clássico presente", () => {
+    const lines = formatProjectChecklist({ infra: "ready" });
+    assert.deepEqual(lines, ["○ Infra (na fila)"]);
+});

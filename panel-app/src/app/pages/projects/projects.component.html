@@ -172,7 +172,7 @@
                         <app-icon name="check" />
                       }
                     </div>
-                    <div class="tracker-role">{{ roleTitle[step.role] }}</div>
+                    <div class="tracker-role">{{ roleTitleFor(step.role) }}</div>
                     <div class="tracker-status">{{ stepStatusLabel[step.status] }}</div>
                   </div>
                   @if (!last) {
@@ -182,7 +182,7 @@
               </div>
               @for (step of d.steps; track step.id) {
                 @if (step.report) {
-                  <p class="detail-text"><strong>{{ roleTitle[step.role] }}:</strong> {{ step.report }}</p>
+                  <p class="detail-text"><strong>{{ roleTitleFor(step.role) }}:</strong> {{ step.report }}</p>
                 }
               }
             </div>

@@ -4,7 +4,8 @@ import { firstValueFrom } from "rxjs";
 
 export type ProjectStatus = "draft" | "planning" | "active" | "paused" | "needs_revision" | "completed" | "cancelled";
 export type ExecutionMode = "parallel" | "throttled";
-export type ProjectStepRole = "architect" | "designer" | "frontend" | "backend" | "dba" | "security" | "qa";
+/** Livre desde a dinamização de papéis no backend-v2 (§14) — só "architect"/"designer"/"qa" têm significado especial; qualquer outro rótulo pode ter sido inventado na hora pela Helena/Arquiteta. */
+export type ProjectStepRole = string;
 export type ProjectStepStatus = "ready" | "running" | "done" | "failed";
 export type AutonomyDecision = "qa_failure" | "revision_scope_change";
 export type AutonomyMode = "auto" | "ask";

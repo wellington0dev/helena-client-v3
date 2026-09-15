@@ -18,7 +18,8 @@ const STATUS_LABEL: Record<ProjectDetail["project"]["status"], string> = {
     cancelled: "Cancelado",
 };
 
-const ROLE_TITLE: Record<ProjectStepRole, string> = {
+/** Só os papéis "clássicos" têm rótulo pré-definido — um papel inventado na hora (ver §14 do doc de arquitetura do backend-v2) cai no fallback capitalizado (ver `roleLabel`). */
+const ROLE_TITLE: Partial<Record<ProjectStepRole, string>> = {
     architect: "Arquiteta",
     designer: "Designer",
     frontend: "Frontend",
@@ -28,8 +29,12 @@ const ROLE_TITLE: Record<ProjectStepRole, string> = {
     qa: "QA",
 };
 
-/** Ordem fixa de exibição — não a ordem de criação dos steps (que varia por Project). */
+/** Ordem fixa dos papéis clássicos — qualquer papel dinâmico (fora desta lista) aparece DEPOIS, na ordem em que os steps foram criados (ver `visibleSteps`). */
 const ROLE_ORDER: ProjectStepRole[] = ["architect", "designer", "frontend", "backend", "dba", "security", "qa"];
+
+function capitalize(role: string): string {
+    return role.length > 0 ? role[0]!.toUpperCase() + role.slice(1) : role;
+}
 
 const STEP_STATUS_LABEL: Record<string, string> = { ready: "Na fila", running: "Rodando", done: "Concluído", failed: "Falhou" };
 
@@ -79,11 +84,13 @@ export class ProjectDetailComponent implements OnDestroy {
 
     private pollHandle?: ReturnType<typeof setInterval>;
 
-    /** Só os papéis que este Project realmente tem step, na ordem fixa de exibição. */
+    /** Papéis clássicos na ordem fixa de exibição, seguidos de qualquer papel DINÂMICO (inventado na hora — ver §14) na ordem em que os steps foram criados — nunca escondido só por não estar no catálogo fixo. */
     protected readonly visibleSteps = computed<ProjectStepSummary[]>(() => {
         const steps = this.detail()?.steps ?? [];
         const byRole = new Map(steps.map((s) => [s.role, s]));
-        return ROLE_ORDER.map((role) => byRole.get(role)).filter((s): s is ProjectStepSummary => !!s);
+        const classic = ROLE_ORDER.map((role) => byRole.get(role)).filter((s): s is ProjectStepSummary => !!s);
+        const dynamic = steps.filter((s) => !ROLE_ORDER.includes(s.role));
+        return [...classic, ...dynamic];
     });
 
     constructor() {
@@ -105,7 +112,9 @@ export class ProjectDetailComponent implements OnDestroy {
     }
 
     protected roleLabel(role: ProjectStepRole): string {
-        return `${ROLE_TITLE[role]} (${this.agentPersonas()[role]})`;
+        const title = ROLE_TITLE[role] ?? capitalize(role);
+        const customName = this.agentPersonas()[role];
+        return customName ? `${title} (${customName})` : title;
     }
 
     protected canMessage(role: ProjectStepRole): boolean {

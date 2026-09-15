@@ -5,7 +5,8 @@
  * o Node 22, sem depender do pacote `ws`).
  */
 
-export type ProjectStepRole = "architect" | "designer" | "frontend" | "backend" | "dba" | "security" | "qa";
+/** Livre desde a dinamização de papéis no backend-v2 (§14 do doc de arquitetura) — só "architect"/"designer"/"qa" têm significado especial; qualquer outro rótulo pode ter sido inventado na hora pela Helena/Arquiteta. */
+export type ProjectStepRole = string;
 export type ProjectStepStatus = "ready" | "running" | "done" | "failed";
 
 export type ChatProgressEvent =
