@@ -5,6 +5,7 @@ import TextInput from "ink-text-input";
 import { resolveInterrupt, sendMessage, UnauthorizedError, type PendingConfirmation, type SendMessageResult, type TurnUsage } from "../backend.ts";
 import { findCommand, type Screen } from "./commands.ts";
 import { ConfigScreen } from "./config-screen.ts";
+import { ContactsScreen } from "./contacts-screen.ts";
 import { formatToolCall, formatToolResult } from "./format-tool-call.ts";
 import { formatUsageLine } from "./format-usage.ts";
 import { connectProgress, type ChatProgressEvent } from "./progress-client.ts";
@@ -260,13 +261,13 @@ export function App(props: AppProps): React.ReactElement {
         void runTurn(() => resolveInterrupt(backendUrl, token, activeSessionId, current.tool, current.ref, approved, approved ? undefined : "Recusado pelo usuário no CLI."));
     }
 
+    const onUnauthorized = () => onDone({ type: "relogin", history: historyRef.current, sessionId: sessionIdRef.current });
+
     if (screen === "config") {
-        return h(ConfigScreen, {
-            backendUrl,
-            token,
-            onExit: () => setScreen("chat"),
-            onUnauthorized: () => onDone({ type: "relogin", history: historyRef.current, sessionId: sessionIdRef.current }),
-        });
+        return h(ConfigScreen, { backendUrl, token, onExit: () => setScreen("chat"), onUnauthorized });
+    }
+    if (screen === "contacts") {
+        return h(ContactsScreen, { backendUrl, token, onExit: () => setScreen("chat"), onUnauthorized });
     }
 
     let liveRegion: React.ReactElement;

@@ -12,7 +12,7 @@
  * Cobrança/Uso) só entram aqui quando a tela correspondente for entregue
  * — nunca um `/comando` morto aparecendo no `/help` antes de existir.
  */
-export type Screen = "chat" | "config";
+export type Screen = "chat" | "config" | "contacts";
 
 export interface CommandContext {
     setScreen: (screen: Screen) => void;
@@ -32,6 +32,11 @@ export const COMMANDS: Command[] = [
         aliases: ["settings"],
         description: "Preferências — telemetria, auto-approve shell, mensagem proativa, tokens de API",
         run: (ctx) => ctx.setScreen("config"),
+    },
+    {
+        name: "contatos",
+        description: "Editar/apagar contatos (WhatsApp/Telegram) e permissões extras",
+        run: (ctx) => ctx.setScreen("contacts"),
     },
     {
         name: "help",
