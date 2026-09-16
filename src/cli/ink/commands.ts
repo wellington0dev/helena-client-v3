@@ -12,7 +12,7 @@
  * Cobrança/Uso) só entram aqui quando a tela correspondente for entregue
  * — nunca um `/comando` morto aparecendo no `/help` antes de existir.
  */
-export type Screen = "chat" | "config" | "contacts";
+export type Screen = "chat" | "config" | "contacts" | "mcp";
 
 export interface CommandContext {
     setScreen: (screen: Screen) => void;
@@ -37,6 +37,11 @@ export const COMMANDS: Command[] = [
         name: "contatos",
         description: "Editar/apagar contatos (WhatsApp/Telegram) e permissões extras",
         run: (ctx) => ctx.setScreen("contacts"),
+    },
+    {
+        name: "integracoes",
+        description: "Conexões MCP (integrações de terceiros) + guia de como montar um servidor compatível",
+        run: (ctx) => ctx.setScreen("mcp"),
     },
     {
         name: "help",

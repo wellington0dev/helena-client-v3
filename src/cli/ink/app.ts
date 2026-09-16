@@ -6,6 +6,7 @@ import { resolveInterrupt, sendMessage, UnauthorizedError, type PendingConfirmat
 import { findCommand, type Screen } from "./commands.ts";
 import { ConfigScreen } from "./config-screen.ts";
 import { ContactsScreen } from "./contacts-screen.ts";
+import { McpScreen } from "./mcp-screen.ts";
 import { formatToolCall, formatToolResult } from "./format-tool-call.ts";
 import { formatUsageLine } from "./format-usage.ts";
 import { connectProgress, type ChatProgressEvent } from "./progress-client.ts";
@@ -268,6 +269,9 @@ export function App(props: AppProps): React.ReactElement {
     }
     if (screen === "contacts") {
         return h(ContactsScreen, { backendUrl, token, onExit: () => setScreen("chat"), onUnauthorized });
+    }
+    if (screen === "mcp") {
+        return h(McpScreen, { backendUrl, token, onExit: () => setScreen("chat"), onUnauthorized });
     }
 
     let liveRegion: React.ReactElement;
