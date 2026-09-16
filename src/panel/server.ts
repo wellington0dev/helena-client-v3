@@ -3,23 +3,31 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { extname, join, normalize } from "node:path";
 import { WebSocketServer } from "ws";
 import { saveSession } from "../cli/session-store.ts";
+import { ensureDeviceToken } from "../device-auth.ts";
 import { DIST_DIR, renderPanelPage } from "./page.ts";
 import { getState, onStateChange } from "./status-bus.ts";
 
 /**
- * O painel (Angular) e o `helena` (CLI) são processos/UIs diferentes do
- * MESMO `client/` rodando na máquina do dono — mas o JWT do painel só
- * existe no `localStorage` do NAVEGADOR (origem do backend-v2, ex:
- * `:4001`), nunca chega neste processo Node sozinho. Pedido explícito do
- * dono (2026-09-09): depois de logar no painel, `helena` (CLI) na MESMA
- * máquina deveria achar sessão pronta, sem pedir email/senha de novo.
- * `AuthService` (panel-app) manda o token pra cá via `fetch` direto (não
- * pelo `HttpClient`/interceptor, que reescreveria a URL pro backend-v2
- * remoto) logo após login/register — best-effort, nunca bloqueia o login
- * se isto falhar (ex: painel servido de outro jeito, sem este processo
- * `client/` por trás). Reusa o MESMO `session.json` que `cli/session-store.ts`
- * já lê (`ensureSession` em cli/chat.ts) — nenhum mecanismo novo, só o
- * relay que faltava entre navegador e processo Node local.
+ * Ponto ÚNICO de "um login aconteceu nesta máquina" — painel (Angular) e
+ * `helena` (CLI) são processos/UIs diferentes do MESMO `client/`, mas
+ * nenhum dos dois é este processo Node por padrão: o JWT do painel só
+ * existe no `localStorage` do NAVEGADOR (origem do backend-v2), e o do
+ * CLI é outro processo inteiro. Pedido original (2026-09-09): logar no
+ * painel deveria deixar `helena` (CLI) com sessão pronta, sem pedir
+ * email/senha de novo — `AuthService` (panel-app) manda o token pra cá
+ * via `fetch` direto (não pelo `HttpClient`/interceptor, que reescreveria
+ * a URL pro backend-v2 remoto) logo após login/register. `cli/chat.ts`
+ * manda o MESMO jeito depois do próprio login por `readline`.
+ *
+ * Estendido (2026-09-16, achado real: `install.sh` exigia
+ * `BACKEND_V2_API_TOKEN` só que o único jeito fácil de gerar esse token
+ * era logando no painel, e o painel só existe DEPOIS do install.sh — loop
+ * sem saída): além de salvar a sessão pro CLI reusar, agora TAMBÉM
+ * aciona `ensureDeviceToken` — se esta máquina ainda não tem o token de
+ * longa duração (WhatsApp/Telegram/execução remota), provisiona sozinho
+ * a partir deste MESMO JWT que acabou de chegar. Nunca bloqueia a
+ * resposta (fire-and-forget) — um login nunca deve esperar por uma
+ * chamada de rede extra pra backend-v2 só pra terminar.
  */
 function handleCliSession(req: IncomingMessage, res: ServerResponse): void {
     let body = "";
@@ -32,6 +40,7 @@ function handleCliSession(req: IncomingMessage, res: ServerResponse): void {
             const { accessToken } = JSON.parse(body) as { accessToken?: string };
             if (!accessToken) throw new Error("accessToken ausente.");
             saveSession(accessToken);
+            void ensureDeviceToken(accessToken);
             res.writeHead(200, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ ok: true }));
         } catch {

@@ -46,9 +46,15 @@ if [[ ! -f "$ENV_FILE" ]]; then
 fi
 
 # --- valida campos obrigatórios ---
+# BACKEND_V2_API_TOKEN NÃO é obrigatório aqui de propósito (mudou
+# 2026-09-16): era um loop sem saída — esse campo só se gera logando no
+# painel, autenticado, mas o painel só existe DEPOIS deste script instalar
+# e subir o serviço. Sem ele, o client sobe do mesmo jeito (painel de pé,
+# WhatsApp/Telegram/execução remota ficam "aguardando login" — ver
+# device-auth.ts) — o primeiro login (painel OU `helena` CLI) provisiona
+# esse token sozinho, sem precisar copiar/colar nada.
 MISSING=()
 [[ -z "$(read_env "$ENV_FILE" BACKEND_V2_URL)" ]] && MISSING+=("BACKEND_V2_URL")
-[[ -z "$(read_env "$ENV_FILE" BACKEND_V2_API_TOKEN)" ]] && MISSING+=("BACKEND_V2_API_TOKEN (gere via POST /auth/api-tokens, autenticado com seu JWT)")
 
 if [[ ${#MISSING[@]} -gt 0 ]]; then
     warn "Preencha estes campos em $ENV_FILE e rode ./install.sh de novo:"
@@ -88,5 +94,9 @@ else
 fi
 
 bold "Instalação concluída."
-info "Abra o painel local (porta em CLIENT_PANEL_PORT no .env, default 4100) pra parear o WhatsApp escaneando o QR."
+if [[ -z "$(read_env "$ENV_FILE" BACKEND_V2_API_TOKEN)" ]]; then
+    info "Falta só um login pra ativar WhatsApp/Telegram/execução remota — abra o painel local (porta em CLIENT_PANEL_PORT no .env, default 4100), cadastre-se ou entre, e pareie o WhatsApp escaneando o QR. O token de longa duração é gerado sozinho nesse login, sem precisar mexer no .env."
+else
+    info "Abra o painel local (porta em CLIENT_PANEL_PORT no .env, default 4100) pra parear o WhatsApp escaneando o QR."
+fi
 info "'helena' já está disponível — teste com: helena --help"

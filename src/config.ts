@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { loadDeviceToken } from "./device-token.ts";
 
 /**
  * Config central do client/ — lida uma vez, aqui, em vez de cada módulo ler
@@ -13,7 +14,15 @@ import "dotenv/config";
 export const config = {
     panelPort: Number(process.env.CLIENT_PANEL_PORT || 4100),
     backendUrl: process.env.BACKEND_V2_URL || "",
-    backendApiToken: process.env.BACKEND_V2_API_TOKEN || "",
+    /**
+     * Mutável de propósito (não `readonly`) — provisionado sozinho no
+     * primeiro login (painel ou CLI, ver panel/server.ts#handleCliSession)
+     * quando ainda não existe nada salvo/no `.env`. `main.ts` lê este
+     * campo de novo (não só uma vez no boot) na hora de ativar WhatsApp/
+     * Telegram/execução remota, então atualizá-lo em runtime é o bastante
+     * pra "destravar" tudo sem reiniciar o processo.
+     */
+    backendApiToken: loadDeviceToken() || "",
     whatsappAuthDir: process.env.WHATSAPP_AUTH_DIR || "./.whatsapp-auth",
     /** Pins lid→telefone aprendidos via `msg.key.senderPn` (ver channels/whatsapp.ts) — persistido em disco porque o Baileys pode nunca reenviar senderPn de novo pra alguns contatos depois da 1ª vez. */
     whatsappLidPinsFile: process.env.WHATSAPP_LID_PINS_FILE || "./.whatsapp-lid-pins.json",

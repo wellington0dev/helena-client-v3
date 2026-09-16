@@ -104,6 +104,30 @@ function unstickStdinAfterReadline(): void {
     if (state && typeof state.reading === "boolean") state.reading = false;
 }
 
+/**
+ * Best-effort: avisa o processo `client/` (daemon nesta MESMA máquina, se
+ * estiver rodando) que um login acabou de acontecer — reusa o endpoint
+ * que já existia pro sentido painel→CLI (ver panel/server.ts#handleCliSession),
+ * agora também na direção CLI→daemon. É o que deixa `helena login` sozinho
+ * provisionar o token de longa duração (WhatsApp/Telegram/execução
+ * remota) sem precisar abrir o painel nenhuma vez — mas nunca é
+ * obrigatório: se o daemon não estiver rodando nesta máquina (CLI usado
+ * remoto, ou o serviço ainda não instalado), falha em silêncio, o login
+ * do CLI em si já terminou com sucesso de qualquer jeito.
+ */
+async function notifyLocalDaemon(token: string): Promise<void> {
+    try {
+        await fetch(`http://localhost:${config.panelPort}/cli-session`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ accessToken: token }),
+            signal: AbortSignal.timeout(2000),
+        });
+    } catch {
+        // Daemon não está rodando nesta máquina (ou não é a mesma máquina) — sem problema, o CLI segue com o próprio token.
+    }
+}
+
 /** Cria e SEMPRE fecha o próprio `readline.Interface` — precisa liberar o stdin antes do Ink assumir raw mode (ver runInkSession e unstickStdinAfterReadline acima). */
 async function interactiveLogin(): Promise<string> {
     const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -113,6 +137,7 @@ async function interactiveLogin(): Promise<string> {
         const password = await questionMasked(rl, "Senha: ");
         const token = await login(backendUrl, email.trim(), password);
         saveSession(token);
+        void notifyLocalDaemon(token);
         return token;
     } finally {
         rl.close();
