@@ -4,11 +4,29 @@ import Spinner from "ink-spinner";
 import TextInput from "ink-text-input";
 import chalk from "chalk";
 import { resolveInterrupt, sendMessage, UnauthorizedError, type PendingConfirmation, type SendMessageResult, type TurnUsage } from "../backend.ts";
+import { ConfigScreen } from "./config-screen.ts";
 import { formatToolCall, formatToolResult } from "./format-tool-call.ts";
 import { formatUsageLine } from "./format-usage.ts";
 import { connectProgress, type ChatProgressEvent } from "./progress-client.ts";
 import { formatProjectChecklist, formatProjectSummary, type ProjectStepsByRole } from "./project-progress.ts";
 import { renderMarkdownAnsi } from "./render-markdown.ts";
+
+/**
+ * Comandos por barra — padrão opencode/Hermes Agent CLI: tudo dentro do
+ * MESMO TUI (sem abrir processo/tela nova), `/comando` intercepta o
+ * composer antes de virar mensagem de chat. `screen` troca a ÁREA
+ * PRINCIPAL (histórico some, a tela assume o lugar) — Esc dentro da tela
+ * sempre volta pro chat. Primeira tela: `/config` (preferências que hoje
+ * só existiam no painel — telemetria, auto-approve shell, mensagem
+ * proativa, tokens de API). Mais telas (Projects/Contatos/Integrações/
+ * Canais/Cobrança/Uso) chegam depois, mesma arquitetura.
+ */
+type Screen = "chat" | "config";
+
+const HELP_TEXT = `Comandos disponíveis:
+  /config (ou /settings)  Preferências — telemetria, auto-approve shell, mensagem proativa, tokens de API
+  /help (ou /?)           Esta lista
+  Ctrl+C ou Ctrl+D        Sair`;
 
 /** `ink`/`ink-text-input`/`ink-spinner` só publicam `.js` sem JSX — client/ roda `.ts` DIRETO com `node` (sem build, ver bin/helena.js), e o type-stripping nativo do Node não faz transform de JSX. `React.createElement` evita precisar de bundler só pra isto. */
 const h = React.createElement;
@@ -133,6 +151,7 @@ export function App(props: AppProps): React.ReactElement {
     const [pending, setPending] = React.useState<PendingConfirmation | undefined>(undefined);
     const [error, setError] = React.useState<string | undefined>(undefined);
     const [projectSteps, setProjectSteps] = React.useState<Map<string, ProjectStepsByRole>>(new Map());
+    const [screen, setScreen] = React.useState<Screen>("chat");
 
     // Refs pra ler o valor ATUAL de dentro do callback do WS (que só é
     // registrado uma vez no efeito abaixo) sem precisar reconectar o
@@ -212,10 +231,25 @@ export function App(props: AppProps): React.ReactElement {
         }
     }
 
+    function handleCommand(raw: string): void {
+        const cmd = raw.slice(1).trim().toLowerCase();
+        if (cmd === "config" || cmd === "settings") {
+            setScreen("config");
+        } else if (cmd === "help" || cmd === "?") {
+            setHistory((prev) => [...prev, noticeItem(HELP_TEXT, "success")]);
+        } else {
+            setHistory((prev) => [...prev, noticeItem(`Comando desconhecido: "${raw}" — digite /help pra ver os comandos disponíveis.`, "warn")]);
+        }
+    }
+
     function handleSubmit(text: string): void {
         const trimmed = text.trim();
         setInputValue("");
         if (!trimmed || sending || pending) return;
+        if (trimmed.startsWith("/")) {
+            handleCommand(trimmed);
+            return;
+        }
         setHistory((prev) => [...prev, historyItem("user", trimmed)]);
         void runTurn(() => sendMessage(backendUrl, token, { text: trimmed, sessionId, cwd: invocationCwd, machineName }));
     }
@@ -226,6 +260,10 @@ export function App(props: AppProps): React.ReactElement {
         const activeSessionId = sessionId;
         setPending(undefined);
         void runTurn(() => resolveInterrupt(backendUrl, token, activeSessionId, current.tool, current.ref, approved, approved ? undefined : "Recusado pelo usuário no CLI."));
+    }
+
+    if (screen === "config") {
+        return h(ConfigScreen, { backendUrl, token, onExit: () => setScreen("chat") });
     }
 
     let liveRegion: React.ReactElement;

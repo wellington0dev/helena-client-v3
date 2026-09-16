@@ -82,3 +82,72 @@ export async function resolveInterrupt(baseUrl: string, token: string, sessionId
     });
     return parseOrThrow<SendMessageResult>(response);
 }
+
+/**
+ * Endpoints de `/config` no terminal — mesmo protocolo REST que o painel
+ * fala (ver panel-app/src/app/core/{auth,profile}.service.ts). Autenticado
+ * (JWT do login por email/senha, mesmo `token` do resto deste arquivo).
+ */
+async function authed<T>(baseUrl: string, token: string, method: "GET" | "POST" | "PATCH" | "DELETE", path: string, body?: unknown): Promise<T> {
+    const response = await fetch(`${baseUrl}${path}`, {
+        method,
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        ...(body !== undefined && { body: JSON.stringify(body) }),
+    });
+    return parseOrThrow<T>(response);
+}
+
+export type UserRole = "admin" | "user" | "tester";
+
+export interface CurrentUser {
+    id: string;
+    email: string;
+    displayName?: string;
+    role: UserRole;
+    telemetryConsent: boolean;
+    autoApproveShell: boolean;
+    allowProactiveMessages: boolean;
+    whatsappOwnerNumber?: string;
+    telegramOwnerId?: string;
+    createdAt: string;
+}
+
+export function getMe(baseUrl: string, token: string): Promise<CurrentUser> {
+    return authed(baseUrl, token, "GET", "/auth/me");
+}
+
+export function setTelemetryConsent(baseUrl: string, token: string, consent: boolean): Promise<{ telemetryConsent: boolean }> {
+    return authed(baseUrl, token, "PATCH", "/auth/me/telemetry-consent", { consent });
+}
+
+export function setAutoApproveShell(baseUrl: string, token: string, enabled: boolean): Promise<{ autoApproveShell: boolean }> {
+    return authed(baseUrl, token, "PATCH", "/auth/me/auto-approve-shell", { enabled });
+}
+
+export function setProactiveMessages(baseUrl: string, token: string, enabled: boolean): Promise<{ allowProactiveMessages: boolean }> {
+    return authed(baseUrl, token, "PATCH", "/auth/me/allow-proactive-messages", { enabled });
+}
+
+export interface ApiTokenSummary {
+    id: string;
+    label?: string;
+    createdAt: string;
+    lastUsedAt?: string | null;
+}
+
+export interface CreatedApiToken extends ApiTokenSummary {
+    /** Só vem nesta resposta, uma vez — nunca mais recuperável depois. */
+    token: string;
+}
+
+export function listApiTokens(baseUrl: string, token: string): Promise<ApiTokenSummary[]> {
+    return authed(baseUrl, token, "GET", "/auth/api-tokens");
+}
+
+export function createApiToken(baseUrl: string, token: string, label?: string): Promise<CreatedApiToken> {
+    return authed(baseUrl, token, "POST", "/auth/api-tokens", { label });
+}
+
+export function revokeApiToken(baseUrl: string, token: string, id: string): Promise<{ revoked: boolean }> {
+    return authed(baseUrl, token, "DELETE", `/auth/api-tokens/${id}`);
+}

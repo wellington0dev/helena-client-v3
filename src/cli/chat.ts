@@ -81,7 +81,30 @@ async function questionMasked(rl: Interface, query: string): Promise<string> {
     }
 }
 
-/** Cria e SEMPRE fecha o próprio `readline.Interface` — precisa liberar o stdin antes do Ink assumir raw mode (ver runInkSession). */
+/**
+ * Bug real encontrado ao vivo (pty de verdade via `python3 -c "import
+ * pty..."`, testando o handoff readline → Ink): depois de `rl.close()`,
+ * `process.stdin` fica com `_readableState.reading === true` — o
+ * `readline` deixou uma leitura "pendente" registrada internamente, que
+ * nunca é resolvida (ninguém mais está servindo ela). O Ink lê stdin via
+ * `stdin.addListener('readable', ...) + stdin.read()` (modo pausado) —
+ * com `reading` travado em `true`, o Node nunca dispara `'readable'` de
+ * novo pra ele, então TODA tecla digitada no composer (TextInput) some
+ * no vazio (só o eco puro do kernel aparece na tela, nunca processado
+ * pelo Ink). `removeAllListeners('data'/'keypress')` sozinho NÃO resolve
+ * — confirmado isolando cada hipótese nesse mesmo pty antes de achar esta.
+ * Resetar a flag interna (privada, mas estável nesta versão do Node —
+ * `node --version` no ambiente de dev) destrava: o próximo `.read()` do
+ * Ink volta a funcionar normalmente. Guardado atrás de checagem de
+ * existência — se o formato interno mudar numa versão futura do Node,
+ * isto vira no-op silencioso em vez de lançar.
+ */
+function unstickStdinAfterReadline(): void {
+    const state = (process.stdin as unknown as { _readableState?: { reading?: boolean } })._readableState;
+    if (state && typeof state.reading === "boolean") state.reading = false;
+}
+
+/** Cria e SEMPRE fecha o próprio `readline.Interface` — precisa liberar o stdin antes do Ink assumir raw mode (ver runInkSession e unstickStdinAfterReadline acima). */
 async function interactiveLogin(): Promise<string> {
     const rl = createInterface({ input: process.stdin, output: process.stdout });
     try {
@@ -93,6 +116,7 @@ async function interactiveLogin(): Promise<string> {
         return token;
     } finally {
         rl.close();
+        unstickStdinAfterReadline();
     }
 }
 
@@ -128,7 +152,7 @@ let currentToken: string | undefined;
 async function main(): Promise<void> {
     let token = await ensureSession();
     currentToken = token;
-    console.log(`Conectado a ${backendUrl} (${invocationCwd}) — digite sua mensagem (Ctrl+C pra sair).\n`);
+    console.log(`Conectado a ${backendUrl} (${invocationCwd}) — digite sua mensagem, /help pra ver comandos, Ctrl+C pra sair.\n`);
 
     let history: HistoryItem[] = [];
     let sessionId: string | undefined;
