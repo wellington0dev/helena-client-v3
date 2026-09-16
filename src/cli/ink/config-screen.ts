@@ -1,7 +1,5 @@
 import React from "react";
 import { Box, Text, useInput } from "ink";
-import TextInput from "ink-text-input";
-import chalk from "chalk";
 import {
     createApiToken,
     getMe,
@@ -10,22 +8,35 @@ import {
     setAutoApproveShell,
     setProactiveMessages,
     setTelemetryConsent,
+    UnauthorizedError,
     type ApiTokenSummary,
     type CreatedApiToken,
     type CurrentUser,
 } from "../backend.ts";
+import { CrudScreen } from "./crud-screen.ts";
+import { Form } from "./form.ts";
 import { SelectMenu, type SelectMenuItem } from "./select-menu.ts";
+import { c, theme } from "./theme.ts";
 
 const h = React.createElement;
 
-/** `SelectMenu` é genérico (`SelectMenu<T>`), mas `createElement` não tem como instanciar esse genérico sem JSX — mesmo problema/solução de `HistoryStatic` em app.ts. Toda seleção nesta tela é por string (role/id), então um alias só resolve todos os usos. */
+/** `SelectMenu`/`CrudScreen` são genéricos, mas `createElement` não tem como instanciar esse genérico sem JSX — mesmo problema/solução de `HistoryStatic` em app.ts. Toda seleção nesta tela é por string (role/id), então um alias só resolve todos os usos. */
 const StringSelectMenu = SelectMenu as unknown as (props: { items: SelectMenuItem<string>[]; onSelect: (value: string) => void; onCancel?: () => void }) => React.ReactElement;
+const TokenCrudScreen = CrudScreen as unknown as (props: {
+    title: string;
+    items: ApiTokenSummary[] | undefined;
+    itemLabel: (item: ApiTokenSummary) => { label: string; hint?: string };
+    onCreate: () => void;
+    onDelete: (item: ApiTokenSummary) => Promise<void>;
+    busy: boolean;
+    onExit: () => void;
+}) => React.ReactElement;
 
 /** `/config` — primeira tela do CLI equivalente ao painel (perfil/preferências, ver docs de arquitetura do client), padrão opencode/Hermes Agent CLI: tudo dentro do mesmo TUI, Esc sempre volta um nível, nunca abre processo/tela nova. */
 type Screen = { kind: "menu" } | { kind: "tokens" } | { kind: "create-token" } | { kind: "token-created"; created: CreatedApiToken };
 
 function toggleLabel(enabled: boolean): string {
-    return enabled ? chalk.green("ligado") : chalk.dim("desligado");
+    return enabled ? c.success("ligado") : c.muted("desligado");
 }
 
 function formatDate(iso: string | null | undefined): string {
@@ -33,45 +44,54 @@ function formatDate(iso: string | null | undefined): string {
     return new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
-export function ConfigScreen(props: { backendUrl: string; token: string; onExit: () => void }): React.ReactElement {
-    const { backendUrl, token, onExit } = props;
+export function ConfigScreen(props: { backendUrl: string; token: string; onExit: () => void; onUnauthorized: () => void }): React.ReactElement {
+    const { backendUrl, token, onExit, onUnauthorized } = props;
     const [me, setMe] = React.useState<CurrentUser | undefined>(undefined);
     const [tokens, setTokens] = React.useState<ApiTokenSummary[] | undefined>(undefined);
     const [error, setError] = React.useState<string | undefined>(undefined);
     const [busy, setBusy] = React.useState(false);
     const [screen, setScreen] = React.useState<Screen>({ kind: "menu" });
-    const [tokenLabelDraft, setTokenLabelDraft] = React.useState("");
+
+    /** Toda chamada autenticada desta tela passa por aqui — trata sessão expirada (relogin) de um jeito uniforme em vez de só pintar erro vermelho e travar a tela até o dono reabrir o `helena` manualmente. */
+    function handleAsyncError(err: unknown): void {
+        if (err instanceof UnauthorizedError) {
+            onUnauthorized();
+            return;
+        }
+        setError(err instanceof Error ? err.message : String(err));
+    }
 
     const reloadMe = React.useCallback(async () => {
         try {
             setMe(await getMe(backendUrl, token));
         } catch (err) {
-            setError(err instanceof Error ? err.message : String(err));
+            handleAsyncError(err);
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [backendUrl, token]);
 
     const reloadTokens = React.useCallback(async () => {
         try {
             setTokens(await listApiTokens(backendUrl, token));
         } catch (err) {
-            setError(err instanceof Error ? err.message : String(err));
+            handleAsyncError(err);
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [backendUrl, token]);
 
     React.useEffect(() => {
         void reloadMe();
     }, [reloadMe]);
 
-    // Esc sempre sobe UM nível na hierarquia menu → tokens → create-token/token-created — nunca pula direto pro chat de um nível mais fundo. `useInput` roda independente de qual componente tem `focus` (isso só afeta o TextInput capturar a DIGITAÇÃO, não os hooks de tecla), então funciona igual em toda tela, inclusive create-token.
+    // Esc sempre sobe UM nível na hierarquia menu → tokens → create-token/token-created — nunca pula direto pro chat de um nível mais fundo. `useInput` roda independente de qual componente tem `focus` (isso só afeta o TextInput capturar a DIGITAÇÃO, não os hooks de tecla), então funciona igual em toda tela, inclusive create-token. Não se aplica à tela "tokens" — o próprio `CrudScreen` já trata Esc (chamando `onExit` que passamos abaixo).
     useInput((_input, key) => {
         if (!key.escape) return;
         if (screen.kind === "menu") onExit();
-        else if (screen.kind === "tokens") setScreen({ kind: "menu" });
-        else setScreen({ kind: "tokens" }); // create-token ou token-created
+        else if (screen.kind === "create-token" || screen.kind === "token-created") setScreen({ kind: "tokens" });
     });
 
     if (error) {
-        return h(Box, { flexDirection: "column", borderStyle: "round", borderColor: "red", paddingX: 1 }, h(Text, { color: "red" }, `Erro: ${error}`), h(Text, { dimColor: true }, "Esc pra voltar ao chat"));
+        return h(Box, { flexDirection: "column", borderStyle: "round", borderColor: theme.danger, paddingX: 1 }, h(Text, { color: theme.danger }, `Erro: ${error}`), h(Text, { dimColor: true }, "Esc pra voltar ao chat"));
     }
     if (!me) return h(Text, { dimColor: true }, "Carregando configurações...");
 
@@ -82,7 +102,7 @@ export function ConfigScreen(props: { backendUrl: string; token: string; onExit:
             await action();
             await reloadMe();
         } catch (err) {
-            setError(err instanceof Error ? err.message : String(err));
+            handleAsyncError(err);
         } finally {
             setBusy(false);
         }
@@ -97,8 +117,8 @@ export function ConfigScreen(props: { backendUrl: string; token: string; onExit:
         ];
         return h(
             Box,
-            { flexDirection: "column", borderStyle: "round", borderColor: "cyan", paddingX: 1 },
-            h(Text, { bold: true, color: "cyan" }, `Configurações — ${me.email}`),
+            { flexDirection: "column", borderStyle: "round", borderColor: theme.border, paddingX: 1 },
+            h(Text, { bold: true, color: theme.primary }, `Configurações — ${me.email}`),
             h(Box, { marginTop: 1 }),
             h(StringSelectMenu, {
                 items,
@@ -117,78 +137,62 @@ export function ConfigScreen(props: { backendUrl: string; token: string; onExit:
     }
 
     if (screen.kind === "tokens") {
-        if (!tokens) return h(Text, { dimColor: true }, "Carregando tokens...");
-
-        const items: SelectMenuItem<string>[] = [
-            { label: "+ Criar novo token", value: "__create__" },
-            ...tokens.map((t) => ({ label: t.label ?? "(sem nome)", hint: `usado ${formatDate(t.lastUsedAt)} · criado ${formatDate(t.createdAt)} · Enter pra revogar`, value: t.id })),
-        ];
-
-        async function handleRevoke(id: string): Promise<void> {
+        async function handleDelete(t: ApiTokenSummary): Promise<void> {
             setBusy(true);
             try {
-                await revokeApiToken(backendUrl, token, id);
+                await revokeApiToken(backendUrl, token, t.id);
                 await reloadTokens();
             } catch (err) {
-                setError(err instanceof Error ? err.message : String(err));
+                handleAsyncError(err);
             } finally {
                 setBusy(false);
             }
         }
 
-        return h(
-            Box,
-            { flexDirection: "column", borderStyle: "round", borderColor: "cyan", paddingX: 1 },
-            h(Text, { bold: true, color: "cyan" }, "Tokens de API"),
-            h(Text, { dimColor: true }, "Usados pelo helena agent (execução remota) — o valor só aparece uma vez, na criação."),
-            h(Box, { marginTop: 1 }),
-            tokens.length === 0 ? h(Text, { dimColor: true }, "Nenhum token ainda — comece por aqui:") : null,
-            h(StringSelectMenu, {
-                items,
-                onSelect: (value: string) => {
-                    if (value === "__create__") setScreen({ kind: "create-token" });
-                    else void handleRevoke(value);
-                },
-            }),
-            h(Box, { marginTop: 1 }),
-            h(Text, { dimColor: true }, busy ? "aplicando..." : "1-9, ↑↓+Enter cria/revoga · Esc volta"),
-        );
+        return h(TokenCrudScreen, {
+            title: "Tokens de API — usados pelo helena agent (execução remota)",
+            items: tokens,
+            itemLabel: (t) => ({ label: t.label ?? "(sem nome)", hint: `usado ${formatDate(t.lastUsedAt)} · criado ${formatDate(t.createdAt)}` }),
+            onCreate: () => setScreen({ kind: "create-token" }),
+            onDelete: handleDelete,
+            busy,
+            onExit: () => setScreen({ kind: "menu" }),
+        });
     }
 
     if (screen.kind === "create-token") {
-        async function handleSubmit(label: string): Promise<void> {
+        async function handleFormSubmit(values: Record<string, string>): Promise<void> {
             setBusy(true);
             try {
-                const created = await createApiToken(backendUrl, token, label.trim() || undefined);
-                setTokenLabelDraft("");
+                const created = await createApiToken(backendUrl, token, values.label?.trim() || undefined);
                 setScreen({ kind: "token-created", created });
                 await reloadTokens();
             } catch (err) {
-                setError(err instanceof Error ? err.message : String(err));
+                handleAsyncError(err);
             } finally {
                 setBusy(false);
             }
         }
 
-        return h(
-            Box,
-            { flexDirection: "column", borderStyle: "round", borderColor: "cyan", paddingX: 1 },
-            h(Text, { bold: true, color: "cyan" }, "Novo token de API"),
-            h(Box, { marginTop: 1, gap: 1 }, h(Text, null, "Nome (opcional):"), h(TextInput, { value: tokenLabelDraft, onChange: setTokenLabelDraft, onSubmit: (v: string) => void handleSubmit(v), focus: !busy })),
-            h(Box, { marginTop: 1 }),
-            h(Text, { dimColor: true }, busy ? "criando..." : "Enter confirma · Esc cancela (volta pra lista)"),
-        );
+        return h(Form, {
+            title: "Novo token de API",
+            fields: [{ key: "label", label: "Nome", optional: true }],
+            onSubmit: (values) => void handleFormSubmit(values),
+            onCancel: () => setScreen({ kind: "tokens" }),
+            submitLabel: "Enter confirma",
+            busy,
+        });
     }
 
     // screen.kind === "token-created"
     const created = screen.created;
     return h(
         Box,
-        { flexDirection: "column", borderStyle: "round", borderColor: "green", paddingX: 1 },
-        h(Text, { bold: true, color: "green" }, "Token criado"),
+        { flexDirection: "column", borderStyle: "round", borderColor: theme.success, paddingX: 1 },
+        h(Text, { bold: true, color: theme.success }, "Token criado"),
         h(Text, { dimColor: true }, "Copie agora — não vai aparecer de novo:"),
         h(Box, { marginTop: 1 }),
-        h(Text, { color: "yellow" }, created.token),
+        h(Text, { color: theme.warning }, created.token),
         h(Box, { marginTop: 1 }),
         h(Text, { dimColor: true }, "Esc volta pra lista de tokens"),
     );

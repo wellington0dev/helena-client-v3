@@ -1,6 +1,6 @@
 import React from "react";
 import { Box, Text, useInput } from "ink";
-import chalk from "chalk";
+import { c } from "./theme.ts";
 
 const h = React.createElement;
 
@@ -60,10 +60,10 @@ export function SelectMenu<T>(props: { items: SelectMenuItem<T>[]; onSelect: (va
         { flexDirection: "column" },
         ...items.map((item, i) => {
             const active = i === cursor;
-            const pointer = active ? chalk.cyan("❯ ") : "  ";
-            const number = i < 9 ? chalk.dim(`${i + 1}) `) : "   ";
-            const label = item.disabled ? chalk.dim(item.label) : active ? chalk.cyan(item.label) : item.label;
-            const hint = item.hint ? `  ${chalk.dim(item.hint)}` : "";
+            const pointer = active ? c.primary("❯ ") : "  ";
+            const number = i < 9 ? c.muted(`${i + 1}) `) : "   ";
+            const label = item.disabled ? c.muted(item.label) : active ? c.primary(item.label) : item.label;
+            const hint = item.hint ? `  ${c.muted(item.hint)}` : "";
             return h(Text, { key: i }, pointer, number, label, hint);
         }),
     );

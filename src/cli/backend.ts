@@ -6,7 +6,15 @@
  * client/src/channels/backend-client.ts (este pacote roda `.ts` nativo,
  * sem build; classe com parâmetro de construtor não sobrevive ao
  * strip-only do Node).
+ *
+ * `authed`/`parseOrThrow`/`UnauthorizedError` vivem em `api/http.ts`
+ * (compartilhado com os módulos de domínio em `api/*.ts` — Contatos/MCP/
+ * Projetos/etc) — reexporta `UnauthorizedError` pra não quebrar quem já
+ * importa daqui (`app.ts`/`chat.ts`).
  */
+import { authed, parseOrThrow, UnauthorizedError } from "./api/http.ts";
+
+export { UnauthorizedError };
 
 export interface PendingConfirmation {
     tool: string;
@@ -34,18 +42,6 @@ export interface SendMessageResult {
     pending?: PendingConfirmation[];
     toolActivity?: ToolActivityEntry[];
     usage?: TurnUsage;
-}
-
-/** Distinta de um erro genérico pra chat.ts saber quando vale a pena relogar em vez de só mostrar o erro. */
-export class UnauthorizedError extends Error {}
-
-async function parseOrThrow<T>(response: Response): Promise<T> {
-    if (!response.ok) {
-        const body = await response.text().catch(() => "");
-        if (response.status === 401) throw new UnauthorizedError(`sessão expirada ou inválida: ${body}`);
-        throw new Error(`backend-v2 respondeu ${response.status}: ${body}`);
-    }
-    return response.json() as Promise<T>;
 }
 
 export async function login(baseUrl: string, email: string, password: string): Promise<string> {
@@ -87,16 +83,8 @@ export async function resolveInterrupt(baseUrl: string, token: string, sessionId
  * Endpoints de `/config` no terminal — mesmo protocolo REST que o painel
  * fala (ver panel-app/src/app/core/{auth,profile}.service.ts). Autenticado
  * (JWT do login por email/senha, mesmo `token` do resto deste arquivo).
+ * `authed` vem de `api/http.ts` (ver import no topo).
  */
-async function authed<T>(baseUrl: string, token: string, method: "GET" | "POST" | "PATCH" | "DELETE", path: string, body?: unknown): Promise<T> {
-    const response = await fetch(`${baseUrl}${path}`, {
-        method,
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        ...(body !== undefined && { body: JSON.stringify(body) }),
-    });
-    return parseOrThrow<T>(response);
-}
-
 export type UserRole = "admin" | "user" | "tester";
 
 export interface CurrentUser {

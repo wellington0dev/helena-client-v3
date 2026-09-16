@@ -2,14 +2,15 @@ import React from "react";
 import { Box, Static, Text, useInput } from "ink";
 import Spinner from "ink-spinner";
 import TextInput from "ink-text-input";
-import chalk from "chalk";
 import { resolveInterrupt, sendMessage, UnauthorizedError, type PendingConfirmation, type SendMessageResult, type TurnUsage } from "../backend.ts";
+import { findCommand, type Screen } from "./commands.ts";
 import { ConfigScreen } from "./config-screen.ts";
 import { formatToolCall, formatToolResult } from "./format-tool-call.ts";
 import { formatUsageLine } from "./format-usage.ts";
 import { connectProgress, type ChatProgressEvent } from "./progress-client.ts";
 import { formatProjectChecklist, formatProjectSummary, type ProjectStepsByRole } from "./project-progress.ts";
 import { renderMarkdownAnsi } from "./render-markdown.ts";
+import { c, theme } from "./theme.ts";
 
 /**
  * Comandos por barra — padrão opencode/Hermes Agent CLI: tudo dentro do
@@ -19,14 +20,9 @@ import { renderMarkdownAnsi } from "./render-markdown.ts";
  * sempre volta pro chat. Primeira tela: `/config` (preferências que hoje
  * só existiam no painel — telemetria, auto-approve shell, mensagem
  * proativa, tokens de API). Mais telas (Projects/Contatos/Integrações/
- * Canais/Cobrança/Uso) chegam depois, mesma arquitetura.
+ * Canais/Cobrança/Uso) chegam depois, mesma arquitetura. Comandos e o
+ * texto de `/help` vêm do registro único em `commands.ts` — ver lá.
  */
-type Screen = "chat" | "config";
-
-const HELP_TEXT = `Comandos disponíveis:
-  /config (ou /settings)  Preferências — telemetria, auto-approve shell, mensagem proativa, tokens de API
-  /help (ou /?)           Esta lista
-  Ctrl+C ou Ctrl+D        Sair`;
 
 /** `ink`/`ink-text-input`/`ink-spinner` só publicam `.js` sem JSX — client/ roda `.ts` DIRETO com `node` (sem build, ver bin/helena.js), e o type-stripping nativo do Node não faz transform de JSX. `React.createElement` evita precisar de bundler só pra isto. */
 const h = React.createElement;
@@ -76,19 +72,19 @@ function usageItem(usage: TurnUsage): HistoryItem {
 
 function HistoryLine({ item }: { item: HistoryItem }): React.ReactElement {
     if (item.role === "tool_call") {
-        return h(Box, null, h(Text, { color: "gray" }, "● ", formatToolCall(item.name, item.input)));
+        return h(Box, null, h(Text, { color: theme.textMuted }, "● ", formatToolCall(item.name, item.input)));
     }
     if (item.role === "tool_result") {
-        return h(Box, { flexDirection: "column", marginBottom: 1, paddingLeft: 2 }, h(Text, { color: "gray", dimColor: true }, "⎿ ", formatToolResult(item.name, item.output)));
+        return h(Box, { flexDirection: "column", marginBottom: 1, paddingLeft: 2 }, h(Text, { color: theme.textMuted, dimColor: true }, "⎿ ", formatToolResult(item.name, item.output)));
     }
     if (item.role === "notice") {
-        const color = item.tone === "success" ? "green" : item.tone === "danger" ? "red" : "yellow";
+        const color = item.tone === "success" ? theme.success : item.tone === "danger" ? theme.danger : theme.warning;
         return h(Box, { marginBottom: 1 }, h(Text, { color }, item.text));
     }
     if (item.role === "usage") {
-        return h(Box, { marginBottom: 1 }, h(Text, { color: "gray", dimColor: true }, formatUsageLine(item.usage)));
+        return h(Box, { marginBottom: 1 }, h(Text, { color: theme.textMuted, dimColor: true }, formatUsageLine(item.usage)));
     }
-    const label = item.role === "user" ? chalk.cyan.bold("Você") : chalk.magenta.bold("Helena");
+    const label = item.role === "user" ? c.primary.bold("Você") : c.accent.bold("Helena");
     const body = item.role === "assistant" ? renderMarkdownAnsi(item.text) : item.text;
     return h(Box, { flexDirection: "column", marginBottom: 1 }, h(Text, null, `${label}:`), h(Text, null, body));
 }
@@ -103,8 +99,8 @@ function ProjectProgressPanel({ projectSteps }: { projectSteps: Map<string, Proj
         ...[...projectSteps.entries()].map(([projectId, steps]) =>
             h(
                 Box,
-                { key: projectId, flexDirection: "column", borderStyle: "round", borderColor: "cyan", paddingX: 1 },
-                h(Text, { color: "cyan", bold: true }, `Equipe de dev — ${formatProjectSummary(steps)}`),
+                { key: projectId, flexDirection: "column", borderStyle: "round", borderColor: theme.border, paddingX: 1 },
+                h(Text, { color: theme.primary, bold: true }, `Equipe de dev — ${formatProjectSummary(steps)}`),
                 ...formatProjectChecklist(steps).map((line, i) => h(Text, { key: i, dimColor: line.startsWith("○") }, line)),
             ),
         ),
@@ -112,14 +108,14 @@ function ProjectProgressPanel({ projectSteps }: { projectSteps: Map<string, Proj
 }
 
 function StatusLine({ text }: { text: string }): React.ReactElement {
-    return h(Box, { gap: 1 }, h(Text, { color: "cyan" }, h(Spinner, { type: "dots" })), h(Text, { dimColor: true }, text));
+    return h(Box, { gap: 1 }, h(Text, { color: theme.primary }, h(Spinner, { type: "dots" })), h(Text, { dimColor: true }, text));
 }
 
 function Composer(props: { value: string; onChange: (v: string) => void; onSubmit: (v: string) => void; disabled: boolean }): React.ReactElement {
     return h(
         Box,
         { gap: 1 },
-        h(Text, { color: "green", bold: true }, "❯"),
+        h(Text, { color: theme.success, bold: true }, "❯"),
         h(TextInput, { value: props.value, onChange: props.onChange, onSubmit: props.onSubmit, placeholder: "Escreva sua mensagem...", focus: !props.disabled }),
     );
 }
@@ -133,8 +129,8 @@ function ConfirmationPrompt(props: { pending: PendingConfirmation; onAnswer: (ap
 
     return h(
         Box,
-        { flexDirection: "column", borderStyle: "round", borderColor: "yellow", paddingX: 1 },
-        h(Text, { color: "yellow", bold: true }, `Aprovação necessária — ${props.pending.tool}`),
+        { flexDirection: "column", borderStyle: "round", borderColor: theme.warning, paddingX: 1 },
+        h(Text, { color: theme.warning, bold: true }, `Aprovação necessária — ${props.pending.tool}`),
         h(Text, { dimColor: true }, JSON.stringify(props.pending.input, null, 2)),
         h(Text, null, "Aprovar? (s/n)"),
     );
@@ -232,14 +228,16 @@ export function App(props: AppProps): React.ReactElement {
     }
 
     function handleCommand(raw: string): void {
-        const cmd = raw.slice(1).trim().toLowerCase();
-        if (cmd === "config" || cmd === "settings") {
-            setScreen("config");
-        } else if (cmd === "help" || cmd === "?") {
-            setHistory((prev) => [...prev, noticeItem(HELP_TEXT, "success")]);
-        } else {
+        const name = raw.slice(1).trim().toLowerCase();
+        const command = findCommand(name);
+        if (!command) {
             setHistory((prev) => [...prev, noticeItem(`Comando desconhecido: "${raw}" — digite /help pra ver os comandos disponíveis.`, "warn")]);
+            return;
         }
+        command.run({
+            setScreen,
+            pushNotice: (text, tone) => setHistory((prev) => [...prev, noticeItem(text, tone)]),
+        });
     }
 
     function handleSubmit(text: string): void {
@@ -263,7 +261,12 @@ export function App(props: AppProps): React.ReactElement {
     }
 
     if (screen === "config") {
-        return h(ConfigScreen, { backendUrl, token, onExit: () => setScreen("chat") });
+        return h(ConfigScreen, {
+            backendUrl,
+            token,
+            onExit: () => setScreen("chat"),
+            onUnauthorized: () => onDone({ type: "relogin", history: historyRef.current, sessionId: sessionIdRef.current }),
+        });
     }
 
     let liveRegion: React.ReactElement;
