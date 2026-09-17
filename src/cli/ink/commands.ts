@@ -12,7 +12,7 @@
  * Cobrança/Uso) só entram aqui quando a tela correspondente for entregue
  * — nunca um `/comando` morto aparecendo no `/help` antes de existir.
  */
-export type Screen = "chat" | "config" | "contacts" | "mcp" | "channels";
+export type Screen = "chat" | "config" | "contacts" | "mcp" | "channels" | "usage";
 
 export interface CommandContext {
     setScreen: (screen: Screen) => void;
@@ -47,6 +47,11 @@ export const COMMANDS: Command[] = [
         name: "canais",
         description: "Status do WhatsApp/Telegram/execução remota (só leitura)",
         run: (ctx) => ctx.setScreen("channels"),
+    },
+    {
+        name: "uso",
+        description: "Chamadas de chat por canal e nos últimos 7 dias (só leitura)",
+        run: (ctx) => ctx.setScreen("usage"),
     },
     {
         name: "help",
