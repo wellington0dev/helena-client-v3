@@ -12,6 +12,8 @@ export type ChannelStatus = "disconnected" | "connecting" | "qr" | "connected" |
 export interface WhatsappState {
     status: ChannelStatus;
     qrDataUrl?: string;
+    /** Mesmo QR de `qrDataUrl`, mas o payload de TEXTO bruto (não a imagem) — usado pela CLI (`/canais`) pra desenhar o QR em ASCII no terminal via `qrcode-terminal`, sem precisar decodificar a imagem (nem depender de nenhuma lib nova pra isso). */
+    qrText?: string;
     error?: string;
 }
 

@@ -1,0 +1,35 @@
+/**
+ * Conecta no WS `/ws` do PRÓPRIO processo `client/` (`panel/server.ts`)
+ * rodando NESTA MESMA máquina — a CLI (`cli/`) é o mesmo pacote/npm do
+ * daemon (`main.ts`), então pode falar `ws://localhost:${config.panelPort}`
+ * direto, sem passar pelo backend-v2. Nunca lança — se o daemon não
+ * estiver rodando aqui (CLI usada remota, ou serviço ainda não
+ * instalado), `onEvent` simplesmente nunca é chamado, mesmo espírito
+ * gracioso de `notifyLocalDaemon` (`cli/chat.ts`).
+ */
+import type { ClientState } from "../../panel/status-bus.ts";
+
+export function connectLocalWs(panelPort: number, onState: (state: ClientState) => void): () => void {
+    let closed = false;
+    let socket: WebSocket | undefined;
+
+    try {
+        socket = new WebSocket(`ws://localhost:${panelPort}/ws`);
+        socket.addEventListener("message", (event) => {
+            try {
+                onState(JSON.parse(event.data.toString()));
+            } catch {
+                // Payload malformado — ignora, nunca derruba a tela por isso.
+            }
+        });
+        socket.addEventListener("error", () => socket?.close());
+    } catch {
+        // Sem daemon local nesta máquina — a tela mostra "não detectado".
+    }
+
+    return () => {
+        if (closed) return;
+        closed = true;
+        socket?.close();
+    };
+}

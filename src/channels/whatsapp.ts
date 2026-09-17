@@ -263,16 +263,16 @@ async function connect(): Promise<void> {
         const { connection, lastDisconnect, qr } = update;
 
         if (qr) {
-            updateWhatsapp({ status: "qr" });
+            updateWhatsapp({ status: "qr", qrText: qr });
             QRCode.toDataURL(qr)
-                .then((qrDataUrl) => updateWhatsapp({ status: "qr", qrDataUrl }))
+                .then((qrDataUrl) => updateWhatsapp({ status: "qr", qrDataUrl, qrText: qr }))
                 .catch((error) => console.error("[whatsapp] falha ao gerar QR pro painel:", error));
         }
 
         if (connection === "open") {
             console.log("[whatsapp] conectado.");
             currentSock = sock;
-            updateWhatsapp({ status: "connected", qrDataUrl: undefined, error: undefined });
+            updateWhatsapp({ status: "connected", qrDataUrl: undefined, qrText: undefined, error: undefined });
         }
 
         if (connection === "close") {
@@ -281,11 +281,11 @@ async function connect(): Promise<void> {
             if (statusCode === DisconnectReason.loggedOut) {
                 const message = "sessão desconectada (logout) — apague o diretório de auth e reinicie pra escanear um QR novo.";
                 console.error(`[whatsapp] ${message}`);
-                updateWhatsapp({ status: "error", error: message, qrDataUrl: undefined });
+                updateWhatsapp({ status: "error", error: message, qrDataUrl: undefined, qrText: undefined });
                 return;
             }
             if (shuttingDown) return; // fomos nós que fechamos (stopWhatsapp) — não reconecta brigando com o processo saindo.
-            updateWhatsapp({ status: "connecting", qrDataUrl: undefined });
+            updateWhatsapp({ status: "connecting", qrDataUrl: undefined, qrText: undefined });
             setTimeout(() => connect().catch((error) => console.error("[whatsapp] falha ao reconectar:", error)), RECONNECT_DELAY_MS);
         }
     });

@@ -5,8 +5,10 @@ import TextInput from "ink-text-input";
 import { resolveInterrupt, sendMessage, UnauthorizedError, type PendingConfirmation, type SendMessageResult, type TurnUsage } from "../backend.ts";
 import { findCommand, type Screen } from "./commands.ts";
 import { ConfigScreen } from "./config-screen.ts";
+import { ChannelsScreen } from "./channels-screen.ts";
 import { ContactsScreen } from "./contacts-screen.ts";
 import { McpScreen } from "./mcp-screen.ts";
+import { config } from "../../config.ts";
 import { formatToolCall, formatToolResult } from "./format-tool-call.ts";
 import { formatUsageLine } from "./format-usage.ts";
 import { connectProgress, type ChatProgressEvent } from "./progress-client.ts";
@@ -272,6 +274,9 @@ export function App(props: AppProps): React.ReactElement {
     }
     if (screen === "mcp") {
         return h(McpScreen, { backendUrl, token, onExit: () => setScreen("chat"), onUnauthorized });
+    }
+    if (screen === "channels") {
+        return h(ChannelsScreen, { panelPort: config.panelPort, onExit: () => setScreen("chat") });
     }
 
     let liveRegion: React.ReactElement;
