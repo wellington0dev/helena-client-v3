@@ -30,14 +30,13 @@ command -v npm >/dev/null || { err "npm não encontrado no PATH."; exit 1; }
 bold "Instalando dependências (npm install)..."
 ( cd "$CLIENT_DIR" && npm install )
 
-# --- painel web (Angular, sempre rebuilda — nunca serve build antigo) ---
-bold "Buildando o painel web (Angular)..."
-if ! ( cd "$CLIENT_DIR" && npm run build:panel ); then
-    err "Build do painel Angular falhou — abortando instalação."
-    info "Nunca sobe servindo painel quebrado ou build antigo silenciosamente. Corrija o erro acima e rode ./install.sh de novo."
-    exit 1
-fi
-ok "Painel web buildado."
+# --- painel web (Angular) — DESABILITADO (2026-09-17), CLI é a interface
+# principal agora. O código-fonte continua em panel-app/, intacto, pra
+# quem quiser retomar o desenvolvimento dele depois (ver
+# client/docs/local-server-api.md pra API que ele consumia). Pra voltar a
+# servir o painel: rode `npm run build:panel` manualmente e reverta o
+# `startPanelServer` em `src/panel/server.ts` pra servir os arquivos de
+# `panel-app/dist/panel-app/browser` de novo (ver histórico do git).
 
 # --- .env ---
 if [[ ! -f "$ENV_FILE" ]]; then
@@ -95,8 +94,8 @@ fi
 
 bold "Instalação concluída."
 if [[ -z "$(read_env "$ENV_FILE" BACKEND_V2_API_TOKEN)" ]]; then
-    info "Falta só um login pra ativar WhatsApp/Telegram/execução remota — abra o painel local (porta em CLIENT_PANEL_PORT no .env, default 4100), cadastre-se ou entre, e pareie o WhatsApp escaneando o QR. O token de longa duração é gerado sozinho nesse login, sem precisar mexer no .env."
+    info "Falta só um login pra ativar WhatsApp/Telegram/execução remota — rode 'helena', cadastre-se ou entre, depois digite /canais pra parear o WhatsApp escaneando o QR (aparece direto no terminal). O token de longa duração é gerado sozinho nesse login, sem precisar mexer no .env."
 else
-    info "Abra o painel local (porta em CLIENT_PANEL_PORT no .env, default 4100) pra parear o WhatsApp escaneando o QR."
+    info "Rode 'helena' e digite /canais pra parear o WhatsApp escaneando o QR (aparece direto no terminal)."
 fi
 info "'helena' já está disponível — teste com: helena --help"

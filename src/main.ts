@@ -7,15 +7,19 @@ import { startOutboundPoller } from "./outbound-poller.ts";
 import { reportError } from "./telemetry.ts";
 
 /**
- * Entrypoint único do client/ — sobe o painel local SEMPRE (mesmo sem
- * nenhum canal configurado ainda, é dali que a configuração acontece — ver
- * docs/architecture-v2.md §4), tenta os canais, registra esta máquina como
- * executora de comando (absorve o antigo `helena agent` do cli/ — ver
- * machine-agent.ts), e inicia o poller de saída (mensagens que o
- * backend-v2 precisa entregar por iniciativa própria — ver
- * outbound-poller.ts). Um processo só: o painel precisa ver o estado de
- * tudo isso pra mostrar status ao vivo, e o poller de saída depende dos
- * canais já estarem conectados pra entregar.
+ * Entrypoint único do client/ — sobe o servidor local SEMPRE (mesmo sem
+ * nenhum canal configurado ainda; expõe `/health`, `/cli-session` e o WS
+ * `/ws` de status — ver `panel/server.ts`), tenta os canais, registra
+ * esta máquina como executora de comando (absorve o antigo `helena agent`
+ * do cli/ — ver machine-agent.ts), e inicia o poller de saída (mensagens
+ * que o backend-v2 precisa entregar por iniciativa própria — ver
+ * outbound-poller.ts). Um processo só: os endpoints locais precisam ver o
+ * estado de tudo isso, e o poller de saída depende dos canais já
+ * estarem conectados pra entregar.
+ *
+ * O painel web (Angular) que rodava em cima deste mesmo servidor foi
+ * DESABILITADO (2026-09-17) — a CLI (`helena`) é a interface principal
+ * agora; ver `client/docs/local-server-api.md`.
  */
 startPanelServer(config.panelPort, config.backendUrl);
 startWhatsapp();

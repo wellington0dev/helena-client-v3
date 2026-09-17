@@ -1,10 +1,7 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { extname, join, normalize } from "node:path";
 import { WebSocketServer } from "ws";
 import { saveSession } from "../cli/session-store.ts";
 import { ensureDeviceToken } from "../device-auth.ts";
-import { DIST_DIR, renderPanelPage } from "./page.ts";
 import { getState, onStateChange } from "./status-bus.ts";
 
 /**
@@ -50,40 +47,28 @@ function handleCliSession(req: IncomingMessage, res: ServerResponse): void {
     });
 }
 
-const MIME_TYPES: Record<string, string> = {
-    ".js": "application/javascript; charset=utf-8",
-    ".css": "text/css; charset=utf-8",
-    ".html": "text/html; charset=utf-8",
-    ".json": "application/json; charset=utf-8",
-    ".ico": "image/x-icon",
-    ".svg": "image/svg+xml",
-    ".png": "image/png",
-    ".woff": "font/woff",
-    ".woff2": "font/woff2",
-};
-
-/** `null` se o caminho pedido não corresponder a um arquivo real dentro de DIST_DIR (nunca escapa a pasta, mesmo com `../` no request). */
-function resolveStaticFile(urlPath: string): string | null {
-    const candidate = normalize(join(DIST_DIR, urlPath));
-    if (!candidate.startsWith(DIST_DIR)) return null;
-    if (!existsSync(candidate) || !statSync(candidate).isFile()) return null;
-    return candidate;
-}
-
 /**
- * Servidor local do painel — HTTP simples (arquivos estáticos do Angular já
- * buildado, com fallback de SPA pra qualquer rota do Router, ex: `/chat`,
- * `/perfil`) + WebSocket pra empurrar o estado dos canais (status, QR) ao
- * vivo pro navegador. Escuta em 0.0.0.0 (decisão explícita, 2026-09-07) —
- * este processo tem acesso à sessão do WhatsApp/token do Telegram do dono
- * da máquina, então isso só é seguro porque a máquina só é alcançável pela
- * rede privada da VPN (Tailscale) e não pela internet pública. Este
- * servidor em si não tem autenticação própria (quem alcançar a porta vê o
- * painel) — se algum dia a máquina ficar exposta fora da VPN, volte isto
- * pra "127.0.0.1" ou adicione auth aqui.
+ * Servidor local — HTTP simples (`/health`, `/cli-session`) + WebSocket
+ * (`/ws`) pra empurrar o estado dos canais (status, QR) ao vivo. Escuta
+ * em 0.0.0.0 (decisão explícita, 2026-09-07) — este processo tem acesso
+ * à sessão do WhatsApp/token do Telegram do dono da máquina, então isso
+ * só é seguro porque a máquina só é alcançável pela rede privada da VPN
+ * (Tailscale) e não pela internet pública. Este servidor em si não tem
+ * autenticação própria — se algum dia a máquina ficar exposta fora da
+ * VPN, volte isto pra "127.0.0.1" ou adicione auth aqui.
+ *
+ * O painel web (Angular, `panel-app/`) foi DESABILITADO (2026-09-17,
+ * pedido explícito do dono — CLI passa a ser a interface principal) —
+ * este servidor não builda nem serve mais os arquivos estáticos dele
+ * (ver `install.sh`, passo `build:panel` removido). O CÓDIGO-FONTE do
+ * painel continua no repo, intacto, pra retomar depois — ver
+ * `client/docs/local-server-api.md` pra API que ele (e a CLI) consomem.
+ * `backendUrl` fica no parâmetro só pra não quebrar a assinatura caso o
+ * painel volte a ser servido (`renderPanelPage`, em `page.ts`, ainda
+ * existe e funciona — só não é mais chamada daqui).
  */
 /** Devolve o `http.Server` (nunca usado pelo `main.ts` real, só serve pra testes fecharem o servidor no `after()` — sem isso o socket aberto prende o event loop e `node --test` nunca termina o arquivo). */
-export function startPanelServer(port: number, backendUrl: string): ReturnType<typeof createServer> {
+export function startPanelServer(port: number, _backendUrl: string): ReturnType<typeof createServer> {
     const server = createServer((req, res) => {
         if (req.url === "/health") {
             res.writeHead(200, { "Content-Type": "application/json" });
@@ -96,16 +81,8 @@ export function startPanelServer(port: number, backendUrl: string): ReturnType<t
             return;
         }
 
-        const urlPath = (req.url ?? "/").split("?")[0]!;
-        const staticFile = urlPath === "/" ? null : resolveStaticFile(urlPath);
-        if (staticFile) {
-            res.writeHead(200, { "Content-Type": MIME_TYPES[extname(staticFile)] ?? "application/octet-stream" });
-            res.end(readFileSync(staticFile));
-            return;
-        }
-
-        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-        res.end(renderPanelPage(backendUrl));
+        res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end("Painel web desabilitado — use a CLI (`helena`). Ver client/docs/local-server-api.md.");
     });
 
     const wss = new WebSocketServer({ server, path: "/ws" });
@@ -122,7 +99,7 @@ export function startPanelServer(port: number, backendUrl: string): ReturnType<t
     });
 
     server.listen(port, "0.0.0.0", () => {
-        console.log(`[painel] disponível em http://localhost:${port} (e em qualquer IP desta máquina na VPN, porta ${port})`);
+        console.log(`[servidor local] no ar em http://localhost:${port} (painel web desabilitado — use a CLI 'helena')`);
     });
 
     return server;

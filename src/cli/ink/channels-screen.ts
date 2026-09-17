@@ -75,7 +75,7 @@ export function ChannelsScreen(props: { panelPort: number; onExit: () => void })
         whatsapp?.status === "qr" && whatsapp.qrText
             ? h(Box, { flexDirection: "column", marginTop: 1 }, h(Text, null, renderQrAscii(whatsapp.qrText)))
             : whatsapp?.status === "qr"
-              ? h(Text, { dimColor: true }, "  QR disponível só no navegador (abra o painel) — esta versão do daemon local não expõe o texto do QR pro terminal.")
+              ? h(Text, { dimColor: true }, "  Esta versão do daemon local não expõe o texto do QR pro terminal — atualize o client/.")
               : null,
         h(Box, { marginTop: 1 }),
         h(Text, null, "Telegram: ", h(Text, { color: statusColor(telegram?.status ?? "disconnected") }, STATUS_LABEL[telegram?.status ?? "disconnected"])),
