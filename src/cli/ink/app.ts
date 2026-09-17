@@ -8,6 +8,7 @@ import { ConfigScreen } from "./config-screen.ts";
 import { ChannelsScreen } from "./channels-screen.ts";
 import { ContactsScreen } from "./contacts-screen.ts";
 import { McpScreen } from "./mcp-screen.ts";
+import { BillingScreen } from "./billing-screen.ts";
 import { UsageScreen } from "./usage-screen.ts";
 import { config } from "../../config.ts";
 import { formatToolCall, formatToolResult } from "./format-tool-call.ts";
@@ -281,6 +282,9 @@ export function App(props: AppProps): React.ReactElement {
     }
     if (screen === "usage") {
         return h(UsageScreen, { backendUrl, token, onExit: () => setScreen("chat"), onUnauthorized });
+    }
+    if (screen === "billing") {
+        return h(BillingScreen, { backendUrl, token, onExit: () => setScreen("chat"), onUnauthorized });
     }
 
     let liveRegion: React.ReactElement;

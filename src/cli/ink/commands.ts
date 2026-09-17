@@ -12,7 +12,7 @@
  * Cobrança/Uso) só entram aqui quando a tela correspondente for entregue
  * — nunca um `/comando` morto aparecendo no `/help` antes de existir.
  */
-export type Screen = "chat" | "config" | "contacts" | "mcp" | "channels" | "usage";
+export type Screen = "chat" | "config" | "contacts" | "mcp" | "channels" | "usage" | "billing";
 
 export interface CommandContext {
     setScreen: (screen: Screen) => void;
@@ -52,6 +52,11 @@ export const COMMANDS: Command[] = [
         name: "uso",
         description: "Chamadas de chat por canal e nos últimos 7 dias (só leitura)",
         run: (ctx) => ctx.setScreen("usage"),
+    },
+    {
+        name: "cobranca",
+        description: "Saldo de tokens da plataforma, comprar mais",
+        run: (ctx) => ctx.setScreen("billing"),
     },
     {
         name: "help",
