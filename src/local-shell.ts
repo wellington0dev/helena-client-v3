@@ -91,6 +91,23 @@ function cleanupFile(filePath: string): void {
 export function runCommand(command: string, cwd?: string, timeoutMs: number = TIMEOUT_MS): Promise<{ stdout: string; stderr: string; code: number | null }> {
     const spawnOpts = { cwd: expandHome(cwd) };
 
+    // `cwd` inexistente ANTES do spawn — sem isso, vira "spawn /bin/sh ENOENT"
+    // (o Node reporta a falha de chdir como se fosse o shell que não existe,
+    // não o diretório) — confuso o bastante pro agente de dev nunca entender
+    // o motivo real. Um Project novo tem `rootDirectory` (o cwd default de
+    // todo comando sem cwd explícito, ver dev-team-shell.tools.ts) que ainda
+    // NÃO existe no disco — é o caso normal, não um erro, então cria em vez
+    // de recusar. Só vira erro (claro, desta vez) se a criação em si falhar
+    // de verdade (permissão, caminho inválido tipo um arquivo no meio).
+    if (spawnOpts.cwd !== undefined && !fs.existsSync(spawnOpts.cwd)) {
+        try {
+            fs.mkdirSync(spawnOpts.cwd, { recursive: true });
+        } catch (err) {
+            const reason = err instanceof Error ? err.message : String(err);
+            return Promise.resolve({ stdout: "", stderr: `Diretório "${spawnOpts.cwd}" não existe e não foi possível criá-lo: ${reason}`, code: null });
+        }
+    }
+
     const tmpBase = path.join(os.tmpdir(), `helena-shell-${randomUUID()}`);
     const stdoutPath = `${tmpBase}.out`;
     const stderrPath = `${tmpBase}.err`;

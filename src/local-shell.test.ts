@@ -66,6 +66,29 @@ test("runCommand: saída MUITO longa é truncada, não devolvida inteira", async
     assert.match(result.stdout, /saída truncada/);
 });
 
+test("runCommand: cwd que ainda não existe é criado automaticamente — bug real corrigido (antes virava 'spawn /bin/sh ENOENT', confuso, em vez de rodar)", async () => {
+    const dir = path.join(os.tmpdir(), `helena-shell-test-newdir-${Date.now()}`);
+    assert.equal(fs.existsSync(dir), false);
+
+    const result = await runCommand("pwd", dir);
+
+    assert.equal(result.stdout.trim(), dir);
+    assert.equal(result.code, 0);
+    fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("runCommand: cwd impossível de criar devolve erro claro (não 'spawn ENOENT')", async () => {
+    // Um arquivo comum no meio do caminho nunca vira diretório — mkdir recursivo falha de verdade.
+    const blocker = path.join(os.tmpdir(), `helena-shell-test-blocker-${Date.now()}`);
+    fs.writeFileSync(blocker, "");
+
+    const result = await runCommand("pwd", path.join(blocker, "sub"));
+
+    assert.equal(result.code, null);
+    assert.match(result.stderr, /não existe e não foi possível criá-lo/);
+    fs.unlinkSync(blocker);
+});
+
 test("runCommand: timeoutMs customizado é respeitado (mais curto que o default de 30s) — usado pelo modo background com teto próprio", async () => {
     const start = Date.now();
     const result = await runCommand("sleep 5", undefined, 500);
