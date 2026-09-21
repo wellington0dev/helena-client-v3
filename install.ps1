@@ -36,15 +36,6 @@ try {
     npm install
     if ($LASTEXITCODE -ne 0) { Write-Err "npm install falhou."; exit 1 }
 
-    Write-Host "Buildando o painel web (Angular)..." -ForegroundColor Cyan
-    npm run build:panel
-    if ($LASTEXITCODE -ne 0) {
-        Write-Err "Build do painel falhou — abortando instalacao."
-        Write-Info "Nunca sobe servindo painel quebrado ou build antigo silenciosamente. Corrija o erro acima e rode .\install.ps1 de novo."
-        exit 1
-    }
-    Write-Ok "Painel web buildado."
-
     $EnvFile = Join-Path $ClientDir ".env"
     $EnvExample = Join-Path $ClientDir ".env.example"
     if (-not (Test-Path $EnvFile)) {
