@@ -31,7 +31,7 @@ function renderQrAscii(text: string): string {
     return ascii;
 }
 
-/** `/canais` — dashboard read-only de status do WhatsApp/Telegram/execução remota, lendo o WS `/ws` do daemon local (`panel/server.ts`). Sem ações (mesma paridade do painel — `channels.component.ts` também só mostra status). */
+/** `/canais` — dashboard read-only de status do WhatsApp/Telegram/execução remota, lendo o WS `/ws` do daemon local (`local-api/server.ts`). Sem ações (mesma paridade do painel — `channels.component.ts` também só mostra status). */
 export function ChannelsScreen(props: { panelPort: number; onExit: () => void }): React.ReactElement {
     const { panelPort, onExit } = props;
     const [state, setState] = React.useState<ClientState | undefined>(undefined);

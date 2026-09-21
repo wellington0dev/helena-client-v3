@@ -1,5 +1,5 @@
 /**
- * Conecta no WS `/ws` do PRÓPRIO processo `client/` (`panel/server.ts`)
+ * Conecta no WS `/ws` do PRÓPRIO processo `client/` (`local-api/server.ts`)
  * rodando NESTA MESMA máquina — a CLI (`cli/`) é o mesmo pacote/npm do
  * daemon (`main.ts`), então pode falar `ws://localhost:${config.panelPort}`
  * direto, sem passar pelo backend-v2. Nunca lança — se o daemon não
@@ -7,6 +7,7 @@
  * instalado), `onEvent` simplesmente nunca é chamado, mesmo espírito
  * gracioso de `notifyLocalDaemon` (`cli/chat.ts`).
  */
+import { readLocalToken } from "../../local-api/local-token.ts";
 import type { ClientState } from "../../panel/status-bus.ts";
 
 export function connectLocalWs(panelPort: number, onState: (state: ClientState) => void): () => void {
@@ -14,7 +15,9 @@ export function connectLocalWs(panelPort: number, onState: (state: ClientState) 
     let socket: WebSocket | undefined;
 
     try {
-        socket = new WebSocket(`ws://localhost:${panelPort}/ws`);
+        const token = readLocalToken();
+        if (!token) return () => undefined; // daemon nunca subiu aqui: a tela mostra "não detectado"
+        socket = new WebSocket(`ws://127.0.0.1:${panelPort}/ws`, [`helena.bearer.${token}`]);
         socket.addEventListener("message", (event) => {
             try {
                 onState(JSON.parse(event.data.toString()));

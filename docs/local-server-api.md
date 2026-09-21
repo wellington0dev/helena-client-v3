@@ -1,3 +1,5 @@
+> ⚠️ **Substituído por `docs/local-api.md`** (API local `/v1`, com token local e bind em loopback). Este documento descreve o servidor antigo do painel.
+
 # API do servidor local (`client/src/panel/server.ts`)
 
 Documentado em 2026-09-17, quando o painel web (Angular, `panel-app/`) foi

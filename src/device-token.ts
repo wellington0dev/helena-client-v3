@@ -11,7 +11,7 @@ import path from "node:path";
  * de sequer subir o painel — e o painel era o único jeito fácil de
  * conseguir o JWT necessário pra gerar o token, um loop sem saída). Agora
  * provisionado sozinho no primeiro login (painel OU `helena` CLI, ver
- * panel/server.ts#handleCliSession) — este arquivo só guarda o resultado.
+ * local-api/server.ts#handleCliSession) — este arquivo só guarda o resultado.
  *
  * Mesmo diretório de `cli/session-store.ts` (`~/.config/helena/`) — é a
  * MESMA identidade de "Helena nesta máquina", só que de vida mais longa

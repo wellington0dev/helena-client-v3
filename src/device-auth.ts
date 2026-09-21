@@ -7,7 +7,7 @@ import { startMachineAgent } from "./machine-agent.ts";
 /**
  * Provisiona sozinho o token de longa duração desta máquina (WhatsApp/
  * Telegram/execução remota) a partir do PRIMEIRO JWT que aparecer —
- * painel ou `helena` CLI, tanto faz, ver panel/server.ts#handleCliSession
+ * painel ou `helena` CLI, tanto faz, ver local-api/server.ts#handleCliSession
  * e cli/chat.ts. Idempotente: se `config.backendApiToken` já existe (seja
  * de um provisionamento anterior, seja de `BACKEND_V2_API_TOKEN` no
  * `.env` de quem configurou manualmente), não gera um token novo — nunca
