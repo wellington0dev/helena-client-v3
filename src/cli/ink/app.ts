@@ -2,6 +2,7 @@ import React from "react";
 import { Box, Text, useInput, useWindowSize } from "ink";
 import Spinner from "ink-spinner";
 import TextInput from "ink-text-input";
+import { readWorktree, renderWorktreeLines } from "./worktree.ts";
 import { resolveInterrupt, sendMessage, UnauthorizedError, type PendingConfirmation, type SendMessageResult } from "../backend.ts";
 import { findCommand, matchCommands, type Command, type Screen } from "./commands.ts";
 import { ConfigScreen } from "./config-screen.ts";
@@ -81,10 +82,10 @@ function HistoryLine({ item }: { item: HistoryItem }): React.ReactElement {
         // measureHistoryItem em viewport.ts, tem que medir igual.
         return h(Box, { marginBottom: 1 }, h(Text, null, c.primary.bold("Você:"), " ", item.text));
     }
-    // Helena mantém rótulo em linha própria — a resposta é markdown
-    // renderizado (pode ter várias linhas, listas, bloco de código), e
-    // colar isso direto depois de "Helena: " ficaria estranho.
-    return h(Box, { flexDirection: "column", marginBottom: 1 }, h(Text, null, c.accent.bold("Helena") + ":"), h(Text, null, renderMarkdownAnsi(item.text)));
+    // Inline como "Você:" (rótulo + resposta na mesma linha; o markdown segue
+    // quebrando em várias linhas normalmente). measureHistoryItem em
+    // viewport.ts tem que medir a MESMA string concatenada.
+    return h(Box, { marginBottom: 1 }, h(Text, null, c.accent.bold("Helena:"), " ", renderMarkdownAnsi(item.text)));
 }
 
 /** Checklist ao vivo de Project(s) da equipe de dev em andamento — some sozinho quando o Project termina (o resultado final vira um item "notice" permanente no histórico, ver ChatProgressEvent#project_event). Raramente mais de um Project por vez, mas o Map suporta. */
@@ -186,8 +187,11 @@ function measureStatusLine(text: string, columns: number): number {
 function Composer(props: { value: string; onChange: (v: string) => void; onSubmit: (v: string) => void; disabled: boolean; resetKey: number }): React.ReactElement {
     return h(
         Box,
-        { gap: 1 },
-        h(Text, { color: theme.success, bold: true }, "❯"),
+        // Caixa em volta do input: borda (1 col cada lado) + paddingX 1 => 4 colunas e 2 linhas
+        // a mais que o composer sem caixa — measureComposer abaixo desconta as duas coisas.
+        { borderStyle: "round", borderColor: theme.border, paddingX: 1 },
+        // marginRight em vez de `gap`: com texto longo (quebrando) o gap sumia e o "❯" colava na 1ª letra.
+        h(Box, { flexShrink: 0, marginRight: 1 }, h(Text, { color: theme.success, bold: true }, "❯")),
         // `key: resetKey` força o TextInput a REMONTAR quando o Tab do menu de
         // comandos preenche `value` programaticamente — sem isto, o cursor
         // interno do ink-text-input (só se ajusta ao digitar, ver seu
@@ -201,8 +205,9 @@ function Composer(props: { value: string; onChange: (v: string) => void; onSubmi
     );
 }
 
+/** Texto útil = colunas - 4 (borda + padding da caixa) - 3 ("❯" + gap + margem de segurança); +2 linhas de borda. */
 function measureComposer(value: string, columns: number): number {
-    return countWrappedLines(value.length > 0 ? value : "Escreva sua mensagem...", columns - 3);
+    return countWrappedLines(value.length > 0 ? value : "Escreva sua mensagem...", columns - 7) + 2;
 }
 
 /**
@@ -262,6 +267,32 @@ function measureConfirmation(pending: PendingConfirmation, columns: number): num
     return 2 + countWrappedLines(`Aprovação necessária — ${pending.tool}`, inner) + countWrappedLines(JSON.stringify(pending.input, null, 2), inner) + countWrappedLines("Aprovar? (s/n)", inner);
 }
 
+/** Largura TOTAL da sidebar (inclui a borda direita). Some sozinha em terminal estreito — ver MIN_COLUMNS_FOR_SIDEBAR. */
+const SIDEBAR_WIDTH = 30;
+const MIN_COLUMNS_FOR_SIDEBAR = 100;
+
+/**
+ * Worktree à esquerda (`/worktree` esconde/mostra). Altura fixa = tela útil e cada linha é truncada
+ * (nunca quebra), então não mexe na conta de linhas do chat — só desconta SIDEBAR_WIDTH das colunas.
+ */
+function Sidebar({ cwd, entries, height }: { cwd: string; entries: ReturnType<typeof readWorktree>; height: number }): React.ReactElement {
+    const contentWidth = SIDEBAR_WIDTH - 3; // borda direita + paddingX 1 (esq/dir)
+    const treeRows = Math.max(0, height - 3); // título + pasta + linha em branco
+    const lines = renderWorktreeLines(entries, contentWidth, treeRows);
+    const home = process.env.HOME ?? "";
+    const shownPath = home && cwd.startsWith(home) ? `~${cwd.slice(home.length)}` : cwd;
+    return h(
+        Box,
+        { flexDirection: "column", width: SIDEBAR_WIDTH, height, borderStyle: "single", borderColor: theme.border, borderTop: false, borderBottom: false, borderLeft: false, paddingX: 1 },
+        h(Text, { color: theme.primary, bold: true, wrap: "truncate" }, "Worktree"),
+        h(Text, { dimColor: true, wrap: "truncate-start" }, shownPath),
+        h(Text, null, " "),
+        ...(lines.length > 0
+            ? lines.map((line, i) => h(Text, { key: i, wrap: "truncate", color: line.includes("▸ ") ? theme.primary : undefined }, line))
+            : [h(Text, { key: "empty", dimColor: true }, "(vazio)")]),
+    );
+}
+
 /** Dica de rolagem — SEMPRE 1 linha reservada (vazia quando não há o que rolar), pra não criar um ciclo (altura do chrome dependendo de canScrollUp/Down, que só existem DEPOIS de já ter orçado a altura do chrome). */
 function scrollHintText(canScrollUp: boolean, canScrollDown: boolean): string {
     if (canScrollUp && canScrollDown) return "↑ PageUp (mais antigas) · PageDown ↓ (mais novas)";
@@ -299,6 +330,25 @@ export function App(props: AppProps): React.ReactElement {
     const { columns, rows } = useWindowSize();
     const usableRows = Math.max(1, rows - 1);
 
+    // Sidebar de worktree (`/worktree`). `mainColumns` é a largura REAL do chat — toda medição de altura
+    // abaixo usa ela, não `columns`, senão o histórico estoura as linhas (ver viewport.ts).
+    const [sidebarOpen, setSidebarOpen] = React.useState(true);
+    const sidebarVisible = sidebarOpen && screen === "chat" && columns >= MIN_COLUMNS_FOR_SIDEBAR;
+    const mainColumns = sidebarVisible ? columns - SIDEBAR_WIDTH : columns;
+    const [worktree, setWorktree] = React.useState(() => readWorktree(props.invocationCwd));
+    // Relê ao começar/terminar cada turno — é quando o agente pode ter criado/apagado arquivos.
+    // E a cada 3 s enquanto visível (arquivo criado por fora do agente); só troca o estado se a árvore mudou — sem re-render à toa.
+    React.useEffect(() => {
+        if (!sidebarVisible) return;
+        const refresh = (): void => {
+            const next = readWorktree(props.invocationCwd);
+            setWorktree((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
+        };
+        refresh();
+        const timer = setInterval(refresh, 3000);
+        return () => clearInterval(timer);
+    }, [sending, sidebarVisible, props.invocationCwd]);
+
     // O menu só some em DUAS situações, de propósito (pedido explícito):
     // apagar a "/" (inputValue para de começar com "/") ou digitar algo que
     // não casa mais com NENHUM comando (matchCommands fica vazio — inclusive
@@ -322,17 +372,17 @@ export function App(props: AppProps): React.ReactElement {
     // seguro (sobra uma linha em branco); subestimar faz o conteúdo
     // estourar `rows` e o buffer alternativo ROLAR — sem scrollback, isso
     // é conteúdo perdido de vez (ver viewport.ts).
-    const liveRegionRows = pending ? measureConfirmation(pending, columns) : sending ? measureStatusLine(statusLine, columns) : measureComposer(inputValue, columns);
+    const liveRegionRows = pending ? measureConfirmation(pending, mainColumns) : sending ? measureStatusLine(statusLine, mainColumns) : measureComposer(inputValue, mainColumns);
     const chromeRows =
-        measureProjectPanel(projectSteps, columns) +
-        measurePlanPanel(activePlan, columns) +
-        (error ? countWrappedLines(`[erro] ${error}`, columns) : 0) +
+        measureProjectPanel(projectSteps, mainColumns) +
+        measurePlanPanel(activePlan, mainColumns) +
+        (error ? countWrappedLines(`[erro] ${error}`, mainColumns) : 0) +
         liveRegionRows +
-        (showCommandMenu ? measureCommandMenu(filteredCommands, columns) : 0) +
+        (showCommandMenu ? measureCommandMenu(filteredCommands, mainColumns) : 0) +
         1; // dica de rolagem, sempre reservada
     const availableHistoryRows = Math.max(1, usableRows - chromeRows);
 
-    const historyHeights = React.useMemo(() => history.map((item) => measureHistoryItem(item, columns)), [history, columns]);
+    const historyHeights = React.useMemo(() => history.map((item) => measureHistoryItem(item, mainColumns)), [history, mainColumns]);
     const requestedEnd = scrollAnchor === null ? history.length : scrollAnchor;
     const { start: historyStart, end: historyEnd, canScrollUp, canScrollDown } = fitToViewport(historyHeights, availableHistoryRows, requestedEnd);
     const visibleHistory = history.slice(historyStart, historyEnd);
@@ -515,6 +565,7 @@ export function App(props: AppProps): React.ReactElement {
         command.run({
             setScreen,
             pushNotice: (text, tone) => setHistory((prev) => [...prev, noticeItem(text, tone)]),
+            toggleSidebar: () => setSidebarOpen((open) => !open),
         });
     }
 
@@ -577,9 +628,9 @@ export function App(props: AppProps): React.ReactElement {
     else if (sending) liveRegion = h(StatusLine, { text: statusLine });
     else liveRegion = h(Composer, { value: inputValue, onChange: setInputValue, onSubmit: handleSubmit, disabled: false, resetKey: composerResetKey });
 
-    return h(
+    const chat = h(
         Box,
-        { flexDirection: "column", height: usableRows },
+        { flexDirection: "column", height: usableRows, width: mainColumns },
         // `flexGrow:1`: quando o histórico visível é mais curto que o
         // orçamento (`availableHistoryRows`), o Yoga estica esta caixa em
         // vez de deixar o composer grudado logo abaixo da última mensagem
@@ -595,4 +646,6 @@ export function App(props: AppProps): React.ReactElement {
         liveRegion,
         showCommandMenu ? h(CommandMenu, { commands: filteredCommands, activeIndex: commandMenuIndex }) : null,
     );
+
+    return sidebarVisible ? h(Box, { flexDirection: "row", height: usableRows }, h(Sidebar, { cwd: props.invocationCwd, entries: worktree, height: usableRows }), chat) : chat;
 }

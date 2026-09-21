@@ -82,3 +82,10 @@ test("countWrappedLines: códigos ANSI (cor) não contam como largura visível",
     // mesmo com os bytes de escape no meio da string.
     assert.equal(countWrappedLines(colored, 40), 1);
 });
+
+test("measureHistoryItem: resposta da Helena é inline (rótulo na mesma linha do texto) + 1 de margem", async () => {
+    const { measureHistoryItem } = await import("./viewport.ts");
+    const item = { id: "1", role: "assistant", text: "oi" } as never;
+    // "Helena: oi" cabe em 1 linha => 1 + margem 1 (antes eram 2 linhas: rótulo sozinho + corpo)
+    assert.equal(measureHistoryItem(item, 40), 2);
+});

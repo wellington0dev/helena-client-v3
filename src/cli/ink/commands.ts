@@ -17,6 +17,8 @@ export type Screen = "chat" | "config" | "contacts" | "mcp" | "channels" | "usag
 export interface CommandContext {
     setScreen: (screen: Screen) => void;
     pushNotice: (text: string, tone: "success" | "warn" | "danger") => void;
+    /** Mostra/esconde a sidebar de worktree do chat. */
+    toggleSidebar: () => void;
 }
 
 export interface Command {
@@ -62,6 +64,12 @@ export const COMMANDS: Command[] = [
         name: "projetos",
         description: "Equipe de dev — criar, acompanhar, revisar, conversar com cada agente",
         run: (ctx) => ctx.setScreen("projects"),
+    },
+    {
+        name: "worktree",
+        aliases: ["arvore"],
+        description: "Mostra/esconde a sidebar com a árvore de arquivos (some sozinha em terminal estreito)",
+        run: (ctx) => ctx.toggleSidebar(),
     },
     {
         name: "help",

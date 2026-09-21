@@ -58,7 +58,8 @@ export function measureHistoryItem(item: HistoryItem, columns: number): number {
         // HistoryLine desenha, não rótulo e corpo separados.
         return countWrappedLines(`Você: ${item.text}`, columns) + 1;
     }
-    return countWrappedLines("Helena:", columns) + countWrappedLines(renderMarkdownAnsi(item.text), columns) + 1;
+    // Inline como "Você:" (rótulo + resposta na MESMA linha) — mesma string concatenada que HistoryLine desenha.
+    return countWrappedLines(`Helena: ${renderMarkdownAnsi(item.text)}`, columns) + 1;
 }
 
 /**
