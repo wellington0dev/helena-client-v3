@@ -240,7 +240,7 @@ function CommandMenu(props: { commands: Command[]; activeIndex: number }): React
         { flexDirection: "column", ...panel("raised") },
         ...props.commands.map((cmd, i) => {
             const active = i === props.activeIndex;
-            const names = [`/${cmd.name}`, ...(cmd.aliases ?? []).map((a) => `/${a}`)].join(", ");
+            const names = `/${cmd.name}`;
             const pointer = active ? c.primary("❯ ") : "  ";
             const label = active ? c.primary.bold(names) : names;
             return h(Text, { key: cmd.name }, pointer, label, "  ", c.muted(cmd.description));
@@ -254,7 +254,7 @@ function measureCommandMenu(commands: Command[], columns: number): number {
     const inner = columns - 2;
     let total = 2 + 1; // borda (topo+base) + linha de dica
     for (const cmd of commands) {
-        const names = [`/${cmd.name}`, ...(cmd.aliases ?? []).map((a) => `/${a}`)].join(", ");
+        const names = `/${cmd.name}`;
         total += countWrappedLines(`${names}  ${cmd.description}`, inner);
     }
     return total;
