@@ -13,6 +13,8 @@ export const bg = {
     base: "#1a1b26",
     /** Sidebar e barra de status: um degrau mais escuro que a base, ficam "por fora" do conteúdo. */
     panel: "#16161e",
+    /** Janelas sobrepostas (menu de configurações): mais escuras que QUALQUER área do chat, pra se destacarem do fundo. */
+    modal: "#0d0e14",
     /** Campo de digitar, menus e telas de lista/formulário. */
     surface: "#24283b",
     /** Menus/sugestões que abrem em cima de uma área "surface" (autocomplete de / e @) — um degrau acima pra não se fundir com o campo de digitar. */

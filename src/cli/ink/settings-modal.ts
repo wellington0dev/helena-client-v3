@@ -47,7 +47,7 @@ function valuePill(item: SettingItem, busy: boolean): React.ReactElement {
     if (busy || item.value === undefined) return h(Text, { color: theme.textMuted }, " … ");
     return item.value
         ? h(Text, { backgroundColor: bg.success, color: theme.success }, " ● ligado ")
-        : h(Text, { backgroundColor: bg.panel, color: theme.textMuted }, " ○ desligado ");
+        : h(Text, { backgroundColor: bg.surface, color: theme.textMuted }, " ○ desligado ");
 }
 
 /** Menu de configurações (`/config`): modal centralizado sobre o chat. Teclado 100% funcional; mouse é adicional (ver mouse.ts). */
@@ -152,7 +152,7 @@ export function SettingsModal(props: SettingsModalProps): React.ReactElement {
 
     return h(
         Box,
-        { position: "absolute", top: layout.top, left: layout.left, width: layout.width, height: layout.height, flexDirection: "column", backgroundColor: bg.surface, paddingX: 2, paddingY: 1 },
+        { position: "absolute", top: layout.top, left: layout.left, width: layout.width, height: layout.height, flexDirection: "column", backgroundColor: bg.modal, paddingX: 2, paddingY: 1 },
         h(
             Box,
             { justifyContent: "space-between", width: layout.innerWidth },
@@ -161,7 +161,7 @@ export function SettingsModal(props: SettingsModalProps): React.ReactElement {
         ),
         h(
             Box,
-            { width: layout.innerWidth, backgroundColor: bg.raised, paddingX: 1 },
+            { width: layout.innerWidth, backgroundColor: bg.surface, paddingX: 1 },
             h(Text, { wrap: "truncate" }, query ? `⌕ ${query}${chalk.inverse(" ")}` : chalk.hex(theme.textMuted)("⌕ digite para filtrar")),
         ),
         h(Text, null, " "),

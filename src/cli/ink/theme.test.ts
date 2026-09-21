@@ -31,6 +31,6 @@ test("panel(): mesma geometria do antigo borderStyle+paddingX:1 (2 colunas de pa
 
 test("paleta: todos os tokens são hex válidos e fundos de mensagem são distintos entre si", () => {
     for (const value of [...Object.values(bg), ...Object.values(theme)]) assert.match(value, /^#[0-9a-f]{6}$/i);
-    const distinct = new Set([bg.base, bg.panel, bg.surface, bg.raised, bg.user, bg.helena]);
-    assert.equal(distinct.size, 6);
+    const distinct = new Set([bg.base, bg.panel, bg.modal, bg.surface, bg.raised, bg.user, bg.helena]);
+    assert.equal(distinct.size, 7);
 });
