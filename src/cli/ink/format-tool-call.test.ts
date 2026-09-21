@@ -52,3 +52,8 @@ test("formatToolResult: mais de 6 linhas corta e mostra quantas faltam", () => {
     assert.equal(out.split("\n").length, 7); // 6 linhas + marcador
     assert.match(out, /\(\+4 linhas\)$/);
 });
+
+test("formatToolResult: resultado ausente (tool parada esperando confirmação) não lança", () => {
+    assert.equal(formatToolResult("shell", undefined), "(sem resultado ainda)");
+    assert.equal(formatToolResult("outra", undefined), "(sem resultado ainda)");
+});

@@ -2,6 +2,7 @@ import React from "react";
 import { Box, Text, useInput, useWindowSize } from "ink";
 import Spinner from "ink-spinner";
 import TextInput from "ink-text-input";
+import { measurePermissionDialog, PermissionDialog, type PermissionDecision } from "./permission-dialog.ts";
 import { readWorktree, renderWorktreeLines } from "./worktree.ts";
 import { resolveInterrupt, sendMessage, UnauthorizedError, type PendingConfirmation, type SendMessageResult } from "../backend.ts";
 import { findCommand, matchCommands, type Command, type Screen } from "./commands.ts";
@@ -246,27 +247,6 @@ function measureCommandMenu(commands: Command[], columns: number): number {
     return total;
 }
 
-function ConfirmationPrompt(props: { pending: PendingConfirmation; onAnswer: (approved: boolean) => void }): React.ReactElement {
-    useInput((input: string) => {
-        const normalized = input.trim().toLowerCase();
-        if (normalized === "s") props.onAnswer(true);
-        else if (normalized === "n") props.onAnswer(false);
-    });
-
-    return h(
-        Box,
-        { flexDirection: "column", borderStyle: "round", borderColor: theme.warning, paddingX: 1 },
-        h(Text, { color: theme.warning, bold: true }, `Aprovação necessária — ${props.pending.tool}`),
-        h(Text, { dimColor: true }, JSON.stringify(props.pending.input, null, 2)),
-        h(Text, null, "Aprovar? (s/n)"),
-    );
-}
-
-function measureConfirmation(pending: PendingConfirmation, columns: number): number {
-    const inner = columns - 2;
-    return 2 + countWrappedLines(`Aprovação necessária — ${pending.tool}`, inner) + countWrappedLines(JSON.stringify(pending.input, null, 2), inner) + countWrappedLines("Aprovar? (s/n)", inner);
-}
-
 /** Largura TOTAL da sidebar (inclui a borda direita). Some sozinha em terminal estreito — ver MIN_COLUMNS_FOR_SIDEBAR. */
 const SIDEBAR_WIDTH = 30;
 const MIN_COLUMNS_FOR_SIDEBAR = 100;
@@ -372,7 +352,7 @@ export function App(props: AppProps): React.ReactElement {
     // seguro (sobra uma linha em branco); subestimar faz o conteúdo
     // estourar `rows` e o buffer alternativo ROLAR — sem scrollback, isso
     // é conteúdo perdido de vez (ver viewport.ts).
-    const liveRegionRows = pending ? measureConfirmation(pending, mainColumns) : sending ? measureStatusLine(statusLine, mainColumns) : measureComposer(inputValue, mainColumns);
+    const liveRegionRows = pending ? measurePermissionDialog(pending, mainColumns) : sending ? measureStatusLine(statusLine, mainColumns) : measureComposer(inputValue, mainColumns);
     const chromeRows =
         measureProjectPanel(projectSteps, mainColumns) +
         measurePlanPanel(activePlan, mainColumns) +
@@ -541,8 +521,12 @@ export function App(props: AppProps): React.ReactElement {
             setSessionId(result.sessionId);
             // Resultado de tool só existe DEPOIS que o turno inteiro termina (ver toolActivity em backend.ts)
             // — entra em lote aqui, depois de todas as chamadas ao vivo já mostradas, antes da resposta final.
-            const toolResults = (result.toolActivity ?? []).map((entry) => toolResultItem(entry.name, entry.output));
-            setHistory((prev) => [...prev, ...toolResults, historyItem("assistant", result.text), ...(result.usage ? [usageItem(result.usage)] : [])]);
+            // Turno PAROU numa confirmação (PermissionDialog): a tool ainda não tem resultado e o texto é só o
+            // placeholder do backend — o diálogo já explica o estado, então nenhum dos dois entra no histórico.
+            const stoppedForPermission = (result.pending?.length ?? 0) > 0;
+            const toolResults = (result.toolActivity ?? []).filter((entry) => !(stoppedForPermission && entry.output === undefined)).map((entry) => toolResultItem(entry.name, entry.output));
+            const showText = !(stoppedForPermission && result.text.startsWith("(sem texto"));
+            setHistory((prev) => [...prev, ...toolResults, ...(showText ? [historyItem("assistant", result.text)] : []), ...(result.usage ? [usageItem(result.usage)] : [])]);
             setPending(result.pending?.[0]);
         } catch (err) {
             if (err instanceof UnauthorizedError) {
@@ -585,12 +569,14 @@ export function App(props: AppProps): React.ReactElement {
         void runTurn(() => sendMessage(backendUrl, token, { text: trimmed, sessionId, cwd: invocationCwd, machineName }));
     }
 
-    function handleConfirmation(approved: boolean): void {
+    function handleConfirmation(decision: PermissionDecision): void {
         if (!pending || !sessionId) return;
         const current = pending;
         const activeSessionId = sessionId;
+        const approved = decision !== "reject";
         setPending(undefined);
-        void runTurn(() => resolveInterrupt(backendUrl, token, activeSessionId, current.tool, current.ref, approved, approved ? undefined : "Recusado pelo usuário no CLI."));
+        // "só desta vez" manda remember:false (o backend NÃO grava o comando); "sempre permitir" manda true.
+        void runTurn(() => resolveInterrupt(backendUrl, token, activeSessionId, current.tool, current.ref, approved, approved ? undefined : "Recusado pelo usuário no CLI.", approved ? decision === "always" : undefined));
     }
 
     const onUnauthorized = () => onDone({ type: "relogin", history: historyRef.current, sessionId: sessionIdRef.current });
@@ -624,7 +610,7 @@ export function App(props: AppProps): React.ReactElement {
     }
 
     let liveRegion: React.ReactElement;
-    if (pending) liveRegion = h(ConfirmationPrompt, { pending, onAnswer: handleConfirmation });
+    if (pending) liveRegion = h(PermissionDialog, { pending, onAnswer: handleConfirmation });
     else if (sending) liveRegion = h(StatusLine, { text: statusLine });
     else liveRegion = h(Composer, { value: inputValue, onChange: setInputValue, onSubmit: handleSubmit, disabled: false, resetKey: composerResetKey });
 

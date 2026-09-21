@@ -73,8 +73,11 @@ function primaryResultText(name: string, output: unknown): string {
         if (typeof obj.error === "string" && obj.error) return obj.error;
     }
     if (typeof output === "string") return output;
+    // `JSON.stringify(undefined)` devolve undefined (não string) — acontece quando o turno PARA numa tool
+    // esperando confirmação (ver PermissionDialog): a tool ainda não tem resultado. Sem isso o `.split` abaixo derrubava o CLI.
+    if (output === undefined) return "(sem resultado ainda)";
     try {
-        return JSON.stringify(output);
+        return JSON.stringify(output) ?? String(output);
     } catch {
         return String(output);
     }

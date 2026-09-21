@@ -74,11 +74,11 @@ export async function sendMessage(baseUrl: string, token: string, input: SendMes
     return parseOrThrow<SendMessageResult>(response);
 }
 
-export async function resolveInterrupt(baseUrl: string, token: string, sessionId: string, tool: string, ref: string | undefined, approved: boolean, reason?: string): Promise<SendMessageResult> {
+export async function resolveInterrupt(baseUrl: string, token: string, sessionId: string, tool: string, ref: string | undefined, approved: boolean, reason?: string, remember?: boolean): Promise<SendMessageResult> {
     const response = await fetch(`${baseUrl}/chat/sessions/${sessionId}/resolve`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ tool, ref, approved, reason }),
+        body: JSON.stringify({ tool, ref, approved, reason, remember }),
     });
     return parseOrThrow<SendMessageResult>(response);
 }
