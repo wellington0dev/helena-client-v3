@@ -97,5 +97,5 @@ export function formatHelpText(): string {
         const namesLabel = names.length > 1 ? `${names[0]} (ou ${names.slice(1).join(", ")})` : names[0];
         return `  ${namesLabel}  ${cmd.description}`;
     });
-    return ["Comandos disponíveis:", ...lines, "  @arquivo                Cita um arquivo do diretório aberto (autocompleta; Tab/Enter)", "  Esc                     Interrompe a resposta em andamento", "  Ctrl+C (2x) ou Ctrl+D   Sair"].join("\n");
+    return ["Comandos disponíveis:", ...lines, "  @arquivo                Cita um arquivo do diretório aberto (autocompleta; Tab/Enter)", "  ↑ / ↓                   Mensagens anteriores (histórico salvo entre sessões)", "  \\ + Enter               Nova linha na mensagem", "  Esc                     Interrompe a resposta em andamento", "  Ctrl+C (2x) ou Ctrl+D   Sair"].join("\n");
 }

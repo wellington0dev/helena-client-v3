@@ -4,6 +4,7 @@ import Spinner from "ink-spinner";
 import TextInput from "ink-text-input";
 import { applyMention, findMentionToken, listProjectFiles, matchFiles } from "./file-mentions.ts";
 import { readGitBranch } from "./git-branch.ts";
+import { appendInputHistory, loadInputHistory, newerEntry, NOT_NAVIGATING, olderEntry, type HistoryNav } from "./input-history.ts";
 import { connectLocalWs } from "./local-ws-client.ts";
 import { statusBarParts } from "./status-bar.ts";
 import type { ClientState } from "../../local-api/status-bus.ts";
@@ -381,6 +382,16 @@ export function App(props: AppProps): React.ReactElement {
     const lastCtrlCRef = React.useRef(0);
     const [exitHint, setExitHint] = React.useState(false);
 
+    // Histórico do input (↑/↓): persistido em disco; `navRef` diz se estamos navegando (e o rascunho a restaurar).
+    const inputHistoryRef = React.useRef<string[] | undefined>(undefined);
+    if (inputHistoryRef.current === undefined) inputHistoryRef.current = loadInputHistory();
+    const navRef = React.useRef<HistoryNav>(NOT_NAVIGATING);
+    /** Digitou de verdade (não foi ↑/↓): sai do modo navegação. */
+    function handleInputChange(value: string): void {
+        navRef.current = NOT_NAVIGATING;
+        setInputValue(value);
+    }
+
     // O menu só some em DUAS situações, de propósito (pedido explícito):
     // apagar a "/" (inputValue para de começar com "/") ou digitar algo que
     // não casa mais com NENHUM comando (matchCommands fica vazio — inclusive
@@ -600,6 +611,18 @@ export function App(props: AppProps): React.ReactElement {
         { isActive: showMentionMenu },
     );
 
+    useInput(
+        (_input, key) => {
+            const entries = inputHistoryRef.current ?? [];
+            const step = key.upArrow ? olderEntry(entries, navRef.current, inputValue) : key.downArrow ? newerEntry(entries, navRef.current) : undefined;
+            if (!step) return;
+            navRef.current = step.nav;
+            setInputValue(step.value);
+            setComposerResetKey((k) => k + 1); // cursor no fim do texto recuperado
+        },
+        { isActive: screen === "chat" && !sending && !pending && !showCommandMenu && !showMentionMenu },
+    );
+
     // PageUp/PageDown navegam o histórico — `ink-text-input` já ignora
     // essas teclas (não fazem parte do texto digitado, ver
     // nonAlphanumericKeys no ink), então não competem com o composer.
@@ -680,6 +703,13 @@ export function App(props: AppProps): React.ReactElement {
             completeMention();
             return;
         }
+        // "\" no fim + Enter = quebra de linha (Shift+Enter não chega ao terminal sem o protocolo do Kitty).
+        if (text.endsWith("\\")) {
+            navRef.current = NOT_NAVIGATING;
+            setInputValue(`${text.slice(0, -1)}\n`);
+            setComposerResetKey((k) => k + 1);
+            return;
+        }
         const trimmed = text.trim();
         // Turno interrompido que o servidor ainda pode estar terminando: mandar outra mensagem na MESMA sessão
         // poderia rodar dois turnos ao mesmo tempo. Devolve o texto e avisa; Enter de novo força o envio.
@@ -694,7 +724,9 @@ export function App(props: AppProps): React.ReactElement {
             orphanTurnRef.current = false;
         }
         setInputValue("");
+        navRef.current = NOT_NAVIGATING;
         if (!trimmed || sending || pending) return;
+        inputHistoryRef.current = appendInputHistory(inputHistoryRef.current ?? [], trimmed);
         if (trimmed.startsWith("/")) {
             // Menu aberto (mesmo com match parcial, ex: "/co") -> Enter confirma
             // o item destacado, não o texto cru — assim "/co"+Enter já roda
@@ -758,7 +790,7 @@ export function App(props: AppProps): React.ReactElement {
     let liveRegion: React.ReactElement;
     if (pending) liveRegion = h(PermissionDialog, { pending, onAnswer: handleConfirmation });
     else if (sending) liveRegion = h(StatusLine, { text: statusLine });
-    else liveRegion = h(Composer, { value: inputValue, onChange: setInputValue, onSubmit: handleSubmit, disabled: false, resetKey: composerResetKey });
+    else liveRegion = h(Composer, { value: inputValue, onChange: handleInputChange, onSubmit: handleSubmit, disabled: false, resetKey: composerResetKey });
 
     const chat = h(
         Box,
