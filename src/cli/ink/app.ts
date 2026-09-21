@@ -2,8 +2,13 @@ import React from "react";
 import { Box, Text, useInput, useWindowSize } from "ink";
 import Spinner from "ink-spinner";
 import TextInput from "ink-text-input";
+import { applyMention, findMentionToken, listProjectFiles, matchFiles } from "./file-mentions.ts";
+import { readGitBranch } from "./git-branch.ts";
+import { connectLocalWs } from "./local-ws-client.ts";
+import { statusBarParts } from "./status-bar.ts";
+import type { ClientState } from "../../local-api/status-bus.ts";
 import { measurePermissionDialog, PermissionDialog, type PermissionDecision } from "./permission-dialog.ts";
-import { readWorktree, renderWorktreeLines } from "./worktree.ts";
+import { readWorktree, renderWorktreeLines, truncateToWidth } from "./worktree.ts";
 import { resolveInterrupt, sendMessage, UnauthorizedError, type PendingConfirmation, type SendMessageResult } from "../backend.ts";
 import { findCommand, matchCommands, type Command, type Screen } from "./commands.ts";
 import { ConfigScreen } from "./config-screen.ts";
@@ -247,6 +252,34 @@ function measureCommandMenu(commands: Command[], columns: number): number {
     return total;
 }
 
+/** Sugestões de `@arquivo` embaixo do composer — mesmo desenho do CommandMenu; cada linha é truncada pra nunca quebrar (altura = 2 + n + 1, ver measureMentionMenu). */
+function MentionMenu(props: { files: string[]; activeIndex: number; columns: number }): React.ReactElement {
+    const width = Math.max(4, props.columns - 8);
+    return h(
+        Box,
+        { flexDirection: "column", borderStyle: "round", borderColor: theme.border, paddingX: 1 },
+        ...props.files.map((file, i) =>
+            i === props.activeIndex ? h(Text, { key: file, color: theme.primary, bold: true }, `❯ ${truncateToWidth(file, width)}`) : h(Text, { key: file }, `  ${truncateToWidth(file, width)}`),
+        ),
+        h(Text, { dimColor: true }, "↑↓ navegar · Tab/Enter completar"),
+    );
+}
+
+function measureMentionMenu(files: string[]): number {
+    return files.length === 0 ? 0 : 2 + files.length + 1;
+}
+
+/** Rodapé de 1 linha (máquina · branch · pasta · tokens · sessão) + alertas à direita. Ver status-bar.ts. */
+function StatusBar(props: { info: Parameters<typeof statusBarParts>[0]; width: number }): React.ReactElement {
+    const { main, alert } = statusBarParts(props.info, props.width);
+    return h(Box, { justifyContent: "space-between", width: props.width }, h(Text, { dimColor: true, wrap: "truncate" }, main), alert ? h(Text, { color: theme.warning, wrap: "truncate" }, alert) : null);
+}
+
+function shortPath(cwd: string): string {
+    const home = process.env.HOME ?? "";
+    return home && cwd.startsWith(home) ? `~${cwd.slice(home.length)}` : cwd;
+}
+
 /** Largura TOTAL da sidebar (inclui a borda direita). Some sozinha em terminal estreito — ver MIN_COLUMNS_FOR_SIDEBAR. */
 const SIDEBAR_WIDTH = 30;
 const MIN_COLUMNS_FOR_SIDEBAR = 100;
@@ -329,6 +362,25 @@ export function App(props: AppProps): React.ReactElement {
         return () => clearInterval(timer);
     }, [sending, sidebarVisible, props.invocationCwd]);
 
+    // Barra de status: tokens acumulados da conversa, branch e estado dos canais (WS do daemon local).
+    const [totals, setTotals] = React.useState({ tokensIn: 0, tokensOut: 0, turns: 0 });
+    const [branch, setBranch] = React.useState(() => readGitBranch(props.invocationCwd));
+    const [clientState, setClientState] = React.useState<ClientState | undefined>(undefined);
+    React.useEffect(() => {
+        const refresh = (): void => setBranch(readGitBranch(props.invocationCwd));
+        const timer = setInterval(refresh, 5000);
+        return () => clearInterval(timer);
+    }, [props.invocationCwd]);
+    React.useEffect(() => connectLocalWs(config.localPort, (state) => setClientState({ ...state })), []);
+
+    // Esc / Ctrl+C: `abortRef` cancela o `fetch` do turno em andamento (o cliente PARA DE ESPERAR — o servidor pode
+    // terminar o turno sozinho, ver `orphanTurnRef`). Ctrl+C sai só na 2ª vez em 2 s.
+    const abortRef = React.useRef<AbortController | undefined>(undefined);
+    const orphanTurnRef = React.useRef(false);
+    const orphanWarnedRef = React.useRef(false);
+    const lastCtrlCRef = React.useRef(0);
+    const [exitHint, setExitHint] = React.useState(false);
+
     // O menu só some em DUAS situações, de propósito (pedido explícito):
     // apagar a "/" (inputValue para de começar com "/") ou digitar algo que
     // não casa mais com NENHUM comando (matchCommands fica vazio — inclusive
@@ -338,6 +390,27 @@ export function App(props: AppProps): React.ReactElement {
     const commandQuery = screen === "chat" && !sending && !pending && inputValue.startsWith("/") ? inputValue.slice(1) : undefined;
     const filteredCommands = commandQuery !== undefined ? matchCommands(commandQuery) : [];
     const showCommandMenu = filteredCommands.length > 0;
+
+    // Autocomplete de `@arquivo`: só no chat, fora de turno/confirmação e sem competir com o menu de `/comando`.
+    const mentionToken = screen === "chat" && !sending && !pending && !showCommandMenu ? findMentionToken(inputValue) : undefined;
+    const fileIndexRef = React.useRef<{ files: string[]; at: number } | undefined>(undefined);
+    const mentionMatches = React.useMemo(() => {
+        if (mentionToken === undefined) return [];
+        const now = Date.now();
+        if (!fileIndexRef.current || now - fileIndexRef.current.at > 10_000) fileIndexRef.current = { files: listProjectFiles(props.invocationCwd), at: now };
+        return matchFiles(fileIndexRef.current.files, mentionToken.query, 6);
+    }, [mentionToken?.query, mentionToken !== undefined, props.invocationCwd]);
+    const showMentionMenu = mentionMatches.length > 0;
+    const [mentionIndex, setMentionIndex] = React.useState(0);
+    React.useEffect(() => {
+        setMentionIndex(0);
+    }, [mentionToken?.query]);
+    function completeMention(): void {
+        const file = mentionMatches[mentionIndex];
+        if (!mentionToken || !file) return;
+        setInputValue(applyMention(inputValue, mentionToken, file));
+        setComposerResetKey((k) => k + 1);
+    }
 
     // Reseta a seleção a cada mudança no prefixo — inclusive apagando
     // ("/co" -> "/c") — pra nunca deixar o índice apontando pra fora da
@@ -359,7 +432,9 @@ export function App(props: AppProps): React.ReactElement {
         (error ? countWrappedLines(`[erro] ${error}`, mainColumns) : 0) +
         liveRegionRows +
         (showCommandMenu ? measureCommandMenu(filteredCommands, mainColumns) : 0) +
-        1; // dica de rolagem, sempre reservada
+        (showMentionMenu ? measureMentionMenu(mentionMatches) : 0) +
+        1 + // dica de rolagem, sempre reservada
+        1; // barra de status, sempre 1 linha
     const availableHistoryRows = Math.max(1, usableRows - chromeRows);
 
     const historyHeights = React.useMemo(() => history.map((item) => measureHistoryItem(item, mainColumns)), [history, mainColumns]);
@@ -407,6 +482,11 @@ export function App(props: AppProps): React.ReactElement {
                     const lines = chunk.trim().split("\n");
                     const lastLine = lines[lines.length - 1] || "";
                     setStatusLine(`⎿  ${lastLine.slice(0, 120)}${lastLine.length > 120 ? "…" : ""}`);
+                }
+            } else if (event.type === "turn_end" || event.type === "turn_error") {
+                if (orphanTurnRef.current && !sendingRef.current) {
+                    orphanTurnRef.current = false;
+                    setHistory((prev) => [...prev, noticeItem("O turno interrompido terminou no servidor (a resposta ficou salva na sessão dele). Pode continuar.", "success")]);
                 }
             } else if (event.type === "turn_start") {
                 if (!sendingRef.current) return;
@@ -459,10 +539,31 @@ export function App(props: AppProps): React.ReactElement {
         };
     }, [backendUrl, token]);
 
-    useInput((input: string, key: { ctrl: boolean }) => {
-        if (key.ctrl && (input === "c" || input === "d")) {
+    function abortTurn(): void {
+        if (!abortRef.current) return;
+        orphanTurnRef.current = true;
+        orphanWarnedRef.current = false;
+        abortRef.current.abort();
+    }
+
+    useInput((input: string, key: { ctrl: boolean; escape?: boolean }) => {
+        if (key.ctrl && input === "d") {
             onDone({ type: "exit" });
+            return;
         }
+        if (key.ctrl && input === "c") {
+            const now = Date.now();
+            if (now - lastCtrlCRef.current < 2000) {
+                onDone({ type: "exit" });
+                return;
+            }
+            lastCtrlCRef.current = now;
+            if (sendingRef.current) abortTurn();
+            setExitHint(true);
+            setTimeout(() => setExitHint(false), 2000);
+            return;
+        }
+        if (key.escape && sendingRef.current) abortTurn();
     });
 
     // `ink-text-input` ignora de propósito upArrow/downArrow/tab (ver seu
@@ -490,6 +591,15 @@ export function App(props: AppProps): React.ReactElement {
         { isActive: showCommandMenu },
     );
 
+    useInput(
+        (_input, key) => {
+            if (key.downArrow) setMentionIndex((i) => (i + 1) % mentionMatches.length);
+            else if (key.upArrow) setMentionIndex((i) => (i - 1 + mentionMatches.length) % mentionMatches.length);
+            else if (key.tab) completeMention();
+        },
+        { isActive: showMentionMenu },
+    );
+
     // PageUp/PageDown navegam o histórico — `ink-text-input` já ignora
     // essas teclas (não fazem parte do texto digitado, ver
     // nonAlphanumericKeys no ink), então não competem com o composer.
@@ -512,12 +622,14 @@ export function App(props: AppProps): React.ReactElement {
         { isActive: screen === "chat" },
     );
 
-    async function runTurn(action: () => Promise<SendMessageResult>): Promise<void> {
+    async function runTurn(action: (signal: AbortSignal) => Promise<SendMessageResult>): Promise<void> {
+        const controller = new AbortController();
+        abortRef.current = controller;
         setSending(true);
         setStatusLine("Helena está pensando...");
         setError(undefined);
         try {
-            const result = await action();
+            const result = await action(controller.signal);
             setSessionId(result.sessionId);
             // Resultado de tool só existe DEPOIS que o turno inteiro termina (ver toolActivity em backend.ts)
             // — entra em lote aqui, depois de todas as chamadas ao vivo já mostradas, antes da resposta final.
@@ -528,7 +640,15 @@ export function App(props: AppProps): React.ReactElement {
             const showText = !(stoppedForPermission && result.text.startsWith("(sem texto"));
             setHistory((prev) => [...prev, ...toolResults, ...(showText ? [historyItem("assistant", result.text)] : []), ...(result.usage ? [usageItem(result.usage)] : [])]);
             setPending(result.pending?.[0]);
+            if (result.usage) {
+                const usage = result.usage;
+                setTotals((prev) => ({ tokensIn: prev.tokensIn + (usage.inputTokens ?? 0), tokensOut: prev.tokensOut + (usage.outputTokens ?? 0), turns: prev.turns + 1 }));
+            }
         } catch (err) {
+            if (controller.signal.aborted) {
+                setHistory((prev) => [...prev, noticeItem("Interrompido — parei de esperar. O servidor pode terminar esse turno sozinho; te aviso quando acabar.", "warn")]);
+                return;
+            }
             if (err instanceof UnauthorizedError) {
                 onDone({ type: "relogin", history: historyRef.current, sessionId: sessionIdRef.current });
                 return;
@@ -536,6 +656,7 @@ export function App(props: AppProps): React.ReactElement {
             setError(err instanceof Error ? err.message : String(err));
         } finally {
             setSending(false);
+            if (abortRef.current === controller) abortRef.current = undefined;
         }
     }
 
@@ -554,7 +675,24 @@ export function App(props: AppProps): React.ReactElement {
     }
 
     function handleSubmit(text: string): void {
+        // Menu de @arquivo aberto: Enter completa o item destacado em vez de enviar.
+        if (showMentionMenu && mentionToken) {
+            completeMention();
+            return;
+        }
         const trimmed = text.trim();
+        // Turno interrompido que o servidor ainda pode estar terminando: mandar outra mensagem na MESMA sessão
+        // poderia rodar dois turnos ao mesmo tempo. Devolve o texto e avisa; Enter de novo força o envio.
+        if (trimmed && !sending && !pending && orphanTurnRef.current && !trimmed.startsWith("/")) {
+            if (!orphanWarnedRef.current) {
+                orphanWarnedRef.current = true;
+                setInputValue(text);
+                setComposerResetKey((k) => k + 1);
+                setHistory((prev) => [...prev, noticeItem("O turno interrompido ainda pode estar rodando no servidor. Aguarde o aviso de conclusão — ou aperte Enter de novo para enviar mesmo assim.", "warn")]);
+                return;
+            }
+            orphanTurnRef.current = false;
+        }
         setInputValue("");
         if (!trimmed || sending || pending) return;
         if (trimmed.startsWith("/")) {
@@ -566,7 +704,7 @@ export function App(props: AppProps): React.ReactElement {
             return;
         }
         setHistory((prev) => [...prev, historyItem("user", trimmed)]);
-        void runTurn(() => sendMessage(backendUrl, token, { text: trimmed, sessionId, cwd: invocationCwd, machineName }));
+        void runTurn((signal) => sendMessage(backendUrl, token, { text: trimmed, sessionId, cwd: invocationCwd, machineName }, signal));
     }
 
     function handleConfirmation(decision: PermissionDecision): void {
@@ -576,7 +714,7 @@ export function App(props: AppProps): React.ReactElement {
         const approved = decision !== "reject";
         setPending(undefined);
         // "só desta vez" manda remember:false (o backend NÃO grava o comando); "sempre permitir" manda true.
-        void runTurn(() => resolveInterrupt(backendUrl, token, activeSessionId, current.tool, current.ref, approved, approved ? undefined : "Recusado pelo usuário no CLI.", approved ? decision === "always" : undefined));
+        void runTurn((signal) => resolveInterrupt(backendUrl, token, activeSessionId, current.tool, current.ref, approved, approved ? undefined : "Recusado pelo usuário no CLI.", approved ? decision === "always" : undefined, signal));
     }
 
     const onUnauthorized = () => onDone({ type: "relogin", history: historyRef.current, sessionId: sessionIdRef.current });
@@ -609,6 +747,14 @@ export function App(props: AppProps): React.ReactElement {
         return fullScreen(h(ProjectsScreen, { backendUrl, token, onExit: () => setScreen("chat"), onUnauthorized, subscribeProgress }));
     }
 
+    const alerts: string[] = [];
+    if (clientState) {
+        if (clientState.machineAgent.status === "disconnected" || clientState.machineAgent.status === "error") alerts.push("máquina offline");
+        if (clientState.whatsapp.status === "error") alerts.push("WhatsApp desconectado");
+        if (clientState.telegram.status === "error") alerts.push("Telegram com erro");
+    }
+    const statusInfo = { machine: machineName, branch, dir: shortPath(invocationCwd), sessionId, ...totals, alerts };
+
     let liveRegion: React.ReactElement;
     if (pending) liveRegion = h(PermissionDialog, { pending, onAnswer: handleConfirmation });
     else if (sending) liveRegion = h(StatusLine, { text: statusLine });
@@ -625,12 +771,14 @@ export function App(props: AppProps): React.ReactElement {
         // mais que `availableHistoryRows`), esticar aqui nunca estoura
         // `usableRows` no total.
         h(Box, { flexDirection: "column", flexGrow: 1 }, ...visibleHistory.map((item) => h(HistoryLine, { key: item.id, item }))),
-        h(Text, { dimColor: true }, scrollHintText(canScrollUp, canScrollDown)),
+        h(Text, { dimColor: true }, exitHint ? "Pressione Ctrl+C de novo para sair" : scrollHintText(canScrollUp, canScrollDown)),
         h(ProjectProgressPanel, { projectSteps }),
         h(PlanPanel, { plan: activePlan }),
         error ? h(Text, { color: "red" }, `[erro] ${error}`) : null,
         liveRegion,
         showCommandMenu ? h(CommandMenu, { commands: filteredCommands, activeIndex: commandMenuIndex }) : null,
+        showMentionMenu ? h(MentionMenu, { files: mentionMatches, activeIndex: mentionIndex, columns: mainColumns }) : null,
+        h(StatusBar, { info: statusInfo, width: mainColumns }),
     );
 
     return sidebarVisible ? h(Box, { flexDirection: "row", height: usableRows }, h(Sidebar, { cwd: props.invocationCwd, entries: worktree, height: usableRows }), chat) : chat;

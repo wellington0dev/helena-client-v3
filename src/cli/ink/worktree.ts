@@ -19,7 +19,7 @@ export interface WorktreeEntry {
 }
 
 /** Nunca vale a pena listar — gigantes/gerados (o dono os ignora no git também). */
-const IGNORED = new Set([".git", "node_modules", "dist", "build", ".next", ".cache", "__pycache__", ".venv", "venv", "coverage", ".turbo", ".DS_Store"]);
+const IGNORED = new Set([".git", ".angular", "node_modules", "dist", "build", ".next", ".cache", "__pycache__", ".venv", "venv", "coverage", ".turbo", ".DS_Store"]);
 
 const MAX_DEPTH = 3;
 const MAX_ENTRIES_PER_DIR = 40;
@@ -46,8 +46,13 @@ export function readGitignoreNames(root: string): Set<string> {
     return names;
 }
 
+/** Nomes que nunca entram em listagens (fixos + nomes simples do .gitignore da raiz) — compartilhado com file-mentions.ts. */
+export function ignoredNames(root: string): Set<string> {
+    return new Set([...IGNORED, ...readGitignoreNames(root)]);
+}
+
 export function readWorktree(root: string, maxDepth = MAX_DEPTH): WorktreeEntry[] {
-    const ignored = new Set([...IGNORED, ...readGitignoreNames(root)]);
+    const ignored = ignoredNames(root);
     const out: WorktreeEntry[] = [];
     const walk = (dir: string, depth: number): void => {
         if (out.length >= MAX_TOTAL_ENTRIES) return;

@@ -65,20 +65,22 @@ export interface SendMessageInput {
     machineName?: string;
 }
 
-export async function sendMessage(baseUrl: string, token: string, input: SendMessageInput): Promise<SendMessageResult> {
+export async function sendMessage(baseUrl: string, token: string, input: SendMessageInput, signal?: AbortSignal): Promise<SendMessageResult> {
     const response = await fetch(`${baseUrl}/chat/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(input),
+        signal,
     });
     return parseOrThrow<SendMessageResult>(response);
 }
 
-export async function resolveInterrupt(baseUrl: string, token: string, sessionId: string, tool: string, ref: string | undefined, approved: boolean, reason?: string, remember?: boolean): Promise<SendMessageResult> {
+export async function resolveInterrupt(baseUrl: string, token: string, sessionId: string, tool: string, ref: string | undefined, approved: boolean, reason?: string, remember?: boolean, signal?: AbortSignal): Promise<SendMessageResult> {
     const response = await fetch(`${baseUrl}/chat/sessions/${sessionId}/resolve`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ tool, ref, approved, reason, remember }),
+        signal,
     });
     return parseOrThrow<SendMessageResult>(response);
 }
