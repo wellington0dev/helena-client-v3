@@ -2,7 +2,7 @@ import os from "node:os";
 import { config } from "./config.ts";
 import { deleteFile, listFiles, readFile, searchFiles, writeFile, type FileEdit } from "./local-files.ts";
 import { runCommand } from "./local-shell.ts";
-import { updateMachineAgent } from "./panel/status-bus.ts";
+import { updateMachineAgent } from "./local-api/status-bus.ts";
 import { reportTelemetry } from "./telemetry.ts";
 
 /**

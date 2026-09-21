@@ -8,7 +8,6 @@
   },
   "scripts": {
     "start": "node src/main.ts",
-    "build:panel": "npm --prefix panel-app install && npm --prefix panel-app run build",
     "test": "node --test",
     "typecheck": "tsc --noEmit",
     "service:install:windows": "node scripts/install-windows-service.js",

@@ -30,14 +30,6 @@ command -v npm >/dev/null || { err "npm não encontrado no PATH."; exit 1; }
 bold "Instalando dependências (npm install)..."
 ( cd "$CLIENT_DIR" && npm install )
 
-# --- painel web (Angular) — DESABILITADO (2026-09-17), CLI é a interface
-# principal agora. O código-fonte continua em panel-app/, intacto, pra
-# quem quiser retomar o desenvolvimento dele depois (ver
-# client/docs/local-server-api.md pra API que ele consumia). Pra voltar a
-# servir o painel: rode `npm run build:panel` manualmente e reverta o
-# `startPanelServer` em `src/panel/server.ts` pra servir os arquivos de
-# `panel-app/dist/panel-app/browser` de novo (ver histórico do git).
-
 # --- .env ---
 if [[ ! -f "$ENV_FILE" ]]; then
     cp "$ENV_EXAMPLE" "$ENV_FILE"

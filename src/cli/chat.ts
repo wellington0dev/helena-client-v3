@@ -120,7 +120,7 @@ async function notifyLocalDaemon(token: string): Promise<void> {
     try {
         const localToken = readLocalToken(); // sem token = daemon nunca subiu nesta máquina
         if (!localToken) return;
-        await fetch(`http://127.0.0.1:${config.panelPort}/cli-session`, {
+        await fetch(`http://127.0.0.1:${config.localPort}/cli-session`, {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${localToken}` },
             body: JSON.stringify({ accessToken: token }),

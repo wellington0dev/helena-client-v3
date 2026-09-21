@@ -13,7 +13,7 @@ import { startProgressUpstream } from "./local-api/progress-upstream.ts";
 import { startLocalApi } from "./local-api/server.ts";
 import { createSessionManager } from "./local-api/session-manager.ts";
 import { clearSession, loadSession, saveSession } from "./cli/session-store.ts";
-import { getState, onStateChange } from "./panel/status-bus.ts";
+import { getState, onStateChange } from "./local-api/status-bus.ts";
 import { logoutWhatsapp, startWhatsapp, stopWhatsapp } from "./channels/whatsapp.ts";
 import { startTelegram, stopTelegram } from "./channels/telegram.ts";
 import { startMachineAgent } from "./machine-agent.ts";
@@ -59,7 +59,7 @@ const { fixed } = hardenPermissions(secretPaths);
 if (fixed.length > 0) console.log(`[segurança] permissões endurecidas em ${fixed.length} item(ns) de segredo.`);
 
 startLocalApi({
-    port: config.panelPort,
+    port: config.localPort,
     host: config.localBind,
     version,
     localToken: loadOrCreateLocalToken(),

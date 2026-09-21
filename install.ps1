@@ -70,24 +70,12 @@ try {
         Write-Ok "'helena' disponivel globalmente."
     }
 
-    # Atalho pro painel local na area de trabalho — nao precisa de
-    # Administrador, entao fica fora do bloco de servico abaixo. E um
-    # ".url" (Internet Shortcut), nao um ".lnk": abre a pagina no
-    # navegador padrao, idempotente (Set-Content sobrescreve sempre).
-    Write-Host "Criando atalho do painel na area de trabalho..." -ForegroundColor Cyan
-    $panelPort = Read-EnvValue $EnvFile "CLIENT_PANEL_PORT"
-    if (-not $panelPort) { $panelPort = "4100" }
-    $desktopDir = [Environment]::GetFolderPath("Desktop")
-    $shortcutPath = Join-Path $desktopDir "Painel Helena.url"
-    Set-Content -Path $shortcutPath -Value "[InternetShortcut]`r`nURL=http://localhost:$panelPort`r`n" -Encoding ASCII
-    Write-Ok "Atalho criado: $shortcutPath"
-
     $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     if (-not $isAdmin) {
         Write-Warn "Nao esta rodando como Administrador — pulando instalacao do servico do Windows."
         Write-Info "Rode este script como Administrador pra instalar 'HelenaClient' como servico (inicia sozinho, mesmo sem login)."
         Write-Info "Ou rode 'npm start' manualmente sempre que quiser usar o client/."
-        Write-Info "Use o atalho 'Painel Helena' na area de trabalho pra abrir o painel e parear o WhatsApp."
+        Write-Info "Rode 'helena' e use /canais pra parear o WhatsApp (o QR aparece no terminal)."
         exit 0
     }
 

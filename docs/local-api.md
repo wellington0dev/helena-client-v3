@@ -60,3 +60,12 @@ buffer de eventos persistente entre reinícios.
 `node --test src/local-api/` (28 testes. Base: bind, auth, Origin, login sem vazar JWT, passagem sem repassar
 credencial do chamador, allowlist/traversal, injeção de `machineName`, 413, 401→`session.expired`, WS com/sem token,
 replay, legado, token 0600/rotação, upstream com reconexão).
+
+## Painel web removido
+O painel Angular (`panel-app/`) foi removido deste repositório; o último commit que o contém está na tag **`panel-final`**
+(`git checkout panel-final`). A interface passa a ser a TUI, falando só com esta API local.
+
+Lacunas que o painel cobria e a TUI atual **não** cobre (a decisão do plano §5.3 é implementá-las na TUI nova, TUI-3):
+- **identidade de dono** (`PATCH /auth/me/owner-identity`, via `/v1/backend/auth/me/owner-identity`);
+- **anexar arquivo/imagem no chat** (`fileId`);
+- **acesso pelo celular/navegador** — substituído por WhatsApp/Telegram e, opcionalmente, TUI remota (`CLIENT_LOCAL_BIND` + token local, ou SSH).

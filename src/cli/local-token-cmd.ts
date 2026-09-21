@@ -17,7 +17,7 @@ export async function runLocalTokenCommand(args: string[]): Promise<number> {
         const current = readLocalToken();
         if (current) {
             try {
-                const response = await fetch(`http://127.0.0.1:${config.panelPort}/v1/local-token/rotate`, { method: "POST", headers: { Authorization: `Bearer ${current}` }, signal: AbortSignal.timeout(3000) });
+                const response = await fetch(`http://127.0.0.1:${config.localPort}/v1/local-token/rotate`, { method: "POST", headers: { Authorization: `Bearer ${current}` }, signal: AbortSignal.timeout(3000) });
                 if (response.ok) {
                     console.log("Token local rotacionado (daemon atualizado; conexões antigas foram fechadas).");
                     return 0;

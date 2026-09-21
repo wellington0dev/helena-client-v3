@@ -13,8 +13,8 @@ import { loadFileConfig } from "./local-api/config-store.ts";
  * docs/architecture-v2.md §4).
  */
 export const config = {
-    /** Porta da API local (`/v1`). `CLIENT_LOCAL_PORT` é o nome novo; `CLIENT_PANEL_PORT` continua aceita por uma versão. */
-    panelPort: Number(process.env.CLIENT_LOCAL_PORT || process.env.CLIENT_PANEL_PORT || 4100),
+    /** Porta da API local (`/v1`). `CLIENT_LOCAL_PORT` é o nome novo; `CLIENT_PANEL_PORT` (nome antigo) continua aceita por uma versão. */
+    localPort: Number(process.env.CLIENT_LOCAL_PORT || process.env.CLIENT_PANEL_PORT || 4100),
     /** Interface da API local. Padrão loopback; qualquer outro valor (ex.: IP da VPN) é opt-in e continua exigindo o token local. */
     localBind: process.env.CLIENT_LOCAL_BIND || "127.0.0.1",
     backendUrl: process.env.BACKEND_V2_URL || "",

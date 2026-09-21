@@ -4,7 +4,7 @@ import type { WAMessage, WASocket } from "baileys";
 import pino from "pino";
 import QRCode from "qrcode";
 import { config } from "../config.ts";
-import { updateWhatsapp } from "../panel/status-bus.ts";
+import { updateWhatsapp } from "../local-api/status-bus.ts";
 import { sendGroupInboundMessage, sendInboundMessage } from "./backend-client.ts";
 import { exceedsMediaLimit, mediaTooLargeMessage } from "./media-limit.ts";
 import { toWhatsappText } from "./markdown-format.ts";

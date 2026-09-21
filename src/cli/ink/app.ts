@@ -278,7 +278,7 @@ export function App(props: AppProps): React.ReactElement {
         return h(McpScreen, { backendUrl, token, onExit: () => setScreen("chat"), onUnauthorized });
     }
     if (screen === "channels") {
-        return h(ChannelsScreen, { panelPort: config.panelPort, onExit: () => setScreen("chat") });
+        return h(ChannelsScreen, { localPort: config.localPort, onExit: () => setScreen("chat") });
     }
     if (screen === "usage") {
         return h(UsageScreen, { backendUrl, token, onExit: () => setScreen("chat"), onUnauthorized });

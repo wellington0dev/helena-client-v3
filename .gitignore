@@ -5,7 +5,3 @@ node_modules
 .whatsapp-lid-pins.json
 *.log
 
-# Angular (panel-app/ tem seu próprio .gitignore mais completo — isto é reforço no nível raiz)
-panel-app/node_modules
-panel-app/dist
-panel-app/.angular

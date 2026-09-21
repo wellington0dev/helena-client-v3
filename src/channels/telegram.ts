@@ -1,7 +1,7 @@
 import { Bot, InputFile, type Context } from "grammy";
 import { hydrateFiles, type FileFlavor } from "@grammyjs/files";
 import { config } from "../config.ts";
-import { updateTelegram } from "../panel/status-bus.ts";
+import { updateTelegram } from "../local-api/status-bus.ts";
 import { sendGroupInboundMessage, sendInboundMessage } from "./backend-client.ts";
 import { exceedsMediaLimit, mediaTooLargeMessage } from "./media-limit.ts";
 import { toTelegramHtml } from "./markdown-format.ts";

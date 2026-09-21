@@ -1,5 +1,5 @@
 /**
- * Event Hub — evolução do `panel/status-bus.ts`: pub/sub em memória com (a) ESTADO por tópico, mandado inteiro
+ * Event Hub — evolução do `status-bus.ts` (que agora mora ao lado): pub/sub em memória com (a) ESTADO por tópico, mandado inteiro
  * a quem conecta, e (b) um buffer curto de eventos importantes, pra quem abre a TUI depois ver "o que
  * aconteceu enquanto você estava fora". Uma única fonte pra TUI, canais e machine-agent.
  */
