@@ -1,4 +1,5 @@
 import chalk from "chalk";
+import { c } from "./theme.ts";
 import { parseBlocks, type InlineNode } from "../../channels/markdown.ts";
 
 /**
@@ -19,7 +20,7 @@ function inlineToAnsi(nodes: InlineNode[]): string {
                 case "italic":
                     return chalk.italic(node.text);
                 case "code":
-                    return chalk.cyan(`\`${node.text}\``);
+                    return c.code(`\`${node.text}\``);
                 case "link":
                     return `${chalk.underline(node.text)} ${chalk.dim(`(${node.url})`)}`;
                 case "image":
@@ -45,7 +46,7 @@ export function renderMarkdownAnsi(text: string): string {
                 rendered.push(block.items.map((item, i) => `${block.ordered ? `${i + 1}. ` : "• "}${inlineToAnsi(item)}`).join("\n"));
                 break;
             case "codeblock":
-                rendered.push(chalk.gray(block.text));
+                rendered.push(c.muted(block.text));
                 break;
             case "paragraph":
                 rendered.push(inlineToAnsi(block.inline));

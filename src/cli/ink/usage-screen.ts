@@ -3,7 +3,7 @@ import { Box, Text, useInput } from "ink";
 import { getUsage, type UsageSummary } from "../api/usage.ts";
 import { UnauthorizedError } from "../backend.ts";
 import { buildUsageView } from "./usage-view.ts";
-import { c, theme } from "./theme.ts";
+import { c, theme, panel } from "./theme.ts";
 
 const h = React.createElement;
 
@@ -36,19 +36,19 @@ export function UsageScreen(props: { backendUrl: string; token: string; onExit: 
         return h(Text, { color: theme.danger }, `Erro: ${error} — Esc pra voltar ao chat`);
     }
     if (!usage) {
-        return h(Text, { dimColor: true }, "Carregando uso...");
+        return h(Text, { color: theme.textMuted }, "Carregando uso...");
     }
 
     const { channelTiles, weekBars } = buildUsageView(usage);
 
     return h(
         Box,
-        { flexDirection: "column", borderStyle: "round", borderColor: theme.border, paddingX: 1 },
+        { flexDirection: "column", ...panel("border") },
         h(Text, { bold: true, color: theme.primary }, "Uso — chamadas de chat"),
-        h(Text, { dimColor: true }, `Total: ${usage.totalCalls}${usage.firstCallAt ? ` · desde ${new Date(usage.firstCallAt).toLocaleDateString("pt-BR")}` : ""}`),
+        h(Text, { color: theme.textMuted }, `Total: ${usage.totalCalls}${usage.firstCallAt ? ` · desde ${new Date(usage.firstCallAt).toLocaleDateString("pt-BR")}` : ""}`),
         h(Box, { marginTop: 1, gap: 3 }, ...channelTiles.map((tile) => h(Text, { key: tile.key }, `${tile.label}: `, c.primary.bold(String(tile.value))))),
         h(Box, { marginTop: 1 }),
-        h(Text, { dimColor: true }, "Últimos 7 dias:"),
+        h(Text, { color: theme.textMuted }, "Últimos 7 dias:"),
         h(
             Box,
             { flexDirection: "row", gap: 1, marginTop: 1, alignItems: "flex-end" },
@@ -59,12 +59,12 @@ export function UsageScreen(props: { backendUrl: string; token: string; onExit: 
                     { key: bar.date, flexDirection: "column", alignItems: "center" },
                     ...Array.from({ length: BAR_HEIGHT_ROWS - rows }, (_, i) => h(Text, { key: `blank-${i}` }, " ")),
                     ...Array.from({ length: rows }, (_, i) => h(Text, { key: `bar-${i}`, color: theme.primary }, "██")),
-                    h(Text, { dimColor: true }, bar.label),
-                    h(Text, { dimColor: true }, String(bar.calls)),
+                    h(Text, { color: theme.textMuted }, bar.label),
+                    h(Text, { color: theme.textMuted }, String(bar.calls)),
                 );
             }),
         ),
         h(Box, { marginTop: 1 }),
-        h(Text, { dimColor: true }, "Esc volta"),
+        h(Text, { color: theme.textMuted }, "Esc volta"),
     );
 }

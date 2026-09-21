@@ -2,7 +2,7 @@ import React from "react";
 import { Box, Text, useInput } from "ink";
 import qrcodeTerminal from "qrcode-terminal";
 import { connectLocalWs } from "./local-ws-client.ts";
-import { theme } from "./theme.ts";
+import { theme, panel } from "./theme.ts";
 import type { ChannelStatus, ClientState } from "../../local-api/status-bus.ts";
 
 const h = React.createElement;
@@ -53,11 +53,11 @@ export function ChannelsScreen(props: { localPort: number; onExit: () => void })
     if (!connectedToDaemon) {
         return h(
             Box,
-            { flexDirection: "column", borderStyle: "round", borderColor: theme.border, paddingX: 1 },
+            { flexDirection: "column", ...panel("border") },
             h(Text, { bold: true, color: theme.primary }, "Canais"),
-            h(Text, { dimColor: true }, `Daemon local não detectado nesta máquina (porta ${localPort}) — sem status ao vivo pra mostrar.`),
+            h(Text, { color: theme.textMuted }, `Daemon local não detectado nesta máquina (porta ${localPort}) — sem status ao vivo pra mostrar.`),
             h(Box, { marginTop: 1 }),
-            h(Text, { dimColor: true }, "Esc volta"),
+            h(Text, { color: theme.textMuted }, "Esc volta"),
         );
     }
 
@@ -67,19 +67,19 @@ export function ChannelsScreen(props: { localPort: number; onExit: () => void })
 
     return h(
         Box,
-        { flexDirection: "column", borderStyle: "round", borderColor: theme.border, paddingX: 1 },
+        { flexDirection: "column", ...panel("border") },
         h(Text, { bold: true, color: theme.primary }, "Canais"),
         h(Box, { marginTop: 1 }),
         h(Text, null, "WhatsApp: ", h(Text, { color: statusColor(whatsapp?.status ?? "disconnected") }, STATUS_LABEL[whatsapp?.status ?? "disconnected"])),
-        whatsapp?.status === "error" && whatsapp.error ? h(Text, { color: theme.danger, dimColor: true }, `  ${whatsapp.error}`) : null,
+        whatsapp?.status === "error" && whatsapp.error ? h(Text, { color: theme.danger,  }, `  ${whatsapp.error}`) : null,
         whatsapp?.status === "qr" && whatsapp.qrText
             ? h(Box, { flexDirection: "column", marginTop: 1 }, h(Text, null, renderQrAscii(whatsapp.qrText)))
             : whatsapp?.status === "qr"
-              ? h(Text, { dimColor: true }, "  Esta versão do daemon local não expõe o texto do QR pro terminal — atualize o client/.")
+              ? h(Text, { color: theme.textMuted }, "  Esta versão do daemon local não expõe o texto do QR pro terminal — atualize o client/.")
               : null,
         h(Box, { marginTop: 1 }),
         h(Text, null, "Telegram: ", h(Text, { color: statusColor(telegram?.status ?? "disconnected") }, STATUS_LABEL[telegram?.status ?? "disconnected"])),
-        telegram?.status === "error" && telegram.error ? h(Text, { color: theme.danger, dimColor: true }, `  ${telegram.error}`) : null,
+        telegram?.status === "error" && telegram.error ? h(Text, { color: theme.danger,  }, `  ${telegram.error}`) : null,
         h(Box, { marginTop: 1 }),
         h(
             Text,
@@ -87,8 +87,8 @@ export function ChannelsScreen(props: { localPort: number; onExit: () => void })
             "Execução remota: ",
             h(Text, { color: statusColor(machineAgent?.status ?? "disconnected") }, STATUS_LABEL[machineAgent?.status ?? "disconnected"]),
         ),
-        machineAgent?.status === "error" && machineAgent.error ? h(Text, { color: theme.danger, dimColor: true }, `  ${machineAgent.error}`) : null,
+        machineAgent?.status === "error" && machineAgent.error ? h(Text, { color: theme.danger,  }, `  ${machineAgent.error}`) : null,
         h(Box, { marginTop: 1 }),
-        h(Text, { dimColor: true }, "Esc volta"),
+        h(Text, { color: theme.textMuted }, "Esc volta"),
     );
 }

@@ -16,7 +16,7 @@ export type Screen = "chat" | "config" | "contacts" | "mcp" | "channels" | "usag
 
 export interface CommandContext {
     setScreen: (screen: Screen) => void;
-    pushNotice: (text: string, tone: "success" | "warn" | "danger") => void;
+    pushNotice: (text: string, tone: "success" | "warn" | "danger" | "info") => void;
     /** Mostra/esconde a sidebar de worktree do chat. */
     toggleSidebar: () => void;
     /** Começa uma conversa nova (limpa a tela e solta a sessão atual). */
@@ -95,7 +95,7 @@ export const COMMANDS: Command[] = [
         name: "help",
         aliases: ["?"],
         description: "Esta lista",
-        run: (ctx) => ctx.pushNotice(formatHelpText(), "success"),
+        run: (ctx) => ctx.pushNotice(formatHelpText(), "info"),
     },
 ];
 

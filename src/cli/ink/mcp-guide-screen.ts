@@ -2,7 +2,7 @@ import React from "react";
 import { Box, Text, useInput } from "ink";
 import { buildMcpGuideMarkdown } from "./mcp-guide-content.ts";
 import { renderMarkdownAnsi } from "./render-markdown.ts";
-import { theme } from "./theme.ts";
+import { theme, panel } from "./theme.ts";
 
 const h = React.createElement;
 
@@ -19,11 +19,11 @@ export function McpGuideScreen(props: { backendUrl: string; token: string; onExi
 
     return h(
         Box,
-        { flexDirection: "column", borderStyle: "round", borderColor: theme.border, paddingX: 1 },
+        { flexDirection: "column", ...panel("border") },
         h(Text, { bold: true, color: theme.primary }, "Guia — como montar um servidor MCP compatível"),
         h(Box, { marginTop: 1 }),
         h(Box, { flexDirection: "column" }, ...lines.map((line, i) => h(Text, { key: i }, line || " "))),
         h(Box, { marginTop: 1 }),
-        h(Text, { dimColor: true }, "Esc volta"),
+        h(Text, { color: theme.textMuted }, "Esc volta"),
     );
 }

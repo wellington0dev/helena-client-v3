@@ -16,7 +16,7 @@ import {
 import { CrudScreen } from "./crud-screen.ts";
 import { Form } from "./form.ts";
 import { SelectMenu, type SelectMenuItem } from "./select-menu.ts";
-import { c, theme } from "./theme.ts";
+import { c, theme, panel } from "./theme.ts";
 
 const h = React.createElement;
 
@@ -91,9 +91,9 @@ export function ConfigScreen(props: { backendUrl: string; token: string; onExit:
     });
 
     if (error) {
-        return h(Box, { flexDirection: "column", borderStyle: "round", borderColor: theme.danger, paddingX: 1 }, h(Text, { color: theme.danger }, `Erro: ${error}`), h(Text, { dimColor: true }, "Esc pra voltar ao chat"));
+        return h(Box, { flexDirection: "column", ...panel("danger") }, h(Text, { color: theme.danger }, `Erro: ${error}`), h(Text, { color: theme.textMuted }, "Esc pra voltar ao chat"));
     }
-    if (!me) return h(Text, { dimColor: true }, "Carregando configurações...");
+    if (!me) return h(Text, { color: theme.textMuted }, "Carregando configurações...");
 
     async function toggle(action: () => Promise<unknown>): Promise<void> {
         if (busy) return;
@@ -117,7 +117,7 @@ export function ConfigScreen(props: { backendUrl: string; token: string; onExit:
         ];
         return h(
             Box,
-            { flexDirection: "column", borderStyle: "round", borderColor: theme.border, paddingX: 1 },
+            { flexDirection: "column", ...panel("border") },
             h(Text, { bold: true, color: theme.primary }, `Configurações — ${me.email}`),
             h(Box, { marginTop: 1 }),
             h(StringSelectMenu, {
@@ -132,7 +132,7 @@ export function ConfigScreen(props: { backendUrl: string; token: string; onExit:
                 },
             }),
             h(Box, { marginTop: 1 }),
-            h(Text, { dimColor: true }, busy ? "salvando..." : "1-4 ou ↑↓+Enter · Esc volta pro chat"),
+            h(Text, { color: theme.textMuted }, busy ? "salvando..." : "1-4 ou ↑↓+Enter · Esc volta pro chat"),
         );
     }
 
@@ -188,12 +188,12 @@ export function ConfigScreen(props: { backendUrl: string; token: string; onExit:
     const created = screen.created;
     return h(
         Box,
-        { flexDirection: "column", borderStyle: "round", borderColor: theme.success, paddingX: 1 },
+        { flexDirection: "column", ...panel("success") },
         h(Text, { bold: true, color: theme.success }, "Token criado"),
-        h(Text, { dimColor: true }, "Copie agora — não vai aparecer de novo:"),
+        h(Text, { color: theme.textMuted }, "Copie agora — não vai aparecer de novo:"),
         h(Box, { marginTop: 1 }),
         h(Text, { color: theme.warning }, created.token),
         h(Box, { marginTop: 1 }),
-        h(Text, { dimColor: true }, "Esc volta pra lista de tokens"),
+        h(Text, { color: theme.textMuted }, "Esc volta pra lista de tokens"),
     );
 }

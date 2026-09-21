@@ -83,9 +83,21 @@ test("countWrappedLines: códigos ANSI (cor) não contam como largura visível",
     assert.equal(countWrappedLines(colored, 40), 1);
 });
 
-test("measureHistoryItem: resposta da Helena é inline (rótulo na mesma linha do texto) + 1 de margem", async () => {
+test("measureHistoryItem: resposta da Helena é inline (rótulo na mesma linha do texto) dentro de uma caixa", async () => {
     const { measureHistoryItem } = await import("./viewport.ts");
+    const { MESSAGE_PADDING_Y } = await import("./theme.ts");
     const item = { id: "1", role: "assistant", text: "oi" } as never;
-    // "Helena: oi" cabe em 1 linha => 1 + margem 1 (antes eram 2 linhas: rótulo sozinho + corpo)
-    assert.equal(measureHistoryItem(item, 40), 2);
+    // "Helena: oi" cabe em 1 linha => 1 + padding vertical da caixa (topo+base) + 1 de margem
+    assert.equal(measureHistoryItem(item, 40), 1 + 2 * MESSAGE_PADDING_Y + 1);
+});
+
+test("measureHistoryItem: caixas descontam o padding lateral da largura (texto que caberia em 40 quebra em 40-2*padding)", async () => {
+    const { measureHistoryItem } = await import("./viewport.ts");
+    const { MESSAGE_PADDING_X, MESSAGE_PADDING_Y } = await import("./theme.ts");
+    const usable = 40 - 2 * MESSAGE_PADDING_X;
+    // "Você: " (6) + texto = exatamente `usable + 1` colunas → 2 linhas; com `usable` colunas → 1 linha
+    const fits = { id: "1", role: "user", text: "x".repeat(usable - 6) } as never;
+    const overflows = { id: "2", role: "user", text: "x".repeat(usable - 5) } as never;
+    assert.equal(measureHistoryItem(fits, 40), 1 + 2 * MESSAGE_PADDING_Y + 1);
+    assert.equal(measureHistoryItem(overflows, 40), 2 + 2 * MESSAGE_PADDING_Y + 1);
 });

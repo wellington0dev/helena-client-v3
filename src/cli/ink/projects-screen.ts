@@ -8,7 +8,7 @@ import { Form } from "./form.ts";
 import { ProjectDetailScreen } from "./project-detail-screen.ts";
 import type { ChatProgressEvent } from "./progress-client.ts";
 import { STATUS_LABEL } from "./project-status.ts";
-import { c, theme } from "./theme.ts";
+import { c, theme, panel } from "./theme.ts";
 
 const h = React.createElement;
 
@@ -104,7 +104,7 @@ export function ProjectsScreen(props: {
     });
 
     if (error) {
-        return h(Box, { flexDirection: "column", borderStyle: "round", borderColor: theme.danger, paddingX: 1 }, h(Text, { color: theme.danger }, `Erro: ${error}`), h(Text, { dimColor: true }, "Esc pra voltar ao chat"));
+        return h(Box, { flexDirection: "column", ...panel("danger") }, h(Text, { color: theme.danger }, `Erro: ${error}`), h(Text, { color: theme.textMuted }, "Esc pra voltar ao chat"));
     }
 
     async function handleCreate(values: Record<string, string>): Promise<void> {
@@ -242,14 +242,14 @@ function AutonomyScreen(props: { backendUrl: string; token: string; onUnauthoriz
     }
 
     if (error) return h(Text, { color: theme.danger }, `Erro: ${error} — Esc volta`);
-    if (!policies) return h(Text, { dimColor: true }, "Carregando políticas...");
+    if (!policies) return h(Text, { color: theme.textMuted }, "Carregando políticas...");
 
     const decisions: AutonomyDecision[] = ["qa_failure", "revision_scope_change"];
     return h(
         Box,
-        { flexDirection: "column", borderStyle: "round", borderColor: theme.border, paddingX: 1 },
+        { flexDirection: "column", ...panel("border") },
         h(Text, { bold: true, color: theme.primary }, "Políticas de autonomia"),
-        h(Text, { dimColor: true }, "Quando a equipe de dev topa decidir sozinha, e quando prefere te perguntar."),
+        h(Text, { color: theme.textMuted }, "Quando a equipe de dev topa decidir sozinha, e quando prefere te perguntar."),
         h(Box, { marginTop: 1 }),
         ...decisions.map((decision, i) => {
             const mode = policies[decision];
@@ -257,7 +257,7 @@ function AutonomyScreen(props: { backendUrl: string; token: string; onUnauthoriz
             return h(Text, { key: decision }, `${i + 1}) ${AUTONOMY_LABELS[decision]}  `, modeLabel);
         }),
         h(Box, { marginTop: 1 }),
-        h(Text, { dimColor: true }, busy ? "aplicando..." : "1-2 alterna · Esc volta"),
+        h(Text, { color: theme.textMuted }, busy ? "aplicando..." : "1-2 alterna · Esc volta"),
     );
 }
 
@@ -335,7 +335,7 @@ function PersonasScreen(props: {
         });
     }
 
-    if (!personas) return h(Text, { dimColor: true }, "Carregando nomes da equipe...");
+    if (!personas) return h(Text, { color: theme.textMuted }, "Carregando nomes da equipe...");
 
     const items: PersonaItem[] = AGENT_ROLES.map((role) => ({ id: role, label: `${personas[role] ?? DEFAULT_AGENT_NAMES[role]} (${role})` }));
 

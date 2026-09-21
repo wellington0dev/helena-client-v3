@@ -1,6 +1,6 @@
 import React from "react";
 import { Box, Text, useInput } from "ink";
-import { c, theme } from "./theme.ts";
+import { c, theme, panel } from "./theme.ts";
 
 const h = React.createElement;
 
@@ -123,7 +123,7 @@ export function CrudScreen<Item extends { id: string }>(props: CrudScreenProps<I
         const message = deleteConfirmLabel ? deleteConfirmLabel(confirming) : `Apagar "${itemLabel(confirming).label}"? Essa ação não pode ser desfeita.`;
         return h(
             Box,
-            { flexDirection: "column", borderStyle: "round", borderColor: theme.warning, paddingX: 1 },
+            { flexDirection: "column", ...panel("warning") },
             h(Text, { bold: true, color: theme.warning }, message),
             h(Box, { marginTop: 1 }),
             h(Text, null, "Confirmar? (s/n)"),
@@ -132,16 +132,16 @@ export function CrudScreen<Item extends { id: string }>(props: CrudScreenProps<I
 
     return h(
         Box,
-        { flexDirection: "column", borderStyle: "round", borderColor: theme.border, paddingX: 1 },
+        { flexDirection: "column", ...panel("border") },
         h(Text, { bold: true, color: theme.primary }, title),
         h(Box, { marginTop: 1 }),
         !items
-            ? h(Text, { dimColor: true }, "Carregando...")
+            ? h(Text, { color: theme.textMuted }, "Carregando...")
             : h(
                   Box,
                   { flexDirection: "column" },
-                  rows.length === 0 ? h(Text, { dimColor: true }, "Nenhum item ainda.") : null,
-                  windowed ? h(Text, { key: "__above__", dimColor: true }, win.start > 0 ? `  ↑ ${win.start} acima` : " ") : null,
+                  rows.length === 0 ? h(Text, { color: theme.textMuted }, "Nenhum item ainda.") : null,
+                  windowed ? h(Text, { key: "__above__", color: theme.textMuted }, win.start > 0 ? `  ↑ ${win.start} acima` : " ") : null,
                   ...rows.slice(win.start, win.end).map((row, offset) => {
                       const i = win.start + offset;
                       const active = i === cursor;
@@ -152,10 +152,10 @@ export function CrudScreen<Item extends { id: string }>(props: CrudScreenProps<I
                       const hintText = hint ? `  ${c.muted(hint)}` : "";
                       return h(Text, { key: row.kind === "create" ? "__create__" : row.item.id, wrap: "truncate" }, pointer, number, styledLabel, hintText);
                   }),
-                  windowed ? h(Text, { key: "__below__", dimColor: true }, win.end < rows.length ? `  ↓ ${rows.length - win.end} abaixo` : " ") : null,
+                  windowed ? h(Text, { key: "__below__", color: theme.textMuted }, win.end < rows.length ? `  ↓ ${rows.length - win.end} abaixo` : " ") : null,
               ),
         h(Box, { marginTop: 1 }),
         error ? h(Text, { color: theme.danger }, `Erro: ${error}`) : null,
-        h(Text, { dimColor: true }, busy ? "aplicando..." : `1-9, ↑↓+Enter navega${onDelete ? " · x apaga" : ""} · Esc volta`),
+        h(Text, { color: theme.textMuted }, busy ? "aplicando..." : `1-9, ↑↓+Enter navega${onDelete ? " · x apaga" : ""} · Esc volta`),
     );
 }

@@ -1,7 +1,7 @@
 import React from "react";
 import { Box, Text, useInput } from "ink";
 import type { PendingConfirmation } from "../backend.ts";
-import { theme } from "./theme.ts";
+import { theme, panel } from "./theme.ts";
 import { countWrappedLines } from "./viewport.ts";
 
 /**
@@ -112,17 +112,17 @@ export function PermissionDialog(props: { pending: PendingConfirmation; onAnswer
 
     return h(
         Box,
-        { flexDirection: "column", borderStyle: "round", borderColor: theme.warning, paddingX: 1 },
+        { flexDirection: "column", ...panel("warning") },
         h(Text, { color: theme.warning, bold: true }, view.title),
         h(Text, { bold: true }, view.primary),
-        view.context ? h(Text, { dimColor: true }, view.context) : null,
+        view.context ? h(Text, { color: theme.textMuted }, view.context) : null,
         h(Text, null, " "),
         h(Text, null, view.question),
         ...view.options.map((option, i) =>
             i === selected
                 ? h(Text, { key: option.decision, color: theme.primary, bold: true }, optionText(option, i))
-                : h(Text, { key: option.decision, dimColor: true }, `  ${i + 1}. ${option.label}`),
+                : h(Text, { key: option.decision, color: theme.textMuted }, `  ${i + 1}. ${option.label}`),
         ),
-        h(Text, { dimColor: true }, view.hint),
+        h(Text, { color: theme.textMuted }, view.hint),
     );
 }

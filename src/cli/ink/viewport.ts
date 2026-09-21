@@ -3,6 +3,7 @@ import { formatToolCall, formatToolResult } from "./format-tool-call.ts";
 import { formatUsageLine } from "./format-usage.ts";
 import { renderMarkdownAnsi } from "./render-markdown.ts";
 import type { HistoryItem } from "./history-item.ts";
+import { MESSAGE_PADDING_X, MESSAGE_PADDING_Y, NOTICE_PADDING_Y } from "./theme.ts";
 
 /**
  * Medição de altura pro fullscreen (alt-screen, ver app.ts/chat.ts) — no
@@ -46,8 +47,11 @@ export function measureHistoryItem(item: HistoryItem, columns: number): number {
     if (item.role === "tool_result") {
         return countWrappedLines(`⎿ ${formatToolResult(item.name, item.output)}`, columns - 2) + 1;
     }
+    // Avisos e mensagens são CAIXAS coloridas (ver HistoryLine): largura útil = colunas - padding lateral; altura += padding vertical.
+    const boxWidth = columns - 2 * MESSAGE_PADDING_X;
+    const boxPadding = 2 * MESSAGE_PADDING_Y;
     if (item.role === "notice") {
-        return countWrappedLines(item.text, columns) + 1;
+        return countWrappedLines(item.text, boxWidth) + 2 * NOTICE_PADDING_Y + 1;
     }
     if (item.role === "usage") {
         return countWrappedLines(formatUsageLine(item.usage), columns) + 1;
@@ -56,10 +60,10 @@ export function measureHistoryItem(item: HistoryItem, columns: number): number {
         // Inline ("Você: <texto>", uma unidade só que quebra como
         // parágrafo) — tem que medir a MESMA string concatenada que
         // HistoryLine desenha, não rótulo e corpo separados.
-        return countWrappedLines(`Você: ${item.text}`, columns) + 1;
+        return countWrappedLines(`Você: ${item.text}`, boxWidth) + boxPadding + 1;
     }
     // Inline como "Você:" (rótulo + resposta na MESMA linha) — mesma string concatenada que HistoryLine desenha.
-    return countWrappedLines(`Helena: ${renderMarkdownAnsi(item.text)}`, columns) + 1;
+    return countWrappedLines(`Helena: ${renderMarkdownAnsi(item.text)}`, boxWidth) + boxPadding + 1;
 }
 
 /**

@@ -19,7 +19,7 @@ import { sumTokensSpent } from "./project-cost.ts";
 import { roleLabelFor } from "./project-progress.ts";
 import type { ChatProgressEvent } from "./progress-client.ts";
 import { canCancel, canDelete, canRequestRevision, canResume, orderSteps, STATUS_LABEL } from "./project-status.ts";
-import { c, theme } from "./theme.ts";
+import { c, theme, panel } from "./theme.ts";
 
 const h = React.createElement;
 
@@ -179,10 +179,10 @@ export function ProjectDetailScreen(props: {
     }
 
     if (error) {
-        return h(Box, { flexDirection: "column", borderStyle: "round", borderColor: theme.danger, paddingX: 1 }, h(Text, { color: theme.danger }, `Erro: ${error}`), h(Text, { dimColor: true }, "Esc volta pra visão geral (Esc de novo sai)"));
+        return h(Box, { flexDirection: "column", ...panel("danger") }, h(Text, { color: theme.danger }, `Erro: ${error}`), h(Text, { color: theme.textMuted }, "Esc volta pra visão geral (Esc de novo sai)"));
     }
     if (!detail) {
-        return h(Text, { dimColor: true }, "Carregando Project...");
+        return h(Text, { color: theme.textMuted }, "Carregando Project...");
     }
 
     if (screen.kind === "step") {
@@ -243,11 +243,11 @@ export function ProjectDetailScreen(props: {
 
     return h(
         Box,
-        { flexDirection: "column", borderStyle: "round", borderColor: theme.border, paddingX: 1 },
+        { flexDirection: "column", ...panel("border") },
         h(Text, { bold: true, color: theme.primary }, detail.project.spec),
-        h(Text, { dimColor: true }, `Status: ${STATUS_LABEL[project.status]} · Custo estimado: ${cost.toLocaleString("pt-BR")} tokens${project.machine ? ` · Máquina: ${project.machine}` : ""}`),
+        h(Text, { color: theme.textMuted }, `Status: ${STATUS_LABEL[project.status]} · Custo estimado: ${cost.toLocaleString("pt-BR")} tokens${project.machine ? ` · Máquina: ${project.machine}` : ""}`),
         h(Box, { marginTop: 1 }),
-        h(Text, { dimColor: true }, "Equipe:"),
+        h(Text, { color: theme.textMuted }, "Equipe:"),
         ...steps.map((step, i) => {
             const active = i === cursor;
             const pointer = active ? c.primary("❯ ") : "  ";
@@ -257,7 +257,7 @@ export function ProjectDetailScreen(props: {
             return h(Text, { key: step.role }, pointer, number, active ? c.primary(label) : label, tokens);
         }),
         h(Box, { marginTop: 1 }),
-        h(Text, { dimColor: true }, busy ? "aplicando..." : `1-9/↑↓+Enter abre a conversa do agente${hints.length ? ` · ${hints.join(" · ")}` : ""} · Esc volta`),
+        h(Text, { color: theme.textMuted }, busy ? "aplicando..." : `1-9/↑↓+Enter abre a conversa do agente${hints.length ? ` · ${hints.join(" · ")}` : ""} · Esc volta`),
     );
 }
 
@@ -266,7 +266,7 @@ function FallbackBack(props: { message: string; onBack: () => void }): React.Rea
     useInput((_input, key) => {
         if (key.escape) props.onBack();
     });
-    return h(Text, { dimColor: true }, `${props.message} Esc volta.`);
+    return h(Text, { color: theme.textMuted }, `${props.message} Esc volta.`);
 }
 
 function ConfirmPrompt(props: { message: string; busy: boolean; onAnswer: (yes: boolean) => void }): React.ReactElement {
@@ -278,7 +278,7 @@ function ConfirmPrompt(props: { message: string; busy: boolean; onAnswer: (yes: 
     });
     return h(
         Box,
-        { flexDirection: "column", borderStyle: "round", borderColor: theme.warning, paddingX: 1 },
+        { flexDirection: "column", ...panel("warning") },
         h(Text, { bold: true, color: theme.warning }, props.message),
         h(Text, null, props.busy ? "aplicando..." : "Confirmar? (s/n)"),
     );
@@ -351,17 +351,17 @@ function StepScreen(props: { backendUrl: string; token: string; projectId: strin
         });
     }
 
-    if (!transcript) return h(Text, { dimColor: true }, "Carregando conversa...");
+    if (!transcript) return h(Text, { color: theme.textMuted }, "Carregando conversa...");
 
     return h(
         Box,
-        { flexDirection: "column", borderStyle: "round", borderColor: theme.border, paddingX: 1 },
+        { flexDirection: "column", ...panel("border") },
         h(Text, { bold: true, color: theme.primary }, `${roleLabelFor(step.role)} — ${STEP_STATUS_LABEL[step.status]}`),
         transcript.error ? h(Text, { color: theme.danger }, transcript.error) : null,
         h(Box, { marginTop: 1, flexDirection: "column" }, ...transcript.messages.map((msg, i) => h(TranscriptLine, { key: i, msg }))),
         h(Box, { marginTop: 1 }),
         error ? h(Text, { color: theme.danger }, `Erro: ${error}`) : null,
-        h(Text, { dimColor: true }, isIdle ? "m manda mensagem · Esc volta" : "Agente ainda rodando — não dá pra mandar mensagem agora · Esc volta"),
+        h(Text, { color: theme.textMuted }, isIdle ? "m manda mensagem · Esc volta" : "Agente ainda rodando — não dá pra mandar mensagem agora · Esc volta"),
     );
 }
 

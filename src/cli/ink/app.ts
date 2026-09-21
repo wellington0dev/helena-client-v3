@@ -30,7 +30,7 @@ import { connectProgress, type ChatProgressEvent, type AgentPlan, type PlanStep 
 import { formatProjectChecklist, formatProjectSummary, type ProjectStepsByRole } from "./project-progress.ts";
 import { renderMarkdownAnsi } from "./render-markdown.ts";
 import { countWrappedLines, fitToViewport, measureHistoryItem } from "./viewport.ts";
-import { c, theme } from "./theme.ts";
+import { bg, c, theme, panel, MESSAGE_PADDING_X, MESSAGE_PADDING_Y, NOTICE_PADDING_Y } from "./theme.ts";
 
 /**
  * Comandos por barra — padrão opencode/Hermes Agent CLI: tudo dentro do
@@ -75,27 +75,29 @@ function HistoryLine({ item }: { item: HistoryItem }): React.ReactElement {
         return h(Box, null, h(Text, { color: theme.textMuted }, "● ", formatToolCall(item.name, item.input)));
     }
     if (item.role === "tool_result") {
-        return h(Box, { flexDirection: "column", marginBottom: 1, paddingLeft: 2 }, h(Text, { color: theme.textMuted, dimColor: true }, "⎿ ", formatToolResult(item.name, item.output)));
+        return h(Box, { flexDirection: "column", marginBottom: 1, paddingLeft: 2 }, h(Text, { color: theme.textMuted }, "⎿ ", formatToolResult(item.name, item.output)));
     }
+    // Avisos e mensagens são CAIXAS de fundo colorido (sem bordas) — ver theme.ts. measureHistoryItem (viewport.ts)
+    // mede com os mesmos MESSAGE_PADDING_*; mudou o layout aqui, muda lá.
+    const box = (background: string, paddingY = MESSAGE_PADDING_Y): { marginBottom: number; backgroundColor: string; paddingX: number; paddingY: number } => ({
+        marginBottom: 1,
+        backgroundColor: background,
+        paddingX: MESSAGE_PADDING_X,
+        paddingY,
+    });
     if (item.role === "notice") {
-        const color = item.tone === "success" ? theme.success : item.tone === "danger" ? theme.danger : theme.warning;
-        return h(Box, { marginBottom: 1 }, h(Text, { color }, item.text));
+        const [background, color] = item.tone === "success" ? [bg.success, theme.success] : item.tone === "danger" ? [bg.danger, theme.danger] : item.tone === "info" ? [bg.surface, undefined] : [bg.warning, theme.warning];
+        return h(Box, box(background, NOTICE_PADDING_Y), h(Text, { color }, item.text));
     }
     if (item.role === "usage") {
-        return h(Box, { marginBottom: 1 }, h(Text, { color: theme.textMuted, dimColor: true }, formatUsageLine(item.usage)));
+        return h(Box, { marginBottom: 1 }, h(Text, { color: theme.textMuted }, formatUsageLine(item.usage)));
     }
     if (item.role === "user") {
-        // Inline de propósito (rótulo + texto na MESMA linha, quebrando
-        // como um parágrafo só se precisar) — mensagem do usuário costuma
-        // ser curta, e "Você:" numa linha sozinha empurrando um "Opa" pra
-        // linha de baixo desperdiça uma linha inteira à toa. Ver
-        // measureHistoryItem em viewport.ts, tem que medir igual.
-        return h(Box, { marginBottom: 1 }, h(Text, null, c.primary.bold("Você:"), " ", item.text));
+        // Inline de propósito (rótulo + texto na MESMA linha, quebrando como um parágrafo só se precisar).
+        return h(Box, box(bg.user), h(Text, null, c.primary.bold("Você:"), " ", item.text));
     }
-    // Inline como "Você:" (rótulo + resposta na mesma linha; o markdown segue
-    // quebrando em várias linhas normalmente). measureHistoryItem em
-    // viewport.ts tem que medir a MESMA string concatenada.
-    return h(Box, { marginBottom: 1 }, h(Text, null, c.accent.bold("Helena:"), " ", renderMarkdownAnsi(item.text)));
+    // Helena: também inline (rótulo + resposta na mesma linha; o markdown segue quebrando em várias linhas normalmente).
+    return h(Box, box(bg.helena), h(Text, null, c.accent.bold("Helena:"), " ", renderMarkdownAnsi(item.text)));
 }
 
 /** Checklist ao vivo de Project(s) da equipe de dev em andamento — some sozinho quando o Project termina (o resultado final vira um item "notice" permanente no histórico, ver ChatProgressEvent#project_event). Raramente mais de um Project por vez, mas o Map suporta. */
@@ -108,9 +110,9 @@ function ProjectProgressPanel({ projectSteps }: { projectSteps: Map<string, Proj
         ...[...projectSteps.entries()].map(([projectId, steps]) =>
             h(
                 Box,
-                { key: projectId, flexDirection: "column", borderStyle: "round", borderColor: theme.border, paddingX: 1 },
+                { key: projectId, flexDirection: "column", ...panel("border") },
                 h(Text, { color: theme.primary, bold: true }, `Equipe de dev — ${formatProjectSummary(steps)}`),
-                ...formatProjectChecklist(steps).map((line, i) => h(Text, { key: i, dimColor: line.startsWith("○") }, line)),
+                ...formatProjectChecklist(steps).map((line, i) => h(Text, { key: i, color: line.startsWith("○") ? theme.textMuted : undefined }, line)),
             ),
         ),
     );
@@ -138,12 +140,12 @@ function PlanPanel({ plan }: { plan: AgentPlan | null }): React.ReactElement | n
 
     return h(
         Box,
-        { flexDirection: "column", marginBottom: 1, borderStyle: "round", borderColor: theme.border, paddingX: 1 },
+        { flexDirection: "column", marginBottom: 1, ...panel("border") },
         h(Box, { gap: 1 },
             h(Text, { color: theme.accent, bold: true }, `Plano: ${plan.title}`),
             h(Text, { color: statusColor, bold: true }, statusLabel),
         ),
-        h(Text, { dimColor: true }, plan.description),
+        h(Text, { color: theme.textMuted }, plan.description),
         h(Text, null, " "),
         ...plan.steps.map((step, i) => {
             const stepIcon = step.status === "completed" ? "✓"
@@ -161,7 +163,7 @@ function PlanPanel({ plan }: { plan: AgentPlan | null }): React.ReactElement | n
                 Box,
                 { key: step.id, flexDirection: "column", marginBottom: i === plan.steps.length - 1 ? 0 : 1 },
                 h(Text, { color: stepColor }, `${indent}${stepIcon} ${step.title}`),
-                ...(step.description ? [h(Text, { dimColor: true }, `${indent}  ${step.description}`)] : []),
+                ...(step.description ? [h(Text, { color: theme.textMuted }, `${indent}  ${step.description}`)] : []),
                 ...(step.error ? [h(Text, { color: theme.danger }, `${indent}  Erro: ${step.error}`)] : []),
             );
         }),
@@ -186,7 +188,7 @@ function measurePlanPanel(plan: AgentPlan | null, columns: number): number {
 }
 
 function StatusLine({ text }: { text: string }): React.ReactElement {
-    return h(Box, { gap: 1 }, h(Text, { color: theme.primary }, h(Spinner, { type: "dots" })), h(Text, { dimColor: true }, text));
+    return h(Box, { gap: 1 }, h(Text, { color: theme.primary }, h(Spinner, { type: "dots" })), h(Text, { color: theme.textMuted }, text));
 }
 
 /** "❯"/spinner + `gap:1` comem ~3 colunas antes do texto de verdade — subtrai como margem de segurança (superestimar é seguro, ver viewport.ts). */
@@ -199,7 +201,7 @@ function Composer(props: { value: string; onChange: (v: string) => void; onSubmi
         Box,
         // Caixa em volta do input: borda (1 col cada lado) + paddingX 1 => 4 colunas e 2 linhas
         // a mais que o composer sem caixa — measureComposer abaixo desconta as duas coisas.
-        { borderStyle: "round", borderColor: theme.border, paddingX: 1 },
+        { ...panel("border") },
         // marginRight em vez de `gap`: com texto longo (quebrando) o gap sumia e o "❯" colava na 1ª letra.
         h(Box, { flexShrink: 0, marginRight: 1 }, h(Text, { color: theme.success, bold: true }, "❯")),
         // `key: resetKey` força o TextInput a REMONTAR quando o Tab do menu de
@@ -233,7 +235,7 @@ function measureComposer(value: string, columns: number): number {
 function CommandMenu(props: { commands: Command[]; activeIndex: number }): React.ReactElement {
     return h(
         Box,
-        { flexDirection: "column", borderStyle: "round", borderColor: theme.border, paddingX: 1 },
+        { flexDirection: "column", ...panel("raised") },
         ...props.commands.map((cmd, i) => {
             const active = i === props.activeIndex;
             const names = [`/${cmd.name}`, ...(cmd.aliases ?? []).map((a) => `/${a}`)].join(", ");
@@ -241,7 +243,7 @@ function CommandMenu(props: { commands: Command[]; activeIndex: number }): React
             const label = active ? c.primary.bold(names) : names;
             return h(Text, { key: cmd.name }, pointer, label, "  ", c.muted(cmd.description));
         }),
-        h(Text, { dimColor: true }, "↑↓ navegar · Tab completar · Enter executar"),
+        h(Text, { color: theme.textMuted }, "↑↓ navegar · Tab completar · Enter executar"),
     );
 }
 
@@ -261,11 +263,11 @@ function MentionMenu(props: { files: string[]; activeIndex: number; columns: num
     const width = Math.max(4, props.columns - 8);
     return h(
         Box,
-        { flexDirection: "column", borderStyle: "round", borderColor: theme.border, paddingX: 1 },
+        { flexDirection: "column", ...panel("raised") },
         ...props.files.map((file, i) =>
             i === props.activeIndex ? h(Text, { key: file, color: theme.primary, bold: true }, `❯ ${truncateToWidth(file, width)}`) : h(Text, { key: file }, `  ${truncateToWidth(file, width)}`),
         ),
-        h(Text, { dimColor: true }, "↑↓ navegar · Tab/Enter completar"),
+        h(Text, { color: theme.textMuted }, "↑↓ navegar · Tab/Enter completar"),
     );
 }
 
@@ -275,8 +277,9 @@ function measureMentionMenu(files: string[]): number {
 
 /** Rodapé de 1 linha (máquina · branch · pasta · tokens · sessão) + alertas à direita. Ver status-bar.ts. */
 function StatusBar(props: { info: Parameters<typeof statusBarParts>[0]; width: number }): React.ReactElement {
-    const { main, alert } = statusBarParts(props.info, props.width);
-    return h(Box, { justifyContent: "space-between", width: props.width }, h(Text, { dimColor: true, wrap: "truncate" }, main), alert ? h(Text, { color: theme.warning, wrap: "truncate" }, alert) : null);
+    // Fundo `panel` (mais escuro que o chat) com 1 coluna de respiro de cada lado — sem linha separando.
+    const { main, alert } = statusBarParts(props.info, props.width - 2);
+    return h(Box, { justifyContent: "space-between", width: props.width, backgroundColor: bg.panel, paddingX: 1 }, h(Text, { color: theme.textMuted, wrap: "truncate" }, main), alert ? h(Text, { color: theme.warning, wrap: "truncate" }, alert) : null);
 }
 
 function shortPath(cwd: string): string {
@@ -293,20 +296,20 @@ const MIN_COLUMNS_FOR_SIDEBAR = 100;
  * (nunca quebra), então não mexe na conta de linhas do chat — só desconta SIDEBAR_WIDTH das colunas.
  */
 function Sidebar({ cwd, entries, height }: { cwd: string; entries: ReturnType<typeof readWorktree>; height: number }): React.ReactElement {
-    const contentWidth = SIDEBAR_WIDTH - 3; // borda direita + paddingX 1 (esq/dir)
+    const contentWidth = SIDEBAR_WIDTH - 3; // paddingX 1 (esq/dir) + 1 de folga
     const treeRows = Math.max(0, height - 3); // título + pasta + linha em branco
     const lines = renderWorktreeLines(entries, contentWidth, treeRows);
     const home = process.env.HOME ?? "";
     const shownPath = home && cwd.startsWith(home) ? `~${cwd.slice(home.length)}` : cwd;
     return h(
         Box,
-        { flexDirection: "column", width: SIDEBAR_WIDTH, height, borderStyle: "single", borderColor: theme.border, borderTop: false, borderBottom: false, borderLeft: false, paddingX: 1 },
+        { flexDirection: "column", width: SIDEBAR_WIDTH, height, backgroundColor: bg.panel, paddingX: 1 },
         h(Text, { color: theme.primary, bold: true, wrap: "truncate" }, "Worktree"),
-        h(Text, { dimColor: true, wrap: "truncate-start" }, shownPath),
+        h(Text, { color: theme.textMuted, wrap: "truncate-start" }, shownPath),
         h(Text, null, " "),
         ...(lines.length > 0
-            ? lines.map((line, i) => h(Text, { key: i, wrap: "truncate", color: line.includes("▸ ") ? theme.primary : undefined }, line))
-            : [h(Text, { key: "empty", dimColor: true }, "(vazio)")]),
+            ? lines.map((line, i) => h(Text, { key: i, wrap: "truncate", color: line.isDir ? theme.folder : undefined }, line.text))
+            : [h(Text, { key: "empty", color: theme.textMuted }, "(vazio)")]),
     );
 }
 
@@ -797,7 +800,7 @@ export function App(props: AppProps): React.ReactElement {
     // sem altura própria) fica com espaço em branco embaixo quando o
     // conteúdo dela é mais curto que o terminal, em vez de deixar o resto
     // da tela vazio fora do controle do Ink (ver chat.ts pro alt-screen).
-    const fullScreen = (child: React.ReactElement): React.ReactElement => h(Box, { flexDirection: "column", height: usableRows }, child);
+    const fullScreen = (child: React.ReactElement): React.ReactElement => h(Box, { flexDirection: "column", height: usableRows, width: columns, backgroundColor: bg.base }, child);
 
     if (screen === "sessions") {
         return fullScreen(h(SessionsScreen, { backendUrl, token, onPick: (session: SessionSummary) => void resumeSession(session), onExit: () => setScreen("chat"), onUnauthorized }));
@@ -844,7 +847,7 @@ export function App(props: AppProps): React.ReactElement {
 
     const chat = h(
         Box,
-        { flexDirection: "column", height: usableRows, width: mainColumns },
+        { flexDirection: "column", height: usableRows, width: mainColumns, backgroundColor: bg.base },
         // `flexGrow:1`: quando o histórico visível é mais curto que o
         // orçamento (`availableHistoryRows`), o Yoga estica esta caixa em
         // vez de deixar o composer grudado logo abaixo da última mensagem
@@ -853,10 +856,10 @@ export function App(props: AppProps): React.ReactElement {
         // mais que `availableHistoryRows`), esticar aqui nunca estoura
         // `usableRows` no total.
         h(Box, { flexDirection: "column", flexGrow: 1 }, ...visibleHistory.map((item) => h(HistoryLine, { key: item.id, item }))),
-        h(Text, { dimColor: true }, exitHint ? "Pressione Ctrl+C de novo para sair" : scrollHintText(canScrollUp, canScrollDown)),
+        h(Text, { color: theme.textMuted }, exitHint ? "Pressione Ctrl+C de novo para sair" : scrollHintText(canScrollUp, canScrollDown)),
         h(ProjectProgressPanel, { projectSteps }),
         h(PlanPanel, { plan: activePlan }),
-        error ? h(Text, { color: "red" }, `[erro] ${error}`) : null,
+        error ? h(Text, { color: theme.danger }, `[erro] ${error}`) : null,
         liveRegion,
         showCommandMenu ? h(CommandMenu, { commands: filteredCommands, activeIndex: commandMenuIndex }) : null,
         showMentionMenu ? h(MentionMenu, { files: mentionMatches, activeIndex: mentionIndex, columns: mainColumns }) : null,

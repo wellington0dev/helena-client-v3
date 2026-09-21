@@ -5,6 +5,7 @@ import { UnauthorizedError } from "../backend.ts";
 import { CrudScreen } from "./crud-screen.ts";
 import { Form } from "./form.ts";
 import { McpGuideScreen } from "./mcp-guide-screen.ts";
+import { theme } from "./theme.ts";
 
 const h = React.createElement;
 
@@ -84,7 +85,7 @@ export function McpScreen(props: { backendUrl: string; token: string; onExit: ()
     });
 
     if (error) {
-        return h(Text, { color: "red" }, `Erro: ${error} — Esc pra voltar ao chat`);
+        return h(Text, { color: theme.danger }, `Erro: ${error} — Esc pra voltar ao chat`);
     }
 
     async function handleDelete(conn: McpConnectionSummary): Promise<void> {

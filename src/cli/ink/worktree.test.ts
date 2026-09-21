@@ -30,22 +30,25 @@ test("readWorktree: diretório inexistente devolve vazio, sem lançar", () => {
     assert.deepEqual(readWorktree("/caminho/que/nao/existe"), []);
 });
 
-test("renderWorktreeLines: desenha ├─/└─ e marca pastas", () => {
+test("renderWorktreeLines: só indentação (sem ├─/└─); pasta aberta ▾, fechada ▸, arquivo alinhado", () => {
     const entries: WorktreeEntry[] = [
         { name: "src", depth: 0, isDir: true },
         { name: "main.ts", depth: 1, isDir: false },
-        { name: "util.ts", depth: 1, isDir: false },
+        { name: "vazia", depth: 1, isDir: true },
         { name: "README.md", depth: 0, isDir: false },
     ];
-    assert.deepEqual(renderWorktreeLines(entries, 40, 10), ["├─ ▸ src/", "  ├─ main.ts", "  └─ util.ts", "└─ README.md"]);
+    const lines = renderWorktreeLines(entries, 40, 10);
+    assert.deepEqual(lines.map((l) => l.text), ["▾ src/", "    main.ts", "  ▸ vazia/", "  README.md"]);
+    assert.deepEqual(lines.map((l) => l.isDir), [true, false, true, false]);
+    for (const l of lines) assert.ok(!/[├└│─]/.test(l.text), `sem linhas de árvore: "${l.text}"`);
 });
 
 test("renderWorktreeLines: nunca passa da largura nem do orçamento de linhas", () => {
     const entries: WorktreeEntry[] = Array.from({ length: 30 }, (_, i) => ({ name: `arquivo-com-nome-bem-comprido-${i}.ts`, depth: i % 3, isDir: i % 5 === 0 }));
     const lines = renderWorktreeLines(entries, 20, 8);
     assert.equal(lines.length, 8);
-    for (const line of lines) assert.ok(stringWidth(line) <= 20, `"${line}" passou de 20 colunas`);
-    assert.match(lines[7]!, /^… \+\d+ itens$/);
+    for (const line of lines) assert.ok(stringWidth(line.text) <= 20, `"${line.text}" passou de 20 colunas`);
+    assert.match(lines[7]!.text, /^… \+\d+ itens$/);
 });
 
 test("truncateToWidth: corta com … e conta largura visível (acento/emoji)", () => {

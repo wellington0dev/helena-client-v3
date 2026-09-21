@@ -14,7 +14,7 @@ export type HistoryItem =
     /** Resultado de UMA tool — só existe depois que o turno inteiro termina (`SendMessageResult#toolActivity`, ver backend.ts), então sempre aparece em lote, depois de todas as chamadas ao vivo do mesmo turno — nunca intercalado 1-a-1 (o Agent Beta do Genkit não expõe resultado durante o streaming, só no fim). */
     | { id: string; role: "tool_result"; name: string; output: unknown }
     /** Aviso empurrado FORA de qualquer turno de chat em andamento — marco de Project da equipe de dev (pausou/concluiu) ou conclusão de shell em segundo plano (ver ChatProgressEvent#project_event/job_done). Nunca gated por "sending": pode chegar a qualquer momento, mesmo sem o dono ter mandado nada agora. */
-    | { id: string; role: "notice"; text: string; tone: "success" | "warn" | "danger" }
+    | { id: string; role: "notice"; text: string; tone: "success" | "warn" | "danger" | "info" }
     /** Linha discreta de custo do turno (tokens/duração) — ver SendMessageResult#usage. Sempre logo ABAIXO do texto do turno a que pertence. */
     | { id: string; role: "usage"; usage: TurnUsage };
 
@@ -28,7 +28,7 @@ export function toolCallItem(name: string, input: unknown): HistoryItem {
 export function toolResultItem(name: string, output: unknown): HistoryItem {
     return { id: `h${nextId++}`, role: "tool_result", name, output };
 }
-export function noticeItem(text: string, tone: "success" | "warn" | "danger"): HistoryItem {
+export function noticeItem(text: string, tone: "success" | "warn" | "danger" | "info"): HistoryItem {
     return { id: `h${nextId++}`, role: "notice", text, tone };
 }
 export function usageItem(usage: TurnUsage): HistoryItem {

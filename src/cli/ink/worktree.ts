@@ -90,30 +90,26 @@ export function truncateToWidth(text: string, width: number): string {
     return acc + "…";
 }
 
+export interface WorktreeLine {
+    text: string;
+    isDir: boolean;
+}
+
 /**
- * Desenha as entradas como árvore (`├─`/`└─`, `▸` em pasta). `maxLines` é o
- * orçamento de linhas da sidebar; se a árvore não cabe, a última linha vira
- * "… +N" com o quanto ficou de fora.
+ * Desenha as entradas só com INDENTAÇÃO (2 espaços por nível) — sem `├─`/`└─`: a hierarquia é lida pela indentação e
+ * pela cor (pasta × arquivo, a cor é decidida por `isDir` em app.ts). Pasta aberta (com filhos logo abaixo) usa `▾`,
+ * fechada/no limite de profundidade usa `▸`; arquivo alinha o nome com o das pastas. `maxLines` é o orçamento de
+ * linhas; se a árvore não cabe, a última linha vira "… +N itens". Cada linha cabe em `width` colunas.
  */
-export function renderWorktreeLines(entries: WorktreeEntry[], width: number, maxLines: number): string[] {
+export function renderWorktreeLines(entries: WorktreeEntry[], width: number, maxLines: number): WorktreeLine[] {
     if (maxLines <= 0) return [];
-    const lines: string[] = [];
-    entries.forEach((entry, i) => {
-        // último irmão = próxima entrada de profundidade <= a dele é mais rasa (ou não há próxima)
-        let isLast = true;
-        for (let j = i + 1; j < entries.length; j++) {
-            if (entries[j]!.depth < entry.depth) break;
-            if (entries[j]!.depth === entry.depth) {
-                isLast = false;
-                break;
-            }
-        }
+    const lines: WorktreeLine[] = entries.map((entry, i) => {
         const indent = "  ".repeat(Math.max(0, entry.depth));
-        const branch = isLast ? "└─ " : "├─ ";
-        const label = entry.isDir ? `▸ ${entry.name}/` : entry.name;
-        lines.push(truncateToWidth(indent + branch + label, width));
+        const expanded = entry.isDir && entries[i + 1] !== undefined && entries[i + 1]!.depth > entry.depth;
+        const label = entry.isDir ? `${expanded ? "▾" : "▸"} ${entry.name}/` : `  ${entry.name}`;
+        return { text: truncateToWidth(indent + label, width), isDir: entry.isDir };
     });
     if (lines.length <= maxLines) return lines;
     const hidden = lines.length - (maxLines - 1);
-    return [...lines.slice(0, maxLines - 1), truncateToWidth(`… +${hidden} itens`, width)];
+    return [...lines.slice(0, maxLines - 1), { text: truncateToWidth(`… +${hidden} itens`, width), isDir: false }];
 }

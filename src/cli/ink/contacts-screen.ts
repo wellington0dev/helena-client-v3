@@ -4,7 +4,7 @@ import { deleteContact, listContacts, updateContact, type Contact, type Grantabl
 import { UnauthorizedError } from "../backend.ts";
 import { CrudScreen } from "./crud-screen.ts";
 import { Form } from "./form.ts";
-import { c, theme } from "./theme.ts";
+import { c, theme, panel } from "./theme.ts";
 
 const h = React.createElement;
 
@@ -86,7 +86,7 @@ export function ContactsScreen(props: { backendUrl: string; token: string; onExi
     });
 
     if (error) {
-        return h(Box, { flexDirection: "column", borderStyle: "round", borderColor: theme.danger, paddingX: 1 }, h(Text, { color: theme.danger }, `Erro: ${error}`), h(Text, { dimColor: true }, "Esc pra voltar ao chat"));
+        return h(Box, { flexDirection: "column", ...panel("danger") }, h(Text, { color: theme.danger }, `Erro: ${error}`), h(Text, { color: theme.textMuted }, "Esc pra voltar ao chat"));
     }
 
     async function handleDelete(contact: Contact): Promise<void> {
@@ -194,15 +194,15 @@ function GrantToolsScreen(props: {
 
     return h(
         Box,
-        { flexDirection: "column", borderStyle: "round", borderColor: theme.border, paddingX: 1 },
+        { flexDirection: "column", ...panel("border") },
         h(Text, { bold: true, color: theme.primary }, `Permissões extras — ${contactLabel}`),
-        h(Text, { dimColor: true }, "O que este contato pode gerenciar SOZINHO (além de conversar com a Helena)."),
+        h(Text, { color: theme.textMuted }, "O que este contato pode gerenciar SOZINHO (além de conversar com a Helena)."),
         h(Box, { marginTop: 1 }),
         ...GRANTABLE_TOOLS.map((tool, i) => {
             const enabled = grantedTools.includes(tool.key);
             return h(Text, { key: tool.key }, `${i + 1}) `, tool.label, "  ", enabled ? c.success("concedido") : c.muted("não concedido"));
         }),
         h(Box, { marginTop: 1 }),
-        h(Text, { dimColor: true }, busy ? "salvando..." : "1-3 alterna · Enter salva · Esc volta pro formulário"),
+        h(Text, { color: theme.textMuted }, busy ? "salvando..." : "1-3 alterna · Enter salva · Esc volta pro formulário"),
     );
 }
