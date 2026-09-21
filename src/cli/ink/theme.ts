@@ -17,6 +17,8 @@ export const bg = {
     surface: "#24283b",
     /** Menus/sugestões que abrem em cima de uma área "surface" (autocomplete de / e @) — um degrau acima pra não se fundir com o campo de digitar. */
     raised: "#2f3550",
+    /** Linha selecionada/sob o mouse em listas e menus. */
+    selected: "#343b5e",
     /** Mensagem do usuário — azul acinzentado. */
     user: "#2b3556",
     /** Mensagem da Helena — violeta bem discreto. */

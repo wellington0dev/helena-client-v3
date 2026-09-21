@@ -12,7 +12,7 @@
  * Cobrança/Uso) só entram aqui quando a tela correspondente for entregue
  * — nunca um `/comando` morto aparecendo no `/help` antes de existir.
  */
-export type Screen = "chat" | "config" | "contacts" | "mcp" | "channels" | "usage" | "billing" | "projects" | "permissions" | "sessions";
+export type Screen = "chat" | "config" | "contacts" | "mcp" | "channels" | "usage" | "billing" | "projects" | "permissions" | "sessions" | "settings";
 
 export interface CommandContext {
     setScreen: (screen: Screen) => void;
@@ -33,9 +33,9 @@ export interface Command {
 export const COMMANDS: Command[] = [
     {
         name: "config",
-        aliases: ["settings"],
-        description: "Preferências — telemetria, auto-approve shell, mensagem proativa, tokens de API",
-        run: (ctx) => ctx.setScreen("config"),
+        aliases: ["settings", "configuracoes", "ajustes"],
+        description: "Configurações — preferências, segurança, conta e atalhos (com mouse)",
+        run: (ctx) => ctx.setScreen("settings"),
     },
     {
         name: "contatos",

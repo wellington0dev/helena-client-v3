@@ -44,13 +44,13 @@ function formatDate(iso: string | null | undefined): string {
     return new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
-export function ConfigScreen(props: { backendUrl: string; token: string; onExit: () => void; onUnauthorized: () => void }): React.ReactElement {
-    const { backendUrl, token, onExit, onUnauthorized } = props;
+export function ConfigScreen(props: { backendUrl: string; token: string; startAt?: "tokens"; onExit: () => void; onUnauthorized: () => void }): React.ReactElement {
+    const { backendUrl, token, startAt, onExit, onUnauthorized } = props;
     const [me, setMe] = React.useState<CurrentUser | undefined>(undefined);
     const [tokens, setTokens] = React.useState<ApiTokenSummary[] | undefined>(undefined);
     const [error, setError] = React.useState<string | undefined>(undefined);
     const [busy, setBusy] = React.useState(false);
-    const [screen, setScreen] = React.useState<Screen>({ kind: "menu" });
+    const [screen, setScreen] = React.useState<Screen>({ kind: startAt ?? "menu" });
 
     /** Toda chamada autenticada desta tela passa por aqui — trata sessão expirada (relogin) de um jeito uniforme em vez de só pintar erro vermelho e travar a tela até o dono reabrir o `helena` manualmente. */
     function handleAsyncError(err: unknown): void {
@@ -81,12 +81,13 @@ export function ConfigScreen(props: { backendUrl: string; token: string; onExit:
 
     React.useEffect(() => {
         void reloadMe();
-    }, [reloadMe]);
+        if (startAt === "tokens") void reloadTokens(); // veio do menu de configurações direto pra lista de tokens
+    }, [reloadMe, reloadTokens, startAt]);
 
     // Esc sempre sobe UM nível na hierarquia menu → tokens → create-token/token-created — nunca pula direto pro chat de um nível mais fundo. `useInput` roda independente de qual componente tem `focus` (isso só afeta o TextInput capturar a DIGITAÇÃO, não os hooks de tecla), então funciona igual em toda tela, inclusive create-token. Não se aplica à tela "tokens" — o próprio `CrudScreen` já trata Esc (chamando `onExit` que passamos abaixo).
     useInput((_input, key) => {
         if (!key.escape) return;
-        if (screen.kind === "menu") onExit();
+        if (screen.kind === "menu" || (screen.kind === "tokens" && startAt === "tokens")) onExit();
         else if (screen.kind === "create-token" || screen.kind === "token-created") setScreen({ kind: "tokens" });
     });
 
@@ -156,7 +157,7 @@ export function ConfigScreen(props: { backendUrl: string; token: string; onExit:
             onCreate: () => setScreen({ kind: "create-token" }),
             onDelete: handleDelete,
             busy,
-            onExit: () => setScreen({ kind: "menu" }),
+            onExit: () => (startAt === "tokens" ? onExit() : setScreen({ kind: "menu" })),
         });
     }
 

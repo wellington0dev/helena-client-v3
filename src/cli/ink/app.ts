@@ -8,6 +8,8 @@ import { appendInputHistory, loadInputHistory, newerEntry, NOT_NAVIGATING, older
 import { connectLocalWs } from "./local-ws-client.ts";
 import { statusBarParts } from "./status-bar.ts";
 import type { ClientState } from "../../local-api/status-bus.ts";
+import { loadCliPrefs, saveCliPrefs } from "./cli-prefs.ts";
+import { SettingsModal, type SettingsTarget } from "./settings-modal.ts";
 import { PermissionsScreen } from "./permissions-screen.ts";
 import { getSessionHistory, type SessionSummary } from "../api/sessions.ts";
 import { historyEntriesToItems, SessionsScreen } from "./sessions-screen.ts";
@@ -334,6 +336,16 @@ export function App(props: AppProps): React.ReactElement {
     const [projectSteps, setProjectSteps] = React.useState<Map<string, ProjectStepsByRole>>(new Map());
     const [activePlan, setActivePlan] = React.useState<AgentPlan | null>(null);
     const [screen, setScreen] = React.useState<Screen>("chat");
+    // Tela aberta a partir do menu de configurações volta pra ele ao apertar Esc (e não pro chat).
+    const [returnTo, setReturnTo] = React.useState<Screen>("chat");
+    function leaveScreen(): void {
+        setScreen(returnTo);
+        setReturnTo("chat");
+    }
+    function openFromSettings(target: SettingsTarget): void {
+        setReturnTo("settings");
+        setScreen(({ tokens: "config", permissions: "permissions", usage: "usage", billing: "billing", contacts: "contacts", mcp: "mcp", channels: "channels", projects: "projects", sessions: "sessions" } as const)[target]);
+    }
     const [commandMenuIndex, setCommandMenuIndex] = React.useState(0);
     // Incrementado só quando o Tab preenche o composer programaticamente —
     // vira `key` do TextInput (ver Composer) pra forçar o cursor pro fim.
@@ -352,8 +364,13 @@ export function App(props: AppProps): React.ReactElement {
 
     // Sidebar de worktree (`/worktree`). `mainColumns` é a largura REAL do chat — toda medição de altura
     // abaixo usa ela, não `columns`, senão o histórico estoura as linhas (ver viewport.ts).
-    const [sidebarOpen, setSidebarOpen] = React.useState(true);
-    const sidebarVisible = sidebarOpen && screen === "chat" && columns >= MIN_COLUMNS_FOR_SIDEBAR;
+    const [sidebarOpen, setSidebarOpen] = React.useState(() => loadCliPrefs().sidebar ?? true);
+    function changeSidebar(on: boolean): void {
+        setSidebarOpen(on);
+        saveCliPrefs({ sidebar: on }); // lembra entre sessões do helena (só desta máquina)
+    }
+    // O menu de configurações é um modal SOBRE o chat — o layout de trás (inclusive a sidebar) não muda enquanto ele está aberto.
+    const sidebarVisible = sidebarOpen && (screen === "chat" || screen === "settings") && columns >= MIN_COLUMNS_FOR_SIDEBAR;
     const mainColumns = sidebarVisible ? columns - SIDEBAR_WIDTH : columns;
     const [worktree, setWorktree] = React.useState(() => readWorktree(props.invocationCwd));
     // Relê ao começar/terminar cada turno — é quando o agente pode ter criado/apagado arquivos.
@@ -710,6 +727,7 @@ export function App(props: AppProps): React.ReactElement {
     /** Retoma uma sessão: volta pro chat na hora e carrega as últimas mensagens (a Helena já tem o contexto completo no servidor). */
     async function resumeSession(session: SessionSummary): Promise<void> {
         setScreen("chat");
+        setReturnTo("chat"); // veio do menu de configurações? não volta pra ele depois de retomar a conversa
         resetConversation();
         setSessionId(session.id);
         try {
@@ -737,7 +755,7 @@ export function App(props: AppProps): React.ReactElement {
         command.run({
             setScreen,
             pushNotice: (text, tone) => setHistory((prev) => [...prev, noticeItem(text, tone)]),
-            toggleSidebar: () => setSidebarOpen((open) => !open),
+            toggleSidebar: () => changeSidebar(!sidebarOpen),
             newSession,
         });
     }
@@ -803,33 +821,33 @@ export function App(props: AppProps): React.ReactElement {
     const fullScreen = (child: React.ReactElement): React.ReactElement => h(Box, { flexDirection: "column", height: usableRows, width: columns, backgroundColor: bg.base }, child);
 
     if (screen === "sessions") {
-        return fullScreen(h(SessionsScreen, { backendUrl, token, onPick: (session: SessionSummary) => void resumeSession(session), onExit: () => setScreen("chat"), onUnauthorized }));
+        return fullScreen(h(SessionsScreen, { backendUrl, token, onPick: (session: SessionSummary) => void resumeSession(session), onExit: leaveScreen, onUnauthorized }));
     }
 
     if (screen === "permissions") {
-        return fullScreen(h(PermissionsScreen, { backendUrl, token, onExit: () => setScreen("chat"), onUnauthorized }));
+        return fullScreen(h(PermissionsScreen, { backendUrl, token, onExit: leaveScreen, onUnauthorized }));
     }
 
     if (screen === "config") {
-        return fullScreen(h(ConfigScreen, { backendUrl, token, onExit: () => setScreen("chat"), onUnauthorized }));
+        return fullScreen(h(ConfigScreen, { backendUrl, token, startAt: "tokens", onExit: leaveScreen, onUnauthorized }));
     }
     if (screen === "contacts") {
-        return fullScreen(h(ContactsScreen, { backendUrl, token, onExit: () => setScreen("chat"), onUnauthorized }));
+        return fullScreen(h(ContactsScreen, { backendUrl, token, onExit: leaveScreen, onUnauthorized }));
     }
     if (screen === "mcp") {
-        return fullScreen(h(McpScreen, { backendUrl, token, onExit: () => setScreen("chat"), onUnauthorized }));
+        return fullScreen(h(McpScreen, { backendUrl, token, onExit: leaveScreen, onUnauthorized }));
     }
     if (screen === "channels") {
-        return fullScreen(h(ChannelsScreen, { localPort: config.localPort, onExit: () => setScreen("chat") }));
+        return fullScreen(h(ChannelsScreen, { localPort: config.localPort, onExit: leaveScreen }));
     }
     if (screen === "usage") {
-        return fullScreen(h(UsageScreen, { backendUrl, token, onExit: () => setScreen("chat"), onUnauthorized }));
+        return fullScreen(h(UsageScreen, { backendUrl, token, onExit: leaveScreen, onUnauthorized }));
     }
     if (screen === "billing") {
-        return fullScreen(h(BillingScreen, { backendUrl, token, onExit: () => setScreen("chat"), onUnauthorized }));
+        return fullScreen(h(BillingScreen, { backendUrl, token, onExit: leaveScreen, onUnauthorized }));
     }
     if (screen === "projects") {
-        return fullScreen(h(ProjectsScreen, { backendUrl, token, onExit: () => setScreen("chat"), onUnauthorized, subscribeProgress }));
+        return fullScreen(h(ProjectsScreen, { backendUrl, token, onExit: leaveScreen, onUnauthorized, subscribeProgress }));
     }
 
     const alerts: string[] = [];
@@ -843,7 +861,7 @@ export function App(props: AppProps): React.ReactElement {
     let liveRegion: React.ReactElement;
     if (pending) liveRegion = h(PermissionDialog, { pending, onAnswer: handleConfirmation });
     else if (sending) liveRegion = h(StatusLine, { text: statusLine });
-    else liveRegion = h(Composer, { value: inputValue, onChange: handleInputChange, onSubmit: handleSubmit, disabled: false, resetKey: composerResetKey });
+    else liveRegion = h(Composer, { value: inputValue, onChange: handleInputChange, onSubmit: handleSubmit, disabled: screen === "settings", resetKey: composerResetKey });
 
     const chat = h(
         Box,
@@ -866,5 +884,12 @@ export function App(props: AppProps): React.ReactElement {
         h(StatusBar, { info: statusInfo, width: mainColumns }),
     );
 
-    return sidebarVisible ? h(Box, { flexDirection: "row", height: usableRows }, h(Sidebar, { cwd: props.invocationCwd, entries: worktree, height: usableRows }), chat) : chat;
+    const base = sidebarVisible ? h(Box, { flexDirection: "row", height: usableRows }, h(Sidebar, { cwd: props.invocationCwd, entries: worktree, height: usableRows }), chat) : chat;
+    if (screen !== "settings") return base;
+    return h(
+        Box,
+        { width: columns, height: usableRows },
+        base,
+        h(SettingsModal, { backendUrl, token, columns, usableRows, sidebarOn: sidebarOpen, onSidebarChange: changeSidebar, onNavigate: openFromSettings, onClose: leaveScreen, onUnauthorized }),
+    );
 }

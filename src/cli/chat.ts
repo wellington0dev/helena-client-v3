@@ -9,6 +9,7 @@ import { login } from "./backend.ts";
 import { readLocalToken } from "../local-api/local-token.ts";
 import { clearSession, loadSession, saveSession } from "./session-store.ts";
 import { App, type HistoryItem, type SessionOutcome } from "./ink/app.ts";
+import { MOUSE_OFF } from "./ink/mouse.ts";
 
 /**
  * `helena` — REPL interativo com Ink (React pro terminal), fullscreen de
@@ -46,7 +47,8 @@ const h = React.createElement;
  */
 function forceExitAlternateScreen(): void {
     try {
-        process.stdout.write("[?1049l");
+        // desliga o mouse ANTES de sair da tela alternativa: senão o shell recebe lixo a cada clique
+        process.stdout.write(`${MOUSE_OFF}[?1049l`);
     } catch {
         // stdout pode já estar fechado num desligamento abrupto — nada a fazer.
     }
