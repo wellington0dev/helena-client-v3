@@ -9,6 +9,9 @@ import path from "node:path";
  * Windows: `%APPDATA%\Helena`.
  */
 export function configDir(): string {
+    // Override explícito (testes; instalações com config em outro lugar). Sem isto os testes sob Bun escreveriam no HOME real:
+    // o `os.homedir()` do Bun não acompanha mudanças de `process.env.HOME` feitas depois do início.
+    if (process.env.HELENA_CONFIG_DIR) return process.env.HELENA_CONFIG_DIR;
     if (process.platform === "win32" && process.env.APPDATA) return path.join(process.env.APPDATA, "Helena");
     return path.join(os.homedir(), ".config", "helena");
 }
