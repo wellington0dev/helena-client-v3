@@ -52,7 +52,10 @@ function makeFake(opts: { loggedIn?: boolean; health?: () => Promise<never> } = 
         history: ((sid: string, limit: number, offset: number) => { calls.push({ fn: "history", args: [sid, limit, offset] }); return Promise.resolve(f.history(limit, offset)); }) as LocalApi["history"],
         channels: rec("channels", () => ({ whatsapp: { status: "connected" }, telegram: { status: "disconnected" }, machineAgent: { status: "connected" } })),
         doctor: rec("doctor", () => ({ ok: false, version: "t", checks: [{ name: "backend", status: "ok", detail: "respondeu 200" }, { name: "WhatsApp", status: "fail", detail: "error" }] })),
-        backend: rec("backend", () => ({})),
+        backend: ((method: string, path: string, body?: unknown) => { calls.push({ fn: "backend", args: [method, path, body] }); return Promise.resolve(path === "dashboard/usage" ? { totalCalls: 42, callsByChannel: { panel: 20, whatsapp: 15, telegram: 5, cli: 2 }, callsByDay: [{ date: new Date().toISOString().slice(0, 10), calls: 9 }] } : {}); }) as LocalApi["backend"],
+        me: rec("me", () => ({ id: "u1", email: "a@b.c", role: "user", telemetryConsent: false, autoApproveShell: false, allowProactiveMessages: true, whatsappOwnerNumber: undefined, telegramOwnerId: "777" })),
+        setTelegramToken: rec("setTelegramToken", () => undefined),
+        clearTelegramToken: rec("clearTelegramToken", () => undefined),
         channelAction: rec("channelAction", () => undefined),
     } as LocalApi;
     return f;
@@ -232,5 +235,82 @@ describe("TUI (telas em memória)", () => {
         await tick(60);
         await t.renderOnce();
         expect(await frame(t, "enquanto você estava fora")).toContain("npm install terminou");
+    });
+
+    test("/canais: mostra status e QR do WhatsApp; w inicia; l pede confirmação (y desvincula); k salva o token do Telegram", async () => {
+        const f = makeFake();
+        f.api.channels = () => Promise.resolve({ whatsapp: { status: "qr", qrText: "2@QRDATA" }, telegram: { status: "disconnected", tokenSet: false }, machineAgent: { status: "connected", machineName: "notebook" } });
+        const t = await mount(f);
+        await type(t, "/canais");
+        await enter(t);
+        const fr = await frame(t, "aguardando o QR");
+        expect(fr).toContain("Telegram   desconectado (sem token)");
+        expect(fr).toContain("Máquina    conectado (notebook)");
+        expect(fr).toContain("Escaneie no WhatsApp");
+        await t.mockInput.pressKey("w");
+        await t.flush();
+        await tick(60);
+        expect(f.calls.find((c) => c.fn === "channelAction")!.args).toEqual(["whatsapp", "start"]);
+        await t.mockInput.pressKey("l");
+        await t.flush();
+        await tick(60);
+        await t.renderOnce();
+        expect(await frame(t, "Desvincular apaga a sessão local")).toContain("[y] sim");
+        await t.mockInput.pressKey("y");
+        await t.flush();
+        await tick(60);
+        expect(f.calls.filter((c) => c.fn === "channelAction").at(-1)!.args).toEqual(["whatsapp", "logout"]);
+        await t.mockInput.pressKey("k");
+        await t.flush();
+        await tick(60);
+        await t.renderOnce();
+        await type(t, "123456789:AAEabcdefghijklmnopqrstuvwxyz0123456");
+        await enter(t);
+        expect(f.calls.find((c) => c.fn === "setTelegramToken")!.args[0]).toBe("123456789:AAEabcdefghijklmnopqrstuvwxyz0123456");
+    });
+
+    test("/dono: cadastra o número do WhatsApp (só dígitos) e troca para Telegram com Tab", async () => {
+        const f = makeFake();
+        const t = await mount(f);
+        await type(t, "/dono");
+        await enter(t);
+        expect(await frame(t, "identidade de dono")).toContain("Telegram: 777");
+        await type(t, "+55 (11) 99999-8888");
+        await enter(t);
+        expect(f.calls.filter((c) => c.fn === "backend").at(-1)!.args).toEqual(["PATCH", "auth/me/owner-identity", { channel: "whatsapp", contactId: "5511999998888" }]);
+        await t.mockInput.pressTab();
+        await t.flush();
+        await tick(60);
+        await t.renderOnce();
+        expect(await frame(t, "Canal a cadastrar: Telegram")).toContain("ID numérico");
+    });
+
+    test("/uso mostra total, por canal e barras dos últimos 7 dias", async () => {
+        const f = makeFake();
+        const t = await mount(f);
+        await type(t, "/uso");
+        await enter(t);
+        const fr = await frame(t, "Total de chamadas: 42");
+        expect(fr).toContain("WhatsApp: 15");
+        expect(fr).toContain("█");
+    });
+
+    test("/config alterna preferências no backend e avisa do risco do shell sem confirmar", async () => {
+        const f = makeFake();
+        const t = await mount(f);
+        await type(t, "/config");
+        await enter(t);
+        expect(await frame(t, "preferências")).toContain("[3] ● Helena pode mandar mensagem");
+        await t.mockInput.pressKey("2");
+        await t.flush();
+        await tick(80);
+        await t.renderOnce();
+        expect(f.calls.filter((c) => c.fn === "backend").at(-1)!.args).toEqual(["PATCH", "auth/me/auto-approve-shell", { enabled: true }]);
+        expect(await frame(t, "Atenção")).toContain("sem confirmação");
+        await t.mockInput.pressEscape();
+        await t.flush();
+        await tick(60);
+        await t.renderOnce();
+        expect(t.captureCharFrame()).toContain("mensagem"); // voltou pro chat
     });
 });

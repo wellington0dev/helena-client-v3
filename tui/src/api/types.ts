@@ -60,3 +60,21 @@ export interface DoctorReport {
     version: string;
     checks: Array<{ name: string; status: "ok" | "warn" | "fail"; detail: string }>;
 }
+export interface Me {
+    id: string;
+    email: string;
+    displayName?: string;
+    role: string;
+    telemetryConsent: boolean;
+    autoApproveShell: boolean;
+    allowProactiveMessages: boolean;
+    whatsappOwnerNumber?: string;
+    telegramOwnerId?: string;
+}
+export interface UsageSummary {
+    totalCalls: number;
+    firstCallAt?: string;
+    lastCallAt?: string;
+    callsByChannel: Record<string, number>;
+    callsByDay: { date: string; calls: number }[];
+}

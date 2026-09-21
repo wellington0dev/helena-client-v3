@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { ChannelsSnapshot, ChatSessionSummary, DoctorReport, HistoryPage, SendMessageResult } from "./types.ts";
+import type { ChannelsSnapshot, Me, ChatSessionSummary, DoctorReport, HistoryPage, SendMessageResult } from "./types.ts";
 
 export const SUPPORTED_API_VERSION = 1;
 
@@ -52,6 +52,9 @@ export interface LocalApi {
     doctor(): Promise<DoctorReport>;
     /** Passagem autenticada a `/v1/backend/<path>` (contacts, billing, dashboard…). */
     backend<T = unknown>(method: string, path: string, body?: unknown): Promise<T>;
+    me(): Promise<Me>;
+    setTelegramToken(token: string): Promise<void>;
+    clearTelegramToken(): Promise<void>;
     /** Ação de canal: `POST /v1/channels/<canal>/<ação>`. */
     channelAction(channel: "whatsapp" | "telegram", action: "start" | "stop" | "logout"): Promise<void>;
 }
@@ -99,6 +102,9 @@ export function createLocalApi(options: { baseUrl: string; token: string; fetchI
         channels: () => request("GET", "/v1/channels"),
         doctor: () => request("GET", "/v1/doctor"),
         backend: (method, route, body) => request(method, `/v1/backend/${route.replace(/^\//, "")}`, body),
+        me: () => request("GET", "/v1/session/me"),
+        setTelegramToken: async (token) => void (await request("PUT", "/v1/channels/telegram/token", { token })),
+        clearTelegramToken: async () => void (await request("DELETE", "/v1/channels/telegram/token")),
         channelAction: async (channel, action) => void (await request("POST", `/v1/channels/${channel}/${action}`)),
     };
 }

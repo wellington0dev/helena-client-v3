@@ -11,6 +11,7 @@
 // `helena` (este comando) é só o chat interativo.
 
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -22,6 +23,7 @@ const HELP = `helena — chat interativo com a Helena
 Uso: helena [--help]
 
   helena                          abre o chat (conecta em BACKEND_V2_URL, .env do client/)
+  helena --tui                    abre a TUI nova (OpenTUI, Bun) — também: HELENA_TUI=opentui helena
   helena local-token rotate       gera um token local novo pra API do daemon
   helena local-token path         mostra onde está o arquivo do token (nunca imprime o token)
   helena --help, -h               mostra esta ajuda
@@ -40,6 +42,39 @@ if (arg === "local-token") {
 if (arg === "-h" || arg === "--help") {
     console.log(HELP);
     process.exit(0);
+}
+
+/** Porta da API local: variável de ambiente ou `.env` do client/ (o dispatcher não carrega o dotenv). */
+function localPortFromEnvFile() {
+    try {
+        const text = fs.readFileSync(path.join(CLIENT_DIR, ".env"), "utf8");
+        const match = text.match(/^\s*CLIENT_LOCAL_PORT\s*=\s*(\d+)/m) ?? text.match(/^\s*CLIENT_PANEL_PORT\s*=\s*(\d+)/m);
+        return match?.[1];
+    } catch {
+        return undefined;
+    }
+}
+
+if (arg === "--tui" || (arg === undefined && process.env.HELENA_TUI === "opentui")) {
+    // TUI nova: binário compilado (tui/dist/helena-tui) ou, no repo de desenvolvimento, `bun tui/src/main.tsx`.
+    const compiled = path.join(CLIENT_DIR, "tui", "dist", process.platform === "win32" ? "helena-tui.exe" : "helena-tui");
+    const localBun = path.join(CLIENT_DIR, "tui", "node_modules", ".bin", process.platform === "win32" ? "bun.exe" : "bun");
+    const port = process.env.CLIENT_LOCAL_PORT ?? process.env.CLIENT_PANEL_PORT ?? localPortFromEnvFile();
+    const env = { ...process.env, ...(port ? { CLIENT_LOCAL_PORT: port } : {}), HELENA_CLI_CWD: process.cwd() };
+    let command;
+    let args;
+    if (fs.existsSync(compiled)) [command, args] = [compiled, []];
+    else if (fs.existsSync(localBun)) [command, args] = [localBun, [path.join(CLIENT_DIR, "tui", "src", "main.tsx")]];
+    else {
+        console.error("[helena] a TUI nova ainda não foi instalada/compilada. Em client/tui: `npm install` e `npm run build` (gera dist/helena-tui). Enquanto isso, rode `helena` (TUI antiga).");
+        process.exit(1);
+    }
+    const tui = spawnSync(command, args, { cwd: CLIENT_DIR, stdio: "inherit", env });
+    if (tui.error) {
+        console.error(`[helena] falha ao executar a TUI nova: ${tui.error.message}`);
+        process.exit(1);
+    }
+    process.exit(tui.status ?? 1);
 }
 
 if (arg !== undefined) {

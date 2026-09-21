@@ -4,6 +4,7 @@ import type { LocalApi } from "../api/client.ts";
 import type { ChatSessionSummary, DoctorReport } from "../api/types.ts";
 import { hasOlder, toolLabel, type Item } from "../state/chat-store.ts";
 import type { ChatController } from "./use-chat.ts";
+import { ChannelsScreen, ConfigScreen, OwnerScreen, UsageScreen } from "./screens.tsx";
 import { StatusBar, type HubState } from "./StatusBar.tsx";
 import { theme } from "./theme.ts";
 
@@ -11,6 +12,10 @@ const HELP = [
     "/ajuda      esta lista",
     "/nova       começa uma conversa nova",
     "/sessoes    escolhe uma conversa anterior",
+    "/canais     status e QR do WhatsApp/Telegram, iniciar/parar/desvincular",
+    "/dono       cadastra seu número/ID (para a Helena te reconhecer como dono)",
+    "/uso        chamadas de IA por canal e por dia",
+    "/config     preferências (telemetria, shell sem confirmar, mensagens proativas)",
     "/doctor     diagnóstico do daemon (backend, canais, permissões)",
     "/logout     sai da conta (a sessão é encerrada no servidor)",
     "/sair       fecha a TUI (Ctrl+C também)",
@@ -54,12 +59,13 @@ export function ChatScreen(props: { api: LocalApi; chat: ChatController; hub: Hu
     const { state } = chat;
     const [text, setText] = useState("");
     const [overlay, setOverlay] = useState<"none" | "sessions">("none");
+    const [screen, setScreen] = useState<"chat" | "canais" | "dono" | "uso" | "config">("chat");
     const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
     const scroll = useRef<{ scrollTop: number } | null>(null);
     const previousCount = useRef(state.items.length);
 
     const awaiting = state.pending.length > 0;
-    const composerFocused = !awaiting && overlay === "none" && !props.blocked;
+    const composerFocused = !awaiting && overlay === "none" && !props.blocked && screen === "chat";
 
     // ao carregar mensagens antigas (itens entram no TOPO), mantém a leitura perto de onde estava
     useEffect(() => {
@@ -69,7 +75,7 @@ export function ChatScreen(props: { api: LocalApi; chat: ChatController; hub: Hu
     }, [state.items.length]);
 
     useKeyboard((key) => {
-        if (props.blocked) return;
+        if (props.blocked || screen !== "chat") return;
         if (overlay === "sessions" && key.name === "escape") return setOverlay("none");
         if (awaiting) {
             if (key.name === "a") void chat.resolve(true);
@@ -101,6 +107,11 @@ export function ChatScreen(props: { api: LocalApi; chat: ChatController; hub: Hu
                     chat.notice("error", String(e instanceof Error ? e.message : e));
                 }
                 return;
+            case "canais":
+            case "dono":
+            case "uso":
+            case "config":
+                return setScreen(name);
             case "doctor":
                 try {
                     const report: DoctorReport = await api.doctor();
@@ -120,6 +131,19 @@ export function ChatScreen(props: { api: LocalApi; chat: ChatController; hub: Hu
         if (!line || state.busy) return;
         if (line.startsWith("/")) void command(line);
         else void chat.send(line);
+    }
+
+    if (screen !== "chat") {
+        const close = () => setScreen("chat");
+        return (
+            <box flexDirection="column" width="100%" height="100%">
+                <StatusBar hub={props.hub} sessionTitle={props.sessionTitle} />
+                {screen === "canais" ? <ChannelsScreen api={api} live={props.hub.channels} onClose={close} /> : null}
+                {screen === "dono" ? <OwnerScreen api={api} onClose={close} /> : null}
+                {screen === "uso" ? <UsageScreen api={api} onClose={close} /> : null}
+                {screen === "config" ? <ConfigScreen api={api} onClose={close} /> : null}
+            </box>
+        );
     }
 
     return (
