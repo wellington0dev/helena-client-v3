@@ -5,3 +5,7 @@ node_modules
 .whatsapp-lid-pins.json
 *.log
 
+
+# painel web removido — sobras locais de build
+panel-app/.angular/
+panel-app/dist/
