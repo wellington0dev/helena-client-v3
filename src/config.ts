@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { loadDeviceToken } from "./device-token.ts";
+import { loadFileConfig } from "./local-api/config-store.ts";
 
 /**
  * Config central do client/ — lida uma vez, aqui, em vez de cada módulo ler
@@ -34,7 +35,26 @@ export const config = {
     mediaMaxMb: Number(process.env.MEDIA_MAX_MB || 25),
     /** Teto de um comando `shell` rodado com `background:true` (ver machine-agent.ts) — bem maior que os 30s do modo síncrono, mas não infinito. */
     backgroundShellTimeoutMinutes: Number(process.env.CLIENT_BACKGROUND_SHELL_TIMEOUT_MINUTES || 30),
+
+    /** Nome desta máquina (config.json); vazio = hostname. */
+    machineName: "" as string,
+    /** Política de arquivos (config.json) — ver local-api/path-policy.ts. */
+    allowedDirs: [] as string[],
+    deniedPaths: [] as string[],
 };
+
+/** Aplica o `config.json` (precedência sobre o .env). Chamado no import e depois de cada `PATCH /v1/config`. */
+export function applyFileConfig(): void {
+    const file = loadFileConfig();
+    if (file.backendUrl !== undefined) config.backendUrl = file.backendUrl;
+    if (file.machineName !== undefined) config.machineName = file.machineName;
+    if (file.backgroundShellTimeoutMinutes !== undefined) config.backgroundShellTimeoutMinutes = file.backgroundShellTimeoutMinutes;
+    if (file.mediaMaxMb !== undefined) config.mediaMaxMb = file.mediaMaxMb;
+    if (file.telegramBotToken !== undefined) config.telegramBotToken = file.telegramBotToken;
+    config.allowedDirs = file.allowedDirs ?? [];
+    config.deniedPaths = file.deniedPaths ?? [];
+}
+applyFileConfig();
 
 export function hasBackendConfig(): boolean {
     return Boolean(config.backendUrl && config.backendApiToken);

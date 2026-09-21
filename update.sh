@@ -61,14 +61,11 @@ fi
 bold "Atualizando dependências (npm install)..."
 npm install
 
-# --- painel web (Angular) — só reinicia o serviço se o build for limpo ---
-bold "Buildando o painel web (Angular)..."
-if ! npm run build:panel; then
-    err "Build do painel falhou depois do update — o serviço ANTIGO continua rodando, nada foi reiniciado."
-    info "Corrija o erro acima. Pra voltar ao commit anterior: git reset --hard $BEFORE_SHA && ./update.sh"
-    exit 1
+# --- segredos locais: só o dono lê (achado C5 da auditoria) ---
+chmod 600 "$CLIENT_DIR/.env" 2>/dev/null || true
+if [[ -d "$CLIENT_DIR/.whatsapp-auth" ]]; then
+    chmod -R go-rwx "$CLIENT_DIR/.whatsapp-auth" 2>/dev/null || true
 fi
-ok "Build limpo."
 
 # --- comando global 'helena' (chat) — reinstala o link, sem custo se já estiver certo ---
 bash "$CLIENT_DIR/scripts/link-helena.sh"
@@ -84,10 +81,11 @@ bold "Reiniciando $SERVICE..."
 systemctl --user restart "$SERVICE"
 
 # --- health check pós-restart ---
-PORT="$(read_env "$ENV_FILE" CLIENT_PANEL_PORT)"
+PORT="$(read_env "$ENV_FILE" CLIENT_LOCAL_PORT)"
+PORT="${PORT:-$(read_env "$ENV_FILE" CLIENT_PANEL_PORT)}"
 PORT="${PORT:-4100}"
 for _ in $(seq 1 10); do
-    if curl -fsS "http://localhost:$PORT/health" >/dev/null 2>&1; then
+    if curl -fsS "http://127.0.0.1:$PORT/health" >/dev/null 2>&1; then
         ok "Client no ar em http://localhost:$PORT (commit $(git rev-parse --short HEAD))."
         exit 0
     fi

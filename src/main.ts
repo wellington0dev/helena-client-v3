@@ -1,4 +1,10 @@
-import { config } from "./config.ts";
+import os from "node:os";
+import path from "node:path";
+import { applyFileConfig, config } from "./config.ts";
+import { importEnvOnce, loadFileConfig, patchFileConfig, publicView } from "./local-api/config-store.ts";
+import { runDoctor } from "./local-api/doctor.ts";
+import { hardenPermissions } from "./local-api/harden.ts";
+import { configDir } from "./local-api/paths.ts";
 import fs from "node:fs";
 import { ensureDeviceToken } from "./device-auth.ts";
 import { createEventHub } from "./local-api/event-hub.ts";
@@ -8,8 +14,8 @@ import { startLocalApi } from "./local-api/server.ts";
 import { createSessionManager } from "./local-api/session-manager.ts";
 import { clearSession, loadSession, saveSession } from "./cli/session-store.ts";
 import { getState, onStateChange } from "./panel/status-bus.ts";
-import { startWhatsapp, stopWhatsapp } from "./channels/whatsapp.ts";
-import { startTelegram } from "./channels/telegram.ts";
+import { logoutWhatsapp, startWhatsapp, stopWhatsapp } from "./channels/whatsapp.ts";
+import { startTelegram, stopTelegram } from "./channels/telegram.ts";
 import { startMachineAgent } from "./machine-agent.ts";
 import { startOutboundPoller } from "./outbound-poller.ts";
 import { reportError } from "./telemetry.ts";
@@ -39,13 +45,54 @@ const session = createSessionManager({
     hub,
     onLogin: ensureDeviceToken,
 });
+const version = (JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string }).version;
+const clientDir = path.resolve(new URL("..", import.meta.url).pathname);
+const secretPaths = [configDir(), path.join(clientDir, ".env"), path.resolve(config.whatsappAuthDir), path.resolve(config.whatsappLidPinsFile)];
+
+// Config central: importa o .env UMA vez e endurece permissões de segredos (achado C5 da auditoria).
+const imported = importEnvOnce();
+if (imported.imported.length > 0) {
+    applyFileConfig();
+    console.log(`[config] importado do .env para ${configDir()}/config.json: ${imported.imported.join(", ")} (o .env segue como fallback)`);
+}
+const { fixed } = hardenPermissions(secretPaths);
+if (fixed.length > 0) console.log(`[segurança] permissões endurecidas em ${fixed.length} item(ns) de segredo.`);
+
 startLocalApi({
     port: config.panelPort,
     host: config.localBind,
-    version: (JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string }).version,
+    version,
     localToken: loadOrCreateLocalToken(),
     session,
     hub,
+    machineName: config.machineName || os.hostname(),
+    channels: {
+        info: () => ({ telegramTokenSet: Boolean(config.telegramBotToken) }),
+        whatsapp: { start: startWhatsapp, stop: stopWhatsapp, logout: logoutWhatsapp },
+        telegram: {
+            start: startTelegram,
+            stop: stopTelegram,
+            setToken(token) {
+                const result = patchFileConfig({ telegramBotToken: token === "" ? null : token });
+                if (!result.ok) return { ok: false, error: Object.values(result.errors).join("; ") };
+                if (token === "") config.telegramBotToken = "";
+                applyFileConfig();
+                void stopTelegram().then(() => startTelegram());
+                return { ok: true };
+            },
+        },
+    },
+    configApi: {
+        get: () => ({ file: publicView(loadFileConfig()), effective: { backendUrl: config.backendUrl, machineName: config.machineName || os.hostname(), allowedDirs: config.allowedDirs, deniedPaths: config.deniedPaths, backgroundShellTimeoutMinutes: config.backgroundShellTimeoutMinutes, mediaMaxMb: config.mediaMaxMb } }),
+        patch(patch) {
+            const result = patchFileConfig(patch);
+            if (!result.ok) return result;
+            applyFileConfig();
+            return { ok: true, config: publicView(result.config), changed: result.changed, restartRequired: result.restartRequired };
+        },
+    },
+    machine: () => ({ name: config.machineName || os.hostname(), hostname: os.hostname(), platform: process.platform, agent: hub.snapshot().channels ? (hub.snapshot().channels as { machineAgent?: unknown }).machineAgent : undefined }),
+    doctor: () => runDoctor({ backendUrl: config.backendUrl, session, hub, deviceTokenPresent: Boolean(config.backendApiToken), secretPaths, listenHost: config.localBind, version }),
 });
 startProgressUpstream({ backendUrl: config.backendUrl, hub, getToken: () => config.backendApiToken || loadSession()?.accessToken });
 startWhatsapp();

@@ -21,14 +21,21 @@ const HELP = `helena — chat interativo com a Helena
 
 Uso: helena [--help]
 
-  helena              abre o chat (conecta em BACKEND_V2_URL, .env do client/)
-  helena --help, -h   mostra esta ajuda
+  helena                          abre o chat (conecta em BACKEND_V2_URL, .env do client/)
+  helena local-token rotate       gera um token local novo pra API do daemon
+  helena local-token path         mostra onde está o arquivo do token (nunca imprime o token)
+  helena --help, -h               mostra esta ajuda
 
 Execução de comando remoto (antigo 'helena agent'), WhatsApp e Telegram não
 são mais subcomandos daqui — rode 'npm start' dentro de client/ (um
 processo só cobre os três, ver docs/architecture-v2.md §4).`;
 
 const [arg] = process.argv.slice(2);
+
+if (arg === "local-token") {
+    const sub = spawnSync(process.execPath, [path.join(CLIENT_DIR, "src/cli/local-token-main.ts"), ...process.argv.slice(3)], { cwd: CLIENT_DIR, stdio: "inherit" });
+    process.exit(sub.status ?? 1);
+}
 
 if (arg === "-h" || arg === "--help") {
     console.log(HELP);

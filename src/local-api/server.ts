@@ -3,7 +3,7 @@ import os from "node:os";
 import type { Duplex } from "node:stream";
 import { WebSocketServer, type WebSocket } from "ws";
 import type { EventHub, HubEvent } from "./event-hub.ts";
-import { tokensMatch } from "./local-token.ts";
+import { rotateLocalToken, tokensMatch } from "./local-token.ts";
 import { forward, isAllowedBackendPath, MAX_BODY_BYTES, payloadTooLarge, readBody, sendJson } from "./proxy.ts";
 import { HttpError, type SessionManager } from "./session-manager.ts";
 
@@ -20,6 +20,25 @@ export interface LocalApiOptions {
     hub: EventHub;
     /** Nome desta máquina, injetado como contexto advisório nos turnos de chat quando a TUI não manda. */
     machineName?: string;
+    /** Ações sobre os canais (WhatsApp/Telegram). Ausente ⇒ as rotas de ação respondem 501. */
+    channels?: ChannelsController;
+    /** Config local central (`/v1/config`). */
+    configApi?: ConfigApi;
+    /** Estado da máquina/execução remota (`/v1/machine`). */
+    machine?: () => unknown;
+    /** Diagnóstico (`/v1/doctor`). */
+    doctor?: () => Promise<unknown>;
+}
+
+export interface ChannelsController {
+    info(): { telegramTokenSet: boolean };
+    whatsapp: { start(): void | Promise<void>; stop(): Promise<void>; logout(): Promise<void> };
+    telegram: { start(): void | Promise<void>; stop(): Promise<void>; setToken(token: string): { ok: true } | { ok: false; error: string } };
+}
+
+export interface ConfigApi {
+    get(): unknown;
+    patch(patch: Record<string, unknown>): { ok: true; config: unknown; changed: string[]; restartRequired: string[] } | { ok: false; errors: Record<string, string> };
 }
 
 const BEARER_PROTOCOL = "helena.bearer.";
@@ -43,6 +62,7 @@ export function startLocalApi(options: LocalApiOptions): Server {
     const { session, hub } = options;
     const host = options.host ?? "127.0.0.1";
     const machineName = options.machineName ?? os.hostname();
+    const tokenRef = { value: options.localToken }; // mutável: `POST /v1/local-token/rotate` troca sem reiniciar
 
     function deny(res: ServerResponse, status: number, error: string, message: string): void {
         sendJson(res, status, { message, error, statusCode: status });
@@ -54,7 +74,7 @@ export function startLocalApi(options: LocalApiOptions): Server {
             deny(res, 403, "origin_forbidden", "Requisições de navegador não são aceitas.");
             return false;
         }
-        if (!tokensMatch(options.localToken, token)) {
+        if (!tokensMatch(tokenRef.value, token)) {
             res.setHeader("WWW-Authenticate", 'Bearer realm="helena-local"');
             deny(res, 401, "unauthorized", "Token local ausente ou inválido.");
             return false;
@@ -91,6 +111,96 @@ export function startLocalApi(options: LocalApiOptions): Server {
         return deny(res, 404, "not_found", "Rota de sessão desconhecida.");
     }
 
+    async function readJson(req: IncomingMessage, res: ServerResponse, limit = 20_000): Promise<Record<string, unknown> | undefined> {
+        const raw = await readBody(req, limit);
+        if (raw === "too_large") {
+            payloadTooLarge(req, res);
+            return undefined;
+        }
+        try {
+            const parsed = JSON.parse(raw.length === 0 ? "{}" : raw.toString("utf8")) as unknown;
+            if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as Record<string, unknown>;
+        } catch {
+            // cai no 400 abaixo
+        }
+        deny(res, 400, "invalid_json", "Corpo não é um objeto JSON válido.");
+        return undefined;
+    }
+
+    async function handleChannels(req: IncomingMessage, res: ServerResponse, path: string): Promise<void> {
+        const method = req.method ?? "GET";
+        if (path === "/v1/channels" && method === "GET") {
+            const state = (hub.snapshot().channels ?? {}) as Record<string, Record<string, unknown>>;
+            return sendJson(res, 200, { whatsapp: state.whatsapp ?? { status: "disconnected" }, telegram: { ...(state.telegram ?? { status: "disconnected" }), tokenSet: options.channels?.info().telegramTokenSet ?? false }, machineAgent: state.machineAgent ?? { status: "disconnected" } });
+        }
+        const controller = options.channels;
+        if (!controller) return deny(res, 501, "not_implemented", "Ações de canal indisponíveis neste daemon.");
+        const match = path.match(/^\/v1\/channels\/(whatsapp|telegram)\/(start|stop|logout)$/);
+        if (match && method === "POST") {
+            const [, channel, action] = match;
+            try {
+                if (channel === "whatsapp") {
+                    if (action === "start") await controller.whatsapp.start();
+                    else if (action === "stop") await controller.whatsapp.stop();
+                    else await controller.whatsapp.logout();
+                } else if (action === "start") await controller.telegram.start();
+                else if (action === "stop") await controller.telegram.stop();
+                else return deny(res, 404, "not_found", "Telegram não tem logout — remova o token.");
+                return sendJson(res, 200, { ok: true });
+            } catch (error) {
+                return deny(res, 500, "channel_error", error instanceof Error ? error.message : String(error));
+            }
+        }
+        if (path === "/v1/channels/telegram/token" && (method === "PUT" || method === "DELETE")) {
+            if (method === "DELETE") {
+                const removed = controller.telegram.setToken("");
+                return removed.ok ? sendJson(res, 200, { ok: true }) : deny(res, 422, "invalid_token", removed.error);
+            }
+            const body = await readJson(req, res);
+            if (!body) return;
+            if (typeof body.token !== "string") return deny(res, 400, "invalid_body", "Informe { token }.");
+            const result = controller.telegram.setToken(body.token);
+            return result.ok ? sendJson(res, 200, { ok: true }) : deny(res, 422, "invalid_token", result.error); // nunca ecoa o token
+        }
+        return deny(res, 404, "not_found", "Rota de canal desconhecida.");
+    }
+
+    async function handleMisc(req: IncomingMessage, res: ServerResponse, path: string): Promise<boolean> {
+        const method = req.method ?? "GET";
+        if (path === "/v1/config" && method === "GET") {
+            sendJson(res, 200, options.configApi?.get() ?? {});
+            return true;
+        }
+        if (path === "/v1/config" && method === "PATCH") {
+            if (!options.configApi) {
+                deny(res, 501, "not_implemented", "Config indisponível.");
+                return true;
+            }
+            const body = await readJson(req, res);
+            if (!body) return true;
+            const result = options.configApi.patch(body);
+            if (!result.ok) sendJson(res, 422, { message: "Config inválida.", error: "invalid_config", statusCode: 422, errors: result.errors });
+            else sendJson(res, 200, { config: result.config, changed: result.changed, restartRequired: result.restartRequired });
+            return true;
+        }
+        if (path === "/v1/machine" && method === "GET") {
+            sendJson(res, 200, options.machine?.() ?? { name: machineName });
+            return true;
+        }
+        if (path === "/v1/doctor" && method === "GET") {
+            sendJson(res, 200, options.doctor ? await options.doctor() : { ok: true, checks: [] });
+            return true;
+        }
+        if (path === "/v1/local-token/rotate" && method === "POST") {
+            // Única rota que devolve o token — a quem já provou ter o anterior. Derruba as conexões WS antigas.
+            tokenRef.value = rotateLocalToken();
+            sendJson(res, 200, { token: tokenRef.value });
+            for (const client of wss.clients) client.terminate();
+            return true;
+        }
+        return false;
+    }
+
     async function handleChat(req: IncomingMessage, res: ServerResponse, path: string): Promise<void> {
         const backendPath = `/chat${path.slice("/v1/chat".length)}`;
         if (req.method === "POST" && path === "/v1/chat/messages") {
@@ -125,6 +235,8 @@ export function startLocalApi(options: LocalApiOptions): Server {
 
             if (path.startsWith("/v1/session/")) return handleSession(req, res, path);
             if (path.startsWith("/v1/chat/")) return handleChat(req, res, path);
+            if (path === "/v1/channels" || path.startsWith("/v1/channels/")) return handleChannels(req, res, path);
+            if (await handleMisc(req, res, path)) return;
             if (path.startsWith("/v1/backend/")) {
                 const backendPath = path.slice("/v1/backend/".length) + url.search;
                 if (!isAllowedBackendPath(backendPath)) return deny(res, 403, "path_not_allowed", "Caminho fora da allowlist do daemon.");
@@ -164,7 +276,7 @@ export function startLocalApi(options: LocalApiOptions): Server {
         };
         if (!known) return reject(404, "Not Found");
         if (req.headers.origin) return reject(403, "Forbidden");
-        if (!tokensMatch(options.localToken, wsTokenFrom(req))) return reject(401, "Unauthorized");
+        if (!tokensMatch(tokenRef.value, wsTokenFrom(req))) return reject(401, "Unauthorized");
         wss.handleUpgrade(req, socket, head, (ws) => (path === "/ws" ? attachLegacy(ws) : attachEvents(ws, req)));
     });
 

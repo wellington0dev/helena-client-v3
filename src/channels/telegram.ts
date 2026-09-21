@@ -33,6 +33,8 @@ type TelegramContext = FileFlavor<Context>;
 
 /** Instância ativa, pro outbound-poller (ver outbound-poller.ts). `undefined` enquanto não conectado. */
 let currentBot: Bot<TelegramContext> | undefined;
+/** Bot em andamento (inclusive antes do `onStart`) — pra `stopTelegram` conseguir parar o polling a qualquer momento. */
+let activeBot: Bot<TelegramContext> | undefined;
 
 export async function sendTelegramMessage(chatId: string, text: string): Promise<void> {
     if (!currentBot) throw new Error("Telegram não está conectado.");
@@ -140,9 +142,11 @@ export function startTelegram(): void {
         return;
     }
 
+    if (activeBot) return; // já rodando — idempotente
     updateTelegram({ status: "connecting" });
 
     const bot = new Bot<TelegramContext>(config.telegramBotToken);
+    activeBot = bot;
     bot.api.config.use(hydrateFiles(bot.token));
 
     bot.catch((error) => {
@@ -164,4 +168,17 @@ export function startTelegram(): void {
             updateTelegram({ status: "connected", error: undefined });
         },
     });
+}
+
+/** Para o polling (ação explícita pela API local, ou troca de token). Não lança. */
+export async function stopTelegram(): Promise<void> {
+    const bot = activeBot;
+    activeBot = undefined;
+    currentBot = undefined;
+    try {
+        await bot?.stop();
+    } catch (error) {
+        console.error("[telegram] falha ao parar:", error);
+    }
+    updateTelegram({ status: "disconnected", error: undefined });
 }

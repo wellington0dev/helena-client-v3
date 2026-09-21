@@ -1,5 +1,7 @@
 import fs from "fs";
 import path from "path";
+import { config } from "./config.ts";
+import { checkPathAccess, type PathPolicy } from "./local-api/path-policy.ts";
 import { expandHome } from "./local-shell.ts";
 
 /**
@@ -22,6 +24,16 @@ const MAX_SEARCH_RESULTS = 500;
 
 function resolvePath(target: string): string {
     return expandHome(target) ?? target;
+}
+
+/** Política de acesso (allowedDirs/deniedPaths + arquivos sensíveis) — ver local-api/path-policy.ts. */
+function policy(): PathPolicy {
+    return { allowedDirs: config.allowedDirs, deniedPaths: config.deniedPaths, extraDeniedDirs: [path.resolve(config.whatsappAuthDir)] };
+}
+
+function guard(target: string): string | undefined {
+    const check = checkPathAccess(target, policy());
+    return check.ok ? undefined : `Acesso negado: ${check.reason}.`;
 }
 
 function describe(err: unknown): string {
@@ -55,6 +67,8 @@ export interface ListFilesResult {
 /** `pattern` é regex sobre o NOME (não glob) — mesma convenção de `namePattern` em `searchFiles`, só uma forma de casar em todo o módulo. */
 export function listFiles(dirPath: string, pattern?: string): ListFilesResult {
     const resolved = resolvePath(dirPath);
+    const denied = guard(resolved);
+    if (denied) return { files: [], error: denied };
 
     let entries: fs.Dirent[];
     try {
@@ -68,6 +82,7 @@ export function listFiles(dirPath: string, pattern?: string): ListFilesResult {
 
     const files = entries
         .filter((entry) => !regex || regex.test(entry.name))
+        .filter((entry) => !guard(path.join(resolved, entry.name))) // não revela nem lista o que a política protege
         .map((entry) => {
             const fullPath = path.join(resolved, entry.name);
             let size = 0;
@@ -89,6 +104,8 @@ export interface ReadFileResult {
 
 export function readFile(filePath: string): ReadFileResult {
     const resolved = resolvePath(filePath);
+    const denied = guard(resolved);
+    if (denied) return { content: "", error: denied };
 
     let stat: fs.Stats;
     try {
@@ -124,6 +141,7 @@ function walk(dir: string, nameRegex: RegExp | undefined, contentRegex: RegExp |
 
     for (const entry of entries) {
         if (results.length >= MAX_SEARCH_RESULTS) return;
+        if (guard(path.join(dir, entry.name))) continue; // política de arquivos: nunca entra nem devolve o que é protegido
 
         if (entry.isDirectory()) {
             if (IGNORED_DIR_NAMES.has(entry.name)) continue;
@@ -157,6 +175,8 @@ export function searchFiles(dirPath: string, namePattern?: string, contentPatter
     const contentRegex = contentPattern ? safeRegex(contentPattern) : undefined;
     if (contentPattern && !contentRegex) return { paths: [], error: `Padrão de conteúdo inválido: "${contentPattern}"` };
 
+    const rootDenied = guard(resolvePath(dirPath));
+    if (rootDenied) return { paths: [], error: rootDenied };
     const results: string[] = [];
     walk(resolvePath(dirPath), nameRegex, contentRegex, results);
     return { paths: results };
@@ -193,6 +213,8 @@ function writeWhole(resolvedPath: string, originalPath: string, content: string)
 
 export function writeFile(filePath: string, edits: FileEdit[]): WriteFileResult {
     if (edits.length === 0) return { ok: false, error: "Nenhuma edição informada." };
+    const denied = guard(resolvePath(filePath));
+    if (denied) return { ok: false, error: denied };
 
     const replaceAll = edits.find((edit) => edit.type === "replace_all");
     if (replaceAll) {
@@ -243,6 +265,8 @@ export interface DeleteFileResult {
  */
 export function deleteFile(filePath: string): DeleteFileResult {
     const resolved = resolvePath(filePath);
+    const denied = guard(resolved);
+    if (denied) return { ok: false, error: denied };
     try {
         fs.unlinkSync(resolved);
         return { ok: true };

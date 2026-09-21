@@ -26,6 +26,13 @@ daemon guarda o JWT do usuário e o token de dispositivo e fala com o backend. S
 | `POST /v1/chat/sessions/:id/resolve`, `GET /v1/chat/sessions`, `GET /v1/chat/sessions/:id/history?limit&offset` | passagem 1:1 a `/chat/*` (query preservada) |
 | `ANY /v1/backend/<prefixo>/*` | passagem autenticada; **allowlist**: `contacts`, `mcp-connections`, `billing`, `payments`, `dashboard`, `projects`, `agent-personas`, `telemetry`, `feedback`, `auth/me`, `auth/api-tokens`. Nunca repassa `Authorization`/`Cookie` do chamador; corpo ≤ 1 MB (413); rejeita `..`, `//`, `\` |
 | `GET /v1/events` (WS) | ao conectar: `{type:"hello"}` e `{type:"state", data:{channels, session, backend…}}`; depois cada evento `{id, ts, type, data}`. `?since=<id>` reenvia o que foi perdido (`job_done`, `project_event`, `session.expired`) com `replayed:true` |
+| `GET /v1/channels` | estado dos canais (`whatsapp` com `qrText`, `telegram` com `tokenSet`, `machineAgent`) |
+| `POST /v1/channels/whatsapp/{start,stop,logout}` · `POST /v1/channels/telegram/{start,stop}` | ações. `logout` do WhatsApp desvincula o aparelho e apaga o auth local (próximo `start` pede QR novo); `stop`/`start` preservam a sessão |
+| `PUT /v1/channels/telegram/token` `{token}` · `DELETE …/token` | grava/remove o token do bot (validado, **write-only**: nunca ecoado) e reinicia o Telegram |
+| `GET /v1/config` · `PATCH /v1/config` | config central (`~/.config/helena/config.json`, `0600`): `backendUrl`, `machineName`, `allowedDirs`, `deniedPaths`, `backgroundShellTimeoutMinutes`, `mediaMaxMb`, `telegramBotToken`. PATCH inválido → 422 com `errors` por chave e **nada é gravado**; `null` remove a chave; resposta traz `restartRequired`. Precedência: config.json > `.env` > padrão (o `.env` é importado uma vez) |
+| `GET /v1/machine` | nome, hostname, plataforma e estado do `machine-agent` |
+| `GET /v1/doctor` | diagnóstico: backend, sessão, token de dispositivo, canais, permissões dos segredos, bind — sem vazar segredo |
+| `POST /v1/local-token/rotate` | rotaciona o token local (única rota que o devolve), derruba as conexões WS antigas. CLI: `helena local-token rotate` / `helena local-token path` |
 | `POST /cli-session` (**legado**) | CLI antigo entrega um JWT já obtido; agora exige o token local |
 | `GET /ws` (**legado**) | estado dos canais no formato antigo; agora exige o token local |
 
@@ -35,11 +42,21 @@ daemon guarda o JWT do usuário e o token de dispositivo e fala com o backend. S
 vindos de **uma única** conexão `/ws/chat-progress`, com reconexão por backoff), `session.expired` (o backend
 devolveu 401: a TUI pede login de novo sem perder a tela).
 
+## Política de arquivos (capabilities `read_file`/`list_files`/`search_files`/`write_file`)
+Fecha o achado C1 da auditoria de 10/09. **Sempre negados**: `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.kube`, `~/.config/gcloud`, a pasta
+de config da Helena, o diretório de auth do WhatsApp, e por nome `.env*` (exceto `.env.example|sample|template`), `*.pem|*.key|*.p12|*.pfx`,
+chaves SSH, `.netrc`, `creds.json`, `session.json`, `device-token.json`, `local-token`; mais `deniedPaths` do usuário. Se `allowedDirs`
+não estiver vazio, só o que estiver dentro delas (links simbólicos são resolvidos, `../` não escapa). A listagem/busca não revela nem entra
+no que é protegido.
+
+## Permissões de segredos (achado C5)
+No boot o daemon põe `0600`/`0700` em `~/.config/helena`, `.env`, `.whatsapp-auth/` e `.whatsapp-lid-pins.json`; `install.sh`/`update.sh` também.
+
 ## Ainda não implementado (próximos passos do plano §4.8)
-`/v1/channels` (ações), `/v1/machine`, `/v1/config` (config central), `/v1/doctor`, refresh token (R0b), `helena local-token rotate`,
-inventário final da allowlist, migração de `.whatsapp-auth`/`.env`.
+Refresh token (R0b, depende do backend), migração do `.whatsapp-auth` para `~/.local/share/helena`, inventário final da allowlist,
+buffer de eventos persistente entre reinícios.
 
 ## Testes
-`node --test src/local-api/local-api.test.ts` (16 testes: bind, auth, Origin, login sem vazar JWT, passagem sem repassar
+`node --test src/local-api/` (28 testes. Base: bind, auth, Origin, login sem vazar JWT, passagem sem repassar
 credencial do chamador, allowlist/traversal, injeção de `machineName`, 413, 401→`session.expired`, WS com/sem token,
 replay, legado, token 0600/rotação, upstream com reconexão).

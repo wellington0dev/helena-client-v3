@@ -43,6 +43,7 @@ if [[ ! -f "$ENV_FILE" ]]; then
     cp "$ENV_EXAMPLE" "$ENV_FILE"
     warn ".env criado a partir de .env.example."
 fi
+chmod 600 "$ENV_FILE" 2>/dev/null || true # segredos locais: só o dono lê
 
 # --- valida campos obrigatórios ---
 # BACKEND_V2_API_TOKEN NÃO é obrigatório aqui de propósito (mudou
