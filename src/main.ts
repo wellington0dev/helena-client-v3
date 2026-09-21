@@ -44,6 +44,7 @@ const session = createSessionManager({
     store: { load: loadSession, save: saveSession, clear: clearSession },
     hub,
     onLogin: ensureDeviceToken,
+    deviceLabel: config.machineName || os.hostname(),
 });
 const version = (JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string }).version;
 const clientDir = path.resolve(new URL("..", import.meta.url).pathname);

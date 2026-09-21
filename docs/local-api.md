@@ -52,8 +52,11 @@ no que é protegido.
 ## Permissões de segredos (achado C5)
 No boot o daemon põe `0600`/`0700` em `~/.config/helena`, `.env`, `.whatsapp-auth/` e `.whatsapp-lid-pins.json`; `install.sh`/`update.sh` também.
 
+## Sessão e refresh token
+O daemon guarda o access JWT e o **refresh token** (rotativo; backend `POST /auth/refresh`, branch `feat/auth-refresh-and-hardening` do `helena-bk-v3`). A TUI nunca vê nenhum dos dois. Renovação **preventiva** (faltando < 60 s pro access expirar) e **reativa** (401 → uma repetição), **single-flight** (refresh é de uso único: duas renovações paralelas derrubariam a sessão), com o par novo **gravado em disco antes de ser usado** (`session.json` atômico, `0600`). Refresh rejeitado (401/400) → sessão limpa + `session.expired`; falha de rede/5xx **não** desloga. Sessão legada (JWT sem refresh) segue expirando no 401. O login manda `deviceLabel` (nome da máquina) para `GET /auth/sessions`. Compatível com backend antigo (sem `refreshToken`, tudo funciona como antes).
+
 ## Ainda não implementado (próximos passos do plano §4.8)
-Refresh token (R0b, depende do backend), migração do `.whatsapp-auth` para `~/.local/share/helena`, inventário final da allowlist,
+ migração do `.whatsapp-auth` para `~/.local/share/helena`, inventário final da allowlist,
 buffer de eventos persistente entre reinícios.
 
 ## Testes

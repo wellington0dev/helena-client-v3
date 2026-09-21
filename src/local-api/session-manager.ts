@@ -1,14 +1,21 @@
 import type { EventHub } from "./event-hub.ts";
 
 /**
- * Dono das credenciais de USUÁRIO do backend (JWT). A TUI nunca vê o JWT: ela pede login/logout ao daemon e
- * usa as rotas `/v1/*`, que passam por `authedFetch` aqui. Hoje o backend não tem refresh token (R0b em
- * docs/plano-evolucao-v3.md §4.4): 401 ⇒ sessão expirou ⇒ evento `session.expired` no hub e a TUI pede a
- * senha de novo, sem perder a tela. Quando o refresh existir, é aqui (e só aqui) que a renovação entra.
+ * Dono das credenciais de USUÁRIO do backend (access JWT + refresh token). A TUI nunca vê nenhum dos dois: ela
+ * pede login/logout ao daemon e usa as rotas `/v1/*`, que passam por `authedFetch` aqui.
+ *
+ * Renovação (docs/plano-evolucao-v3.md §4.4): preventiva (perto de expirar) e reativa (401 → uma única repetição).
+ *  - SINGLE-FLIGHT: refresh é rotativo; duas renovações paralelas com o mesmo token disparariam a detecção de
+ *    reuso do backend e derrubariam a sessão. Chamadas concorrentes esperam a MESMA promessa.
+ *  - O par novo é GRAVADO EM DISCO ANTES de ser usado (se o processo cair no meio, o servidor ainda tolera o token
+ *    antigo por 30 s e o arquivo nunca fica com um token já consumido).
+ *  - Refresh rejeitado (401/400 = inválido, expirado, revogado, reutilizado) → sessão limpa + `session.expired`.
+ *    Falha de REDE/5xx NÃO desloga: mantém o estado e tenta de novo na próxima chamada.
+ *  - Sessão legada (JWT sem refresh token): 401 ⇒ expirou, como antes.
  */
 export interface SessionStore {
-    load(): { accessToken: string } | undefined;
-    save(accessToken: string): void;
+    load(): { accessToken: string; refreshToken?: string } | undefined;
+    save(accessToken: string, refreshToken?: string): void;
     clear(): void;
 }
 
@@ -19,6 +26,10 @@ export interface SessionManagerOptions {
     fetchImpl?: typeof fetch;
     /** Chamado (sem esperar) depois de login/registro bem-sucedido — ex.: provisionar o token de dispositivo. */
     onLogin?: (accessToken: string) => void | Promise<void>;
+    /** Nome desta máquina, enviado no login só pra o usuário reconhecer a sessão em `GET /auth/sessions`. */
+    deviceLabel?: string;
+    /** Renova quando faltar menos que isto pro access token expirar (padrão 60 s). */
+    refreshLeewayMs?: number;
 }
 
 export interface SessionManager {
@@ -52,51 +63,128 @@ async function messageOf(response: Response): Promise<string> {
     return raw || `HTTP ${response.status}`;
 }
 
+function jwtExpiryMs(token: string): number | undefined {
+    try {
+        const payload = JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8")) as { exp?: number };
+        return typeof payload.exp === "number" ? payload.exp * 1000 : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+type RefreshOutcome = "ok" | "rejected" | "network";
+
 export function createSessionManager(options: SessionManagerOptions): SessionManager {
     const { backendUrl, store, hub } = options;
     const doFetch = options.fetchImpl ?? fetch;
-    let token = store.load()?.accessToken;
+    const leeway = options.refreshLeewayMs ?? 60_000;
+    const loaded = store.load();
+    let token = loaded?.accessToken;
+    let refreshToken = loaded?.refreshToken;
+    let expiresAt = token ? jwtExpiryMs(token) : undefined;
+    let inflight: Promise<RefreshOutcome> | undefined;
 
     hub.setState("session", { loggedIn: Boolean(token) });
 
-    function setToken(next: string | undefined): void {
-        token = next;
-        if (next) store.save(next);
+    function setSession(access: string | undefined, refresh?: string, expiresInSeconds?: number): void {
+        if (access) store.save(access, refresh); // grava ANTES de trocar em memória
         else store.clear();
-        hub.setState("session", { loggedIn: Boolean(next) });
+        token = access;
+        refreshToken = access ? refresh : undefined;
+        expiresAt = access ? (expiresInSeconds ? Date.now() + expiresInSeconds * 1000 : jwtExpiryMs(access)) : undefined;
+        hub.setState("session", { loggedIn: Boolean(access) });
     }
 
-    async function authenticate(path: string, body: unknown): Promise<{ user: unknown }> {
-        const response = await doFetch(`${backendUrl}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    function expire(): void {
+        setSession(undefined);
+        hub.publish("session.expired", { reason: "backend_401" });
+    }
+
+    async function authenticate(path: string, body: Record<string, unknown>): Promise<{ user: unknown }> {
+        const payload = { ...body, ...(options.deviceLabel ? { deviceLabel: options.deviceLabel } : {}) };
+        const response = await doFetch(`${backendUrl}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
         if (!response.ok) throw new HttpError(response.status, await messageOf(response));
-        const parsed = (await response.json()) as { accessToken?: string; user?: unknown };
+        const parsed = (await response.json()) as { accessToken?: string; refreshToken?: string; expiresIn?: number; user?: unknown };
         if (!parsed.accessToken) throw new HttpError(502, "Resposta do backend sem accessToken.");
-        setToken(parsed.accessToken);
+        setSession(parsed.accessToken, parsed.refreshToken, parsed.expiresIn);
         void Promise.resolve(options.onLogin?.(parsed.accessToken)).catch(() => undefined);
         return { user: parsed.user };
     }
+
+    function refresh(): Promise<RefreshOutcome> {
+        if (!refreshToken) return Promise.resolve("rejected");
+        if (inflight) return inflight;
+        const used = refreshToken;
+        inflight = (async (): Promise<RefreshOutcome> => {
+            let response: Response;
+            try {
+                response = await doFetch(`${backendUrl}/auth/refresh`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refreshToken: used }), signal: AbortSignal.timeout(15_000) });
+            } catch {
+                return "network";
+            }
+            if (response.status === 401 || response.status === 400) return "rejected";
+            if (!response.ok) return "network"; // 5xx/429: o servidor não disse que a sessão morreu
+            try {
+                const parsed = (await response.json()) as { accessToken?: string; refreshToken?: string; expiresIn?: number };
+                if (!parsed.accessToken || !parsed.refreshToken) return "network";
+                setSession(parsed.accessToken, parsed.refreshToken, parsed.expiresIn);
+                return "ok";
+            } catch {
+                return "network";
+            }
+        })().finally(() => {
+            inflight = undefined;
+        });
+        return inflight;
+    }
+
+    function call(path: string, init: RequestInit): Promise<Response> {
+        const headers = new Headers(init.headers);
+        headers.set("Authorization", `Bearer ${token}`);
+        return doFetch(`${backendUrl}${path}`, { ...init, headers, signal: init.signal ?? AbortSignal.timeout(60_000) });
+    }
+
+    const noSession = () => new Response(JSON.stringify({ message: "Sem sessão — faça login.", error: "no_session", statusCode: 401 }), { status: 401, headers: { "Content-Type": "application/json" } });
 
     return {
         isLoggedIn: () => Boolean(token),
         login: (email, password) => authenticate("/auth/login", { email, password }),
         register: (email, password, displayName) => authenticate("/auth/register", { email, password, ...(displayName ? { displayName } : {}) }),
-        logout: () => setToken(undefined),
+        logout() {
+            const rt = refreshToken;
+            setSession(undefined);
+            // avisa o backend (revoga a família) sem esperar nem falhar por isso
+            if (rt) void doFetch(`${backendUrl}/auth/logout`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refreshToken: rt }), signal: AbortSignal.timeout(5_000) }).catch(() => undefined);
+        },
         adoptToken(accessToken) {
-            setToken(accessToken);
+            setSession(accessToken); // legado: JWT sem refresh
             void Promise.resolve(options.onLogin?.(accessToken)).catch(() => undefined);
         },
         async authedFetch(path, init = {}) {
-            if (!token) {
-                return new Response(JSON.stringify({ message: "Sem sessão — faça login.", error: "no_session", statusCode: 401 }), { status: 401, headers: { "Content-Type": "application/json" } });
+            if (!token) return noSession();
+            if (refreshToken && expiresAt !== undefined && expiresAt - Date.now() < leeway) {
+                if ((await refresh()) === "rejected") {
+                    expire();
+                    return noSession();
+                }
             }
-            const headers = new Headers(init.headers);
-            headers.set("Authorization", `Bearer ${token}`);
-            const response = await doFetch(`${backendUrl}${path}`, { ...init, headers, signal: init.signal ?? AbortSignal.timeout(60_000) });
-            if (response.status === 401) {
-                setToken(undefined);
-                hub.publish("session.expired", { reason: "backend_401" });
+            if (!token) return noSession();
+            const response = await call(path, init);
+            if (response.status !== 401) return response;
+
+            if (!refreshToken) {
+                expire();
+                return response;
             }
-            return response;
+            const outcome = await refresh();
+            if (outcome === "rejected") {
+                expire();
+                return response;
+            }
+            if (outcome === "network" || !token) return response; // não dá pra concluir; a sessão continua guardada
+            const retried = await call(path, init);
+            if (retried.status === 401) expire();
+            return retried;
         },
     };
 }
