@@ -12,13 +12,15 @@
  * Cobrança/Uso) só entram aqui quando a tela correspondente for entregue
  * — nunca um `/comando` morto aparecendo no `/help` antes de existir.
  */
-export type Screen = "chat" | "config" | "contacts" | "mcp" | "channels" | "usage" | "billing" | "projects" | "permissions";
+export type Screen = "chat" | "config" | "contacts" | "mcp" | "channels" | "usage" | "billing" | "projects" | "permissions" | "sessions";
 
 export interface CommandContext {
     setScreen: (screen: Screen) => void;
     pushNotice: (text: string, tone: "success" | "warn" | "danger") => void;
     /** Mostra/esconde a sidebar de worktree do chat. */
     toggleSidebar: () => void;
+    /** Começa uma conversa nova (limpa a tela e solta a sessão atual). */
+    newSession: () => void;
 }
 
 export interface Command {
@@ -64,6 +66,18 @@ export const COMMANDS: Command[] = [
         name: "projetos",
         description: "Equipe de dev — criar, acompanhar, revisar, conversar com cada agente",
         run: (ctx) => ctx.setScreen("projects"),
+    },
+    {
+        name: "sessoes",
+        aliases: ["sessions", "historico"],
+        description: "Conversas recentes — retomar uma delas",
+        run: (ctx) => ctx.setScreen("sessions"),
+    },
+    {
+        name: "novo",
+        aliases: ["limpar", "new", "clear"],
+        description: "Nova conversa (limpa a tela e começa outra sessão)",
+        run: (ctx) => ctx.newSession(),
     },
     {
         name: "permissoes",

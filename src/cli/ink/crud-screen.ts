@@ -38,12 +38,21 @@ export interface CrudScreenProps<Item extends { id: string }> {
     busy: boolean;
     error?: string;
     onExit: () => void;
+    /** Teto de linhas de item mostradas ao mesmo tempo — acima disso a lista rola acompanhando o cursor (telas com listas longas, ex: /sessoes). Ausente = mostra tudo. */
+    maxVisible?: number;
+}
+
+/** Janela [start, end) de `total` linhas com o cursor o mais centralizado possível. Pura e testada em crud-screen.test.ts. */
+export function visibleWindow(total: number, cursor: number, maxVisible: number | undefined): { start: number; end: number } {
+    if (!maxVisible || total <= maxVisible) return { start: 0, end: total };
+    const start = Math.min(Math.max(cursor - Math.floor(maxVisible / 2), 0), total - maxVisible);
+    return { start, end: start + maxVisible };
 }
 
 type Row<Item> = { kind: "create" } | { kind: "item"; item: Item };
 
 export function CrudScreen<Item extends { id: string }>(props: CrudScreenProps<Item>): React.ReactElement {
-    const { title, items, itemLabel, onSelect, onCreate, createLabel = "+ Criar novo", onDelete, deleteConfirmLabel, busy, error, onExit } = props;
+    const { title, items, itemLabel, onSelect, onCreate, createLabel = "+ Criar novo", onDelete, deleteConfirmLabel, busy, error, onExit, maxVisible } = props;
     const [cursor, setCursor] = React.useState(0);
     const [confirming, setConfirming] = React.useState<Item | undefined>(undefined);
 
@@ -107,6 +116,9 @@ export function CrudScreen<Item extends { id: string }>(props: CrudScreenProps<I
         }
     }
 
+    const win = visibleWindow(rows.length, cursor, maxVisible);
+    const windowed = Boolean(maxVisible) && rows.length > (maxVisible ?? 0);
+
     if (confirming) {
         const message = deleteConfirmLabel ? deleteConfirmLabel(confirming) : `Apagar "${itemLabel(confirming).label}"? Essa ação não pode ser desfeita.`;
         return h(
@@ -129,15 +141,18 @@ export function CrudScreen<Item extends { id: string }>(props: CrudScreenProps<I
                   Box,
                   { flexDirection: "column" },
                   rows.length === 0 ? h(Text, { dimColor: true }, "Nenhum item ainda.") : null,
-                  ...rows.map((row, i) => {
+                  windowed ? h(Text, { key: "__above__", dimColor: true }, win.start > 0 ? `  ↑ ${win.start} acima` : " ") : null,
+                  ...rows.slice(win.start, win.end).map((row, offset) => {
+                      const i = win.start + offset;
                       const active = i === cursor;
                       const pointer = active ? c.primary("❯ ") : "  ";
                       const number = i < 9 ? c.muted(`${i + 1}) `) : "   ";
                       const { label, hint } = row.kind === "create" ? { label: createLabel, hint: undefined } : itemLabel(row.item);
                       const styledLabel = active ? c.primary(label) : label;
                       const hintText = hint ? `  ${c.muted(hint)}` : "";
-                      return h(Text, { key: row.kind === "create" ? "__create__" : row.item.id }, pointer, number, styledLabel, hintText);
+                      return h(Text, { key: row.kind === "create" ? "__create__" : row.item.id, wrap: "truncate" }, pointer, number, styledLabel, hintText);
                   }),
+                  windowed ? h(Text, { key: "__below__", dimColor: true }, win.end < rows.length ? `  ↓ ${rows.length - win.end} abaixo` : " ") : null,
               ),
         h(Box, { marginTop: 1 }),
         error ? h(Text, { color: theme.danger }, `Erro: ${error}`) : null,

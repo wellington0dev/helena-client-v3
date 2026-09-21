@@ -9,6 +9,8 @@ import { connectLocalWs } from "./local-ws-client.ts";
 import { statusBarParts } from "./status-bar.ts";
 import type { ClientState } from "../../local-api/status-bus.ts";
 import { PermissionsScreen } from "./permissions-screen.ts";
+import { getSessionHistory, type SessionSummary } from "../api/sessions.ts";
+import { historyEntriesToItems, SessionsScreen } from "./sessions-screen.ts";
 import { measurePermissionDialog, PermissionDialog, type PermissionDecision } from "./permission-dialog.ts";
 import { readWorktree, renderWorktreeLines, truncateToWidth } from "./worktree.ts";
 import { resolveInterrupt, sendMessage, UnauthorizedError, type PendingConfirmation, type SendMessageResult } from "../backend.ts";
@@ -684,6 +686,44 @@ export function App(props: AppProps): React.ReactElement {
         }
     }
 
+    /** Zera tudo que pertence à conversa atual (histórico da tela, sessão, totais, plano, rolagem, turno órfão). */
+    function resetConversation(): void {
+        setHistory([]);
+        setSessionId(undefined);
+        setTotals({ tokensIn: 0, tokensOut: 0, turns: 0 });
+        setActivePlan(null);
+        setScrollAnchor(null);
+        setError(undefined);
+        orphanTurnRef.current = false;
+        orphanWarnedRef.current = false;
+        navRef.current = NOT_NAVIGATING;
+    }
+
+    function newSession(): void {
+        resetConversation();
+        setHistory([noticeItem("Nova conversa. A anterior continua em /sessoes.", "success")]);
+    }
+
+    /** Retoma uma sessão: volta pro chat na hora e carrega as últimas mensagens (a Helena já tem o contexto completo no servidor). */
+    async function resumeSession(session: SessionSummary): Promise<void> {
+        setScreen("chat");
+        resetConversation();
+        setSessionId(session.id);
+        try {
+            const page = await getSessionHistory(backendUrl, token, session.id);
+            const items = historyEntriesToItems(page.entries);
+            const older = page.total - page.entries.length;
+            const banner = noticeItem(older > 0 ? `Conversa retomada — mostrando as últimas ${page.entries.length} de ${page.total} mensagens.` : "Conversa retomada.", "success");
+            setHistory([banner, ...items]);
+        } catch (err) {
+            if (err instanceof UnauthorizedError) {
+                onDone({ type: "relogin", history: historyRef.current, sessionId: session.id });
+                return;
+            }
+            setHistory([noticeItem(`Não consegui carregar o histórico (${err instanceof Error ? err.message : String(err)}). A conversa continua de onde parou.`, "warn")]);
+        }
+    }
+
     function handleCommand(raw: string): void {
         const name = raw.slice(1).trim().toLowerCase();
         const command = findCommand(name);
@@ -695,6 +735,7 @@ export function App(props: AppProps): React.ReactElement {
             setScreen,
             pushNotice: (text, tone) => setHistory((prev) => [...prev, noticeItem(text, tone)]),
             toggleSidebar: () => setSidebarOpen((open) => !open),
+            newSession,
         });
     }
 
@@ -757,6 +798,10 @@ export function App(props: AppProps): React.ReactElement {
     // conteúdo dela é mais curto que o terminal, em vez de deixar o resto
     // da tela vazio fora do controle do Ink (ver chat.ts pro alt-screen).
     const fullScreen = (child: React.ReactElement): React.ReactElement => h(Box, { flexDirection: "column", height: usableRows }, child);
+
+    if (screen === "sessions") {
+        return fullScreen(h(SessionsScreen, { backendUrl, token, onPick: (session: SessionSummary) => void resumeSession(session), onExit: () => setScreen("chat"), onUnauthorized }));
+    }
 
     if (screen === "permissions") {
         return fullScreen(h(PermissionsScreen, { backendUrl, token, onExit: () => setScreen("chat"), onUnauthorized }));
