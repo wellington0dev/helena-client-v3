@@ -12,7 +12,7 @@
  * Cobrança/Uso) só entram aqui quando a tela correspondente for entregue
  * — nunca um `/comando` morto aparecendo no `/help` antes de existir.
  */
-export type Screen = "chat" | "config" | "contacts" | "mcp" | "channels" | "usage" | "billing";
+export type Screen = "chat" | "config" | "contacts" | "mcp" | "channels" | "usage" | "billing" | "projects";
 
 export interface CommandContext {
     setScreen: (screen: Screen) => void;
@@ -59,6 +59,11 @@ export const COMMANDS: Command[] = [
         run: (ctx) => ctx.setScreen("billing"),
     },
     {
+        name: "projetos",
+        description: "Equipe de dev — criar, acompanhar, revisar, conversar com cada agente",
+        run: (ctx) => ctx.setScreen("projects"),
+    },
+    {
         name: "help",
         aliases: ["?"],
         description: "Esta lista",
@@ -69,6 +74,12 @@ export const COMMANDS: Command[] = [
 export function findCommand(name: string): Command | undefined {
     const normalized = name.toLowerCase();
     return COMMANDS.find((cmd) => cmd.name === normalized || cmd.aliases?.includes(normalized));
+}
+
+/** Usado pelo menu de autocompletar do composer (ver app.ts) — prefixo vazio ("/" sozinho) casa com tudo, então digitar só "/" já mostra a lista inteira. Casa nome OU apelido pra "/s" também sugerir /config (apelido "settings"). */
+export function matchCommands(prefix: string): Command[] {
+    const normalized = prefix.toLowerCase();
+    return COMMANDS.filter((cmd) => cmd.name.startsWith(normalized) || cmd.aliases?.some((alias) => alias.startsWith(normalized)));
 }
 
 /** Monta o texto de `/help` a partir do registro — nunca mais uma const solta duplicando o que os comandos já descrevem. */

@@ -89,6 +89,21 @@ function cleanupFile(filePath: string): void {
 }
 
 export function runCommand(command: string, cwd?: string, timeoutMs: number = TIMEOUT_MS): Promise<{ stdout: string; stderr: string; code: number | null }> {
+    return runCommandInternal(command, cwd, timeoutMs);
+}
+
+export interface StreamCallbacks {
+    onStdoutChunk?: (chunk: string) => void;
+    onStderrChunk?: (chunk: string) => void;
+}
+
+/** Versão interna que aceita callbacks de streaming opcionais. */
+export function runCommandInternal(
+    command: string,
+    cwd?: string,
+    timeoutMs: number = TIMEOUT_MS,
+    callbacks?: StreamCallbacks
+): Promise<{ stdout: string; stderr: string; code: number | null }> {
     const spawnOpts = { cwd: expandHome(cwd) };
 
     // `cwd` inexistente ANTES do spawn — sem isso, vira "spawn /bin/sh ENOENT"
@@ -130,10 +145,23 @@ export function runCommand(command: string, cwd?: string, timeoutMs: number = TI
             child.kill();
         }, timeoutMs);
 
+        // Streaming: leia os arquivos periodicamente e chame callbacks
+        const streamInterval = callbacks ? setInterval(() => {
+            if (callbacks.onStdoutChunk) {
+                const chunk = readCapped(stdoutPath);
+                if (chunk) callbacks.onStdoutChunk(chunk);
+            }
+            if (callbacks.onStderrChunk) {
+                const chunk = readCapped(stderrPath);
+                if (chunk) callbacks.onStderrChunk(chunk);
+            }
+        }, 200) : null; // 5x por segundo
+
         function finish(code: number | null): void {
             if (settled) return;
             settled = true;
             clearTimeout(timer);
+            if (streamInterval) clearInterval(streamInterval);
 
             // Fecha NOSSOS fds — um processo em segundo plano que ainda os
             // segura continua escrevendo num arquivo de verdade, nunca
@@ -148,6 +176,18 @@ export function runCommand(command: string, cwd?: string, timeoutMs: number = TI
                 fs.closeSync(stderrFd);
             } catch {
                 // já fechado — nada a fazer.
+            }
+
+            // Leitura final
+            if (callbacks) {
+                if (callbacks.onStdoutChunk) {
+                    const chunk = readCapped(stdoutPath);
+                    if (chunk) callbacks.onStdoutChunk(chunk);
+                }
+                if (callbacks.onStderrChunk) {
+                    const chunk = readCapped(stderrPath);
+                    if (chunk) callbacks.onStderrChunk(chunk);
+                }
             }
 
             const stdout = readCapped(stdoutPath);

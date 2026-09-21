@@ -33,6 +33,10 @@ export interface ToolActivityEntry {
 export interface TurnUsage {
     inputTokens?: number;
     outputTokens?: number;
+    /** Quanto de `inputTokens` veio do cache implícito do Gemini (ver captureUsageMiddleware no backend-v2) — o backend já manda isso, só não era mostrado aqui. */
+    cachedTokens?: number;
+    /** Tokens de "pensamento" do Gemini — cobrados pela Google à taxa de OUTPUT, mas fora de `outputTokens` (ver captureUsageMiddleware no backend-v2). Ausente em turnos gravados antes de 2026-09-19. */
+    thoughtsTokens?: number;
     durationMs: number;
 }
 

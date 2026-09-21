@@ -1,7 +1,7 @@
 import os from "node:os";
 import { config } from "./config.ts";
-import { deleteFile, listFiles, readFile, searchFiles, writeFile, type FileEdit } from "./local-files.ts";
-import { runCommand } from "./local-shell.ts";
+import { deleteFile, globFiles, grepFiles, listFiles, previewDiff, readFile, searchFiles, writeFile, type FileEdit } from "./local-files.ts";
+import { runCommand, runCommandInternal, type StreamCallbacks } from "./local-shell.ts";
 import { updateMachineAgent } from "./panel/status-bus.ts";
 import { reportTelemetry } from "./telemetry.ts";
 
@@ -29,6 +29,13 @@ interface AgentExecResultMessage {
     error?: string;
 }
 
+interface AgentExecProgressMessage {
+    type: "exec-progress";
+    requestId: string;
+    stdoutChunk?: string;
+    stderrChunk?: string;
+}
+
 interface AgentExecBackgroundResultMessage {
     type: "exec-background-result";
     jobId: string;
@@ -37,13 +44,15 @@ interface AgentExecBackgroundResultMessage {
     error?: string;
 }
 
-type AgentClientMessage = AgentRegisterMessage | AgentExecResultMessage | AgentExecBackgroundResultMessage;
+type AgentClientMessage = AgentRegisterMessage | AgentExecResultMessage | AgentExecProgressMessage | AgentExecBackgroundResultMessage;
 
 interface AgentExecRequest {
     type: "exec";
     requestId: string;
     capability: string;
     payload: unknown;
+    /** Se true, o cliente DEVE emitir `exec-progress` eventos durante a execução (streaming). */
+    stream?: boolean;
 }
 
 /**
@@ -62,10 +71,11 @@ interface AgentExecBackgroundRequest {
 type AgentServerEvent = AgentExecRequest | AgentExecBackgroundRequest;
 
 const RECONNECT_DELAY_MS = 5_000;
+const TIMEOUT_MS = 30_000;
 
 /**
  * `shell`/`exec-background` são do backend-v2 desde o início; `list_files`/
- * `read_file`/`search_files`/`write_file` são a Fase 0 do plano de agentes
+ * `read_file`/`search_files`/`write_file`/`grep_files`/`glob_files` são a Fase 0 do plano de agentes
  * de dev (backend-v2 `docs/agent-team-architecture.md` §1.2) — leitura/
  * escrita estruturada, nunca via heredoc de shell. `device`/`network`/`gh`/
  * `browser`/`file-transfer` eram do backend single-owner, não portadas
@@ -76,9 +86,9 @@ const RECONNECT_DELAY_MS = 5_000;
  * local-files.ts). Fixa, sem env var pra configurar — YAGNI enquanto o
  * conjunto não mudar por tenant.
  */
-const CAPABILITIES = ["shell", "list_files", "read_file", "search_files", "write_file", "delete_file"];
+const CAPABILITIES = ["shell", "list_files", "read_file", "search_files", "write_file", "delete_file", "grep_files", "glob_files", "preview_diff"];
 
-/** As 5 capabilities de arquivo são síncronas e locais (sem I/O de rede) — cabem no mesmo `exec`/`exec-result` de sempre, sem precisar do caminho `exec-background`. */
+/** As capabilities de arquivo são síncronas e locais (sem I/O de rede) — cabem no mesmo `exec`/`exec-result` de sempre, sem precisar do caminho `exec-background`. */
 function dispatchCapability(capability: string, payload: unknown): unknown {
     switch (capability) {
         case "list_files": {
@@ -93,6 +103,14 @@ function dispatchCapability(capability: string, payload: unknown): unknown {
             const { path, namePattern, contentPattern } = payload as { path: string; namePattern?: string; contentPattern?: string };
             return searchFiles(path, namePattern, contentPattern);
         }
+        case "grep_files": {
+            const { path, pattern, filePattern } = payload as { path: string; pattern: string; filePattern?: string };
+            return grepFiles(path, pattern, filePattern);
+        }
+        case "glob_files": {
+            const { path, pattern } = payload as { path: string; pattern: string };
+            return globFiles(path, pattern);
+        }
         case "write_file": {
             const { path, edits } = payload as { path: string; edits: FileEdit[] };
             return writeFile(path, edits);
@@ -101,15 +119,47 @@ function dispatchCapability(capability: string, payload: unknown): unknown {
             const { path } = payload as { path: string };
             return deleteFile(path);
         }
+        case "preview_diff": {
+            const { path, edits } = payload as { path: string; edits: FileEdit[] };
+            return previewDiff(path, edits);
+        }
         default:
             throw new Error(`capability desconhecida: "${capability}"`);
     }
 }
 
-async function handleExec(message: AgentExecRequest): Promise<AgentClientMessage> {
+async function handleExec(message: AgentExecRequest, socket: WebSocket): Promise<AgentClientMessage> {
     try {
         if (message.capability === "shell") {
             const { command, cwd } = message.payload as { command: string; cwd?: string };
+            const shouldStream = message.stream === true;
+
+            if (shouldStream) {
+                // Streaming mode: emit progress events during execution
+                const callbacks: StreamCallbacks = {
+                    onStdoutChunk: (chunk) => {
+                        if (socket.readyState === socket.OPEN) {
+                            socket.send(JSON.stringify({
+                                type: "exec-progress",
+                                requestId: message.requestId,
+                                stdoutChunk: chunk,
+                            } satisfies AgentExecProgressMessage));
+                        }
+                    },
+                    onStderrChunk: (chunk) => {
+                        if (socket.readyState === socket.OPEN) {
+                            socket.send(JSON.stringify({
+                                type: "exec-progress",
+                                requestId: message.requestId,
+                                stderrChunk: chunk,
+                            } satisfies AgentExecProgressMessage));
+                        }
+                    },
+                };
+                const result = await runCommandInternal(command, cwd, TIMEOUT_MS, callbacks);
+                return { type: "exec-result", requestId: message.requestId, ok: true, result };
+            }
+
             const result = await runCommand(command, cwd);
             return { type: "exec-result", requestId: message.requestId, ok: true, result };
         }
@@ -178,7 +228,7 @@ export function startMachineAgent(backendUrl: string, apiToken: string): void {
                 return;
             }
             if (message.type === "exec") {
-                handleExec(message).then((response) => socket.send(JSON.stringify(response)));
+                handleExec(message, socket).then((response) => socket.send(JSON.stringify(response)));
                 return;
             }
             if (message.type === "exec-background") {

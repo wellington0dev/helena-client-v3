@@ -10,19 +10,55 @@ import { clearSession, loadSession, saveSession } from "./session-store.ts";
 import { App, type HistoryItem, type SessionOutcome } from "./ink/app.ts";
 
 /**
- * `helena` — REPL interativo com Ink (React pro terminal), inspirado nos
- * padrões reais do gemini-cli (histórico congelado em `<Static>`, spinner
- * de status vindo de `/ws/chat-progress` — ver ChatProgressGateway no
+ * `helena` — REPL interativo com Ink (React pro terminal), fullscreen de
+ * verdade (buffer alternativo, mesmo mecanismo de vim/htop — ver
+ * `{ alternateScreen: true }` em `runInkSession` abaixo), spinner de
+ * status vindo de `/ws/chat-progress` (ver ChatProgressGateway no
  * backend-v2). `React.createElement` em vez de JSX: ver comentário em
  * ink/app.ts sobre o modelo "zero build" deste pacote.
  *
  * Login (email/senha) continua por `readline` puro, ANTES de montar o Ink
  * — reimplementar prompt de senha mascarada dentro do Ink não teria ganho
- * real. `cwd`/`machineName` vão em TODO turno (ver ink/app.ts), mesmo
- * contexto advisório de antes.
+ * real, e como resultado os prompts de login acontecem no buffer NORMAL
+ * (só o chat em si é fullscreen) — de quebra, se o login falhar, dá pra
+ * rolar o terminal e ver o que aconteceu, coisa que o buffer alternativo
+ * não permite. `cwd`/`machineName` vão em TODO turno (ver ink/app.ts),
+ * mesmo contexto advisório de antes.
  */
 
 const h = React.createElement;
+
+/**
+ * O Ink entra/sai do buffer alternativo sozinho (`alternateScreen: true`,
+ * ver `runInkSession`) e faz isso corretamente no caminho normal —
+ * `unmount()` já escreve a sequência de saída ANTES de devolver o
+ * controle. O que o Ink NÃO cobre (confirmado lendo `ink.js`: só registra
+ * `process.once("beforeExit", ...)`, nada de sinal) é encerramento
+ * ABRUPTO — `SIGTERM` de fora, `SIGINT` como sinal de verdade em vez de
+ * tecla (não deveria acontecer aqui, já que `exitOnCtrlC: false` faz o
+ * Ctrl+C virar uma tecla normal pro `useInput` do App, mas um terminal/
+ * multiplexador pode mandar o sinal de outro jeito), ou um crash que leve
+ * a `process.exit()`. Nesses casos o buffer alternativo ficaria preso —
+ * esta é só uma rede de segurança de ÚLTIMA LINHA: escrever a sequência
+ * de saída de novo quando já se saiu normalmente é inofensivo (o terminal
+ * ignora), então não precisa nem rastrear estado.
+ */
+function forceExitAlternateScreen(): void {
+    try {
+        process.stdout.write("[?1049l");
+    } catch {
+        // stdout pode já estar fechado num desligamento abrupto — nada a fazer.
+    }
+}
+process.on("exit", forceExitAlternateScreen);
+process.on("SIGINT", () => {
+    forceExitAlternateScreen();
+    process.exit(130);
+});
+process.on("SIGTERM", () => {
+    forceExitAlternateScreen();
+    process.exit(143);
+});
 
 if (!config.backendUrl) {
     console.error("[helena] BACKEND_V2_URL não configurado no .env.");
@@ -151,7 +187,32 @@ async function ensureSession(): Promise<string> {
     return interactiveLogin();
 }
 
-/** Monta o app Ink, devolve quando `onDone` disparar (Ctrl+C/Ctrl+D ou sessão expirada) — `unmount()` libera o raw mode do stdin antes do `readline` da próxima relogin poder usá-lo. */
+/**
+ * Monta o app Ink, devolve quando `onDone` disparar (Ctrl+C/Ctrl+D ou
+ * sessão expirada) — `unmount()` libera o raw mode do stdin antes do
+ * `readline` da próxima relogin poder usá-lo.
+ *
+ * `alternateScreen: true` é o mecanismo NATIVO do Ink pro fullscreen —
+ * entra no buffer alternativo (+ esconde cursor) ao montar, sai (+
+ * mostra cursor) ao desmontar, e já trata sozinho os casos que uma
+ * implementação manual erraria fácil: ambiente não-interativo/sem TTY
+ * vira no-op automático (`resolveAlternateScreenOption` em ink.js), e
+ * suspender/retomar o terminal (`Ctrl+Z`) alterna o buffer certinho nos
+ * dois sentidos. `main()` cria um `runInkSession` NOVO a cada relogin —
+ * os prompts de email/senha entre uma sessão e outra caem no buffer
+ * normal por um instante, o que é aceitável (ver comentário no topo do
+ * arquivo).
+ *
+ * `exitOnCtrlC: false` é OBRIGATÓRIO — o padrão do Ink (`true`) intercepta
+ * Ctrl+C ANTES de qualquer `useInput` da árvore (ver `use-input.js`: só
+ * entrega o evento se `internal_exitOnCtrlC` for falso) e desmonta
+ * sozinho, sem passar pelo `onDone` do App. Achado ao vivo via pty: com o
+ * padrão, o Ctrl+C saía do buffer alternativo certinho (o unmount interno
+ * do Ink cuida disso independente de quem pediu a saída) mas NUNCA
+ * imprimia "Até mais!" — o `onDone` deste arquivo simplesmente não era
+ * chamado. Desativando o padrão, Ctrl+C passa a se comportar IGUAL
+ * Ctrl+D — os dois batem no mesmo `useInput` do App.
+ */
 function runInkSession(token: string, initialHistory: HistoryItem[], initialSessionId: string | undefined): Promise<SessionOutcome> {
     return new Promise((resolve) => {
         const instance = render(
@@ -167,6 +228,7 @@ function runInkSession(token: string, initialHistory: HistoryItem[], initialSess
                     resolve(outcome);
                 },
             }),
+            { alternateScreen: true, exitOnCtrlC: false },
         );
     });
 }
@@ -185,6 +247,10 @@ async function main(): Promise<void> {
     while (true) {
         const outcome = await runInkSession(token, history, sessionId);
         if (outcome.type === "exit") {
+            // `instance.unmount()` (chamado dentro de `onDone`, ver
+            // `runInkSession`) já restaurou o buffer normal ANTES desta
+            // Promise resolver — o "Até mais!" já pousa no scrollback de
+            // verdade, de volta pro shell.
             console.log("\nAté mais!");
             return;
         }

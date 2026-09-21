@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@grammyjs/files": "^1.2.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "baileys": "6.7.24",
     "chalk": "^6.0.0",
     "dotenv": "^17.4.2",
@@ -35,6 +36,8 @@
     "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
     "react": "^19.2.8",
+    "string-width": "^8.2.0",
+    "wrap-ansi": "^10.0.0",
     "ws": "^8.21.3"
   },
   "overrides": {

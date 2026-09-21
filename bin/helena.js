@@ -19,24 +19,40 @@ const CLIENT_DIR = path.join(BIN_DIR, "..");
 
 const HELP = `helena — chat interativo com a Helena
 
-Uso: helena [--help]
+Uso: helena [comando] [--help]
 
   helena              abre o chat (conecta em BACKEND_V2_URL, .env do client/)
+  helena mcp-server   inicia MCP server via stdio (expondo shell, file ops, etc)
   helena --help, -h   mostra esta ajuda
 
 Execução de comando remoto (antigo 'helena agent'), WhatsApp e Telegram não
 são mais subcomandos daqui — rode 'npm start' dentro de client/ (um
 processo só cobre os três, ver docs/architecture-v2.md §4).`;
 
-const [arg] = process.argv.slice(2);
+const [cmd, ...args] = process.argv.slice(2);
 
-if (arg === "-h" || arg === "--help") {
+if (cmd === "-h" || cmd === "--help") {
     console.log(HELP);
     process.exit(0);
 }
 
-if (arg !== undefined) {
-    console.error(`[helena] argumento desconhecido: ${arg}\n`);
+if (cmd === "mcp-server") {
+    // Inicia MCP server standalone via stdio
+    const result = spawnSync(process.execPath, [path.join(CLIENT_DIR, "src/mcp-server.ts")], {
+        cwd: CLIENT_DIR,
+        stdio: "inherit",
+        env: { ...process.env, CLIENT_MCP_SERVER: "1" },
+    });
+
+    if (result.error) {
+        console.error(`[helena mcp-server] falha ao executar: ${result.error.message}`);
+        process.exit(1);
+    }
+    process.exit(result.status ?? 1);
+}
+
+if (cmd !== undefined) {
+    console.error(`[helena] comando desconhecido: ${cmd}\n`);
     console.log(HELP);
     process.exit(1);
 }

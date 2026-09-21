@@ -5,6 +5,7 @@ import { startTelegram } from "./channels/telegram.ts";
 import { startMachineAgent } from "./machine-agent.ts";
 import { startOutboundPoller } from "./outbound-poller.ts";
 import { reportError } from "./telemetry.ts";
+import { startMcpServer, stopMcpServer } from "./mcp-server.ts";
 
 /**
  * Entrypoint único do client/ — sobe o servidor local SEMPRE (mesmo sem
@@ -20,12 +21,21 @@ import { reportError } from "./telemetry.ts";
  * O painel web (Angular) que rodava em cima deste mesmo servidor foi
  * DESABILITADO (2026-09-17) — a CLI (`helena`) é a interface principal
  * agora; ver `client/docs/local-server-api.md`.
+ *
+ * MCP Server (novo): se `CLIENT_MCP_SERVER=1` no .env, também sobe o
+ * MCP server via stdio expondo capacidades locais (shell, file ops, etc)
+ * pra clientes MCP externos conectarem.
  */
 startPanelServer(config.panelPort, config.backendUrl);
 startWhatsapp();
 startTelegram();
 startMachineAgent(config.backendUrl, config.backendApiToken);
 startOutboundPoller();
+
+// MCP Server opcional (via env var)
+if (config.mcpServerEnabled) {
+    startMcpServer().catch((err) => console.error("[MCP Server] falha ao iniciar:", err));
+}
 
 /**
  * Único ponto de captura de erro NÃO tratado do processo inteiro (ver
@@ -49,6 +59,7 @@ const SHUTDOWN_TIMEOUT_MS = 5000;
 
 async function shutdown(): Promise<void> {
     await Promise.race([stopWhatsapp().catch((error) => console.error("[main] falha ao encerrar WhatsApp:", error)), new Promise((resolve) => setTimeout(resolve, SHUTDOWN_TIMEOUT_MS))]);
+    await stopMcpServer().catch(() => undefined);
     process.exit(0);
 }
 

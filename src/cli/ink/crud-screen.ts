@@ -33,6 +33,8 @@ export interface CrudScreenProps<Item extends { id: string }> {
     createLabel?: string;
     /** Ausente = sem ação de apagar nenhuma (nem tecla `x`, nem fallback do Enter). */
     onDelete?: (item: Item) => Promise<void>;
+    /** Título da confirmação — default assume "apagar" de verdade (irreversível). Telas que reusam `onDelete` pra outra ação (ex: "restaurar padrão" em `projects-screen.ts`) devem passar um texto específico — nunca deixar o texto genérico mentir sobre o que vai acontecer. */
+    deleteConfirmLabel?: (item: Item) => string;
     busy: boolean;
     error?: string;
     onExit: () => void;
@@ -41,7 +43,7 @@ export interface CrudScreenProps<Item extends { id: string }> {
 type Row<Item> = { kind: "create" } | { kind: "item"; item: Item };
 
 export function CrudScreen<Item extends { id: string }>(props: CrudScreenProps<Item>): React.ReactElement {
-    const { title, items, itemLabel, onSelect, onCreate, createLabel = "+ Criar novo", onDelete, busy, error, onExit } = props;
+    const { title, items, itemLabel, onSelect, onCreate, createLabel = "+ Criar novo", onDelete, deleteConfirmLabel, busy, error, onExit } = props;
     const [cursor, setCursor] = React.useState(0);
     const [confirming, setConfirming] = React.useState<Item | undefined>(undefined);
 
@@ -106,11 +108,11 @@ export function CrudScreen<Item extends { id: string }>(props: CrudScreenProps<I
     }
 
     if (confirming) {
+        const message = deleteConfirmLabel ? deleteConfirmLabel(confirming) : `Apagar "${itemLabel(confirming).label}"? Essa ação não pode ser desfeita.`;
         return h(
             Box,
             { flexDirection: "column", borderStyle: "round", borderColor: theme.warning, paddingX: 1 },
-            h(Text, { bold: true, color: theme.warning }, `Apagar "${itemLabel(confirming).label}"?`),
-            h(Text, { dimColor: true }, "Essa ação não pode ser desfeita."),
+            h(Text, { bold: true, color: theme.warning }, message),
             h(Box, { marginTop: 1 }),
             h(Text, null, "Confirmar? (s/n)"),
         );

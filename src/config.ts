@@ -31,6 +31,8 @@ export const config = {
     mediaMaxMb: Number(process.env.MEDIA_MAX_MB || 25),
     /** Teto de um comando `shell` rodado com `background:true` (ver machine-agent.ts) — bem maior que os 30s do modo síncrono, mas não infinito. */
     backgroundShellTimeoutMinutes: Number(process.env.CLIENT_BACKGROUND_SHELL_TIMEOUT_MINUTES || 30),
+    /** Se true, sobe o MCP server via stdio expondo capacidades locais (shell, file ops, etc) pra clientes MCP externos. */
+    mcpServerEnabled: process.env.CLIENT_MCP_SERVER === "1",
 };
 
 export function hasBackendConfig(): boolean {

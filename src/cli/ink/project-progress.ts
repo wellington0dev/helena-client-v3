@@ -11,13 +11,13 @@ const ROLE_LABEL: Partial<Record<ProjectStepRole, string>> = {
     qa: "QA",
 };
 
-/** Ordem fixa dos papéis clássicos — qualquer papel dinâmico (fora desta lista) aparece DEPOIS, na ordem em que foi descoberto (ver formatProjectChecklist). */
-const ROLE_ORDER: ProjectStepRole[] = ["architect", "designer", "frontend", "backend", "dba", "security", "qa"];
+/** Ordem fixa dos papéis clássicos — qualquer papel dinâmico (fora desta lista) aparece DEPOIS, na ordem em que foi descoberto (ver formatProjectChecklist). Exportada pra `project-detail-screen.ts` ordenar a lista completa de `ProjectStep[]` do mesmo jeito, sem duplicar a lista. */
+export const ROLE_ORDER: ProjectStepRole[] = ["architect", "designer", "frontend", "backend", "dba", "security", "qa"];
 
 const STATUS_ICON: Record<ProjectStepStatus, string> = { ready: "○", running: "◐", done: "✓", failed: "✗" };
 const STATUS_LABEL: Record<ProjectStepStatus, string> = { ready: "na fila", running: "rodando", done: "concluído", failed: "falhou" };
 
-function roleLabelFor(role: ProjectStepRole): string {
+export function roleLabelFor(role: ProjectStepRole): string {
     return ROLE_LABEL[role] ?? (role.length > 0 ? role[0]!.toUpperCase() + role.slice(1) : role);
 }
 

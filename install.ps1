@@ -36,14 +36,14 @@ try {
     npm install
     if ($LASTEXITCODE -ne 0) { Write-Err "npm install falhou."; exit 1 }
 
-    Write-Host "Buildando o painel web (Angular)..." -ForegroundColor Cyan
-    npm run build:panel
-    if ($LASTEXITCODE -ne 0) {
-        Write-Err "Build do painel falhou — abortando instalacao."
-        Write-Info "Nunca sobe servindo painel quebrado ou build antigo silenciosamente. Corrija o erro acima e rode .\install.ps1 de novo."
-        exit 1
-    }
-    Write-Ok "Painel web buildado."
+    # SEM build do painel web (Angular) de proposito — o painel foi
+    # DESABILITADO (2026-09-17, ver src/panel/server.ts): a CLI (`helena`) e
+    # a interface principal agora, o servidor local so serve endpoints
+    # internos (/health, /cli-session, /ws). Buildar o painel aqui builda
+    # algo que nunca e servido — so gasta tempo (Angular e lento/fragil de
+    # buildar no Windows) e cria mais um jeito de a instalacao falhar a toa.
+    # `npm run build:panel` continua existindo pra quem quiser retomar o
+    # desenvolvimento do painel manualmente depois (ver install.sh).
 
     $EnvFile = Join-Path $ClientDir ".env"
     $EnvExample = Join-Path $ClientDir ".env.example"
@@ -52,9 +52,15 @@ try {
         Write-Warn ".env criado a partir de .env.example."
     }
 
+    # BACKEND_V2_API_TOKEN NAO e obrigatorio aqui de proposito (bug real
+    # encontrado ao vivo, 2026-09-18: instalacao no Windows travava sem
+    # saida nenhuma) — esse campo so se gera logando no client/, autenticado,
+    # mas o client so existe DEPOIS deste script instalar e subir o servico.
+    # Exigir aqui era um loop sem saida: nao dava pra terminar a instalacao
+    # nem pra gerar o token. Mesmo fix ja aplicado no install.sh (Linux) em
+    # 2026-09-16 — este script (.ps1) nunca tinha recebido o mesmo ajuste.
     $missing = @()
     if (-not (Read-EnvValue $EnvFile "BACKEND_V2_URL")) { $missing += "BACKEND_V2_URL" }
-    if (-not (Read-EnvValue $EnvFile "BACKEND_V2_API_TOKEN")) { $missing += "BACKEND_V2_API_TOKEN (gere via POST /auth/api-tokens, autenticado com seu JWT)" }
 
     if ($missing.Count -gt 0) {
         Write-Warn "Preencha estes campos em $EnvFile e rode .\install.ps1 de novo:"
@@ -70,24 +76,12 @@ try {
         Write-Ok "'helena' disponivel globalmente."
     }
 
-    # Atalho pro painel local na area de trabalho — nao precisa de
-    # Administrador, entao fica fora do bloco de servico abaixo. E um
-    # ".url" (Internet Shortcut), nao um ".lnk": abre a pagina no
-    # navegador padrao, idempotente (Set-Content sobrescreve sempre).
-    Write-Host "Criando atalho do painel na area de trabalho..." -ForegroundColor Cyan
-    $panelPort = Read-EnvValue $EnvFile "CLIENT_PANEL_PORT"
-    if (-not $panelPort) { $panelPort = "4100" }
-    $desktopDir = [Environment]::GetFolderPath("Desktop")
-    $shortcutPath = Join-Path $desktopDir "Painel Helena.url"
-    Set-Content -Path $shortcutPath -Value "[InternetShortcut]`r`nURL=http://localhost:$panelPort`r`n" -Encoding ASCII
-    Write-Ok "Atalho criado: $shortcutPath"
-
     $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     if (-not $isAdmin) {
         Write-Warn "Nao esta rodando como Administrador — pulando instalacao do servico do Windows."
         Write-Info "Rode este script como Administrador pra instalar 'HelenaClient' como servico (inicia sozinho, mesmo sem login)."
         Write-Info "Ou rode 'npm start' manualmente sempre que quiser usar o client/."
-        Write-Info "Use o atalho 'Painel Helena' na area de trabalho pra abrir o painel e parear o WhatsApp."
+        Write-Info "Depois, rode 'helena' e digite /canais pra parear o WhatsApp escaneando o QR (aparece direto no terminal)."
         exit 0
     }
 
@@ -102,7 +96,11 @@ try {
     node scripts/install-windows-service.js
 
     Write-Host "Instalacao concluida." -ForegroundColor Cyan
-    Write-Info "Use o atalho 'Painel Helena' na area de trabalho pra abrir o painel e parear o WhatsApp escaneando o QR."
+    if (-not (Read-EnvValue $EnvFile "BACKEND_V2_API_TOKEN")) {
+        Write-Info "Falta so um login pra ativar WhatsApp/Telegram/execucao remota — rode 'helena', cadastre-se ou entre, depois digite /canais pra parear o WhatsApp escaneando o QR (aparece direto no terminal). O token de longa duracao e gerado sozinho nesse login, sem precisar mexer no .env."
+    } else {
+        Write-Info "Rode 'helena' e digite /canais pra parear o WhatsApp escaneando o QR (aparece direto no terminal)."
+    }
     Write-Info "'helena' ja esta disponivel — teste com: helena --help"
 } finally {
     Pop-Location

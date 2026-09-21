@@ -3,7 +3,7 @@ import path from "path";
 import { expandHome } from "./local-shell.ts";
 
 /**
- * Capacidades `list_files`/`read_file`/`search_files`/`write_file` — Fase 0
+ * Capacidades `list_files`/`read_file`/`search_files`/`write_file`/`grep`/`glob` — Fase 0
  * do plano de agentes de dev (backend-v2 `docs/agent-team-architecture.md`
  * §1.2). Mesmo protocolo genérico de `exec`/`exec-result` que `shell` já
  * usa (`agent-protocol.ts` não amarra `capability` a um valor fixo) — só
@@ -19,6 +19,8 @@ const IGNORED_DIR_NAMES = new Set(["node_modules", ".git", "dist", "build", ".ne
 const MAX_READ_BYTES = 2 * 1024 * 1024;
 /** Teto de resultados de busca — evita devolver uma lista gigante (ou nunca terminar de escanear um projeto enorme). */
 const MAX_SEARCH_RESULTS = 500;
+/** Teto de resultados do grep — evita output explosivo. */
+const MAX_GREP_RESULTS = 1000;
 
 function resolvePath(target: string): string {
     return expandHome(target) ?? target;
@@ -162,6 +164,140 @@ export function searchFiles(dirPath: string, namePattern?: string, contentPatter
     return { paths: results };
 }
 
+export interface GrepMatch {
+    file: string;
+    lineNumber: number;
+    line: string;
+    match: string;
+}
+
+export interface GrepResult {
+    matches: GrepMatch[];
+    error?: string;
+}
+
+function isTextFile(filePath: string): boolean {
+    try {
+        const buffer = Buffer.alloc(8192);
+        const fd = fs.openSync(filePath, "r");
+        const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, 0);
+        fs.closeSync(fd);
+        // Check for null bytes (binary indicator)
+        return !buffer.subarray(0, bytesRead).includes(0);
+    } catch {
+        return false;
+    }
+}
+
+export function grepFiles(dirPath: string, pattern: string, filePattern?: string): GrepResult {
+    const regex = safeRegex(pattern);
+    if (!regex) return { matches: [], error: `Padrão de regex inválido: "${pattern}"` };
+
+    const fileRegex = filePattern ? safeRegex(filePattern) : undefined;
+    if (filePattern && !fileRegex) return { matches: [], error: `Padrão de arquivo inválido: "${filePattern}"` };
+
+    const matches: GrepMatch[] = [];
+
+    function walkGrep(dir: string): void {
+        if (matches.length >= MAX_GREP_RESULTS) return;
+
+        let entries: fs.Dirent[];
+        try {
+            entries = fs.readdirSync(dir, { withFileTypes: true });
+        } catch {
+            return;
+        }
+
+        for (const entry of entries) {
+            if (matches.length >= MAX_GREP_RESULTS) return;
+
+            if (entry.isDirectory()) {
+                if (IGNORED_DIR_NAMES.has(entry.name)) continue;
+                walkGrep(path.join(dir, entry.name));
+                continue;
+            }
+
+            if (fileRegex && !fileRegex.test(entry.name)) continue;
+
+            const fullPath = path.join(dir, entry.name);
+            if (!isTextFile(fullPath)) continue;
+
+            let content: string;
+            try {
+                content = fs.readFileSync(fullPath, "utf8");
+            } catch {
+                continue;
+            }
+
+            const lines = content.split("\n");
+            for (let i = 0; i < lines.length && matches.length < MAX_GREP_RESULTS; i++) {
+                const line = lines[i];
+                let match: RegExpExecArray | null;
+                // regex is guaranteed non-null here (checked at function entry)
+                while ((match = regex!.exec(line)) !== null) {
+                    matches.push({
+                        file: fullPath,
+                        lineNumber: i + 1,
+                        line: line.trim(),
+                        match: match[0],
+                    });
+                    if (!regex!.global) break;
+                }
+            }
+        }
+    }
+
+    walkGrep(resolvePath(dirPath));
+    return { matches };
+}
+
+export interface GlobResult {
+    paths: string[];
+    error?: string;
+}
+
+export function globFiles(dirPath: string, pattern: string): GlobResult {
+    // Convert glob pattern to regex
+    const regexPattern = pattern
+        .replace(/\./g, "\\.")
+        .replace(/\*/g, ".*")
+        .replace(/\?/g, ".");
+    const regex = safeRegex(regexPattern);
+    if (!regex) return { paths: [], error: `Padrão glob inválido: "${pattern}"` };
+
+    const results: string[] = [];
+
+    function walkGlob(dir: string): void {
+        if (results.length >= MAX_SEARCH_RESULTS) return;
+
+        let entries: fs.Dirent[];
+        try {
+            entries = fs.readdirSync(dir, { withFileTypes: true });
+        } catch {
+            return;
+        }
+
+        for (const entry of entries) {
+            if (results.length >= MAX_SEARCH_RESULTS) return;
+
+            if (entry.isDirectory()) {
+                if (IGNORED_DIR_NAMES.has(entry.name)) continue;
+                walkGlob(path.join(dir, entry.name));
+                continue;
+            }
+
+            const fullPath = path.join(dir, entry.name);
+            // regex is guaranteed non-null here (checked at function entry)
+            if (regex!.test(entry.name) || regex!.test(fullPath)) {
+                results.push(fullPath);
+            }
+        }
+    }
+
+    walkGlob(resolvePath(dirPath));
+    return { paths: results };
+}
+
 /**
  * `startLine`/`endLine` são 1-indexados e sempre se referem ao arquivo
  * ORIGINAL (antes de qualquer edit deste mesmo pedido) — ver doc do tipo
@@ -226,6 +362,133 @@ export function writeFile(filePath: string, edits: FileEdit[]): WriteFileResult 
     }
 
     return writeWhole(resolved, filePath, lines.join("\n"));
+}
+
+/**
+ * Gera um diff unificado (estilo git diff) entre o conteúdo original e o resultado
+ * das edições — sem aplicar as edições. Útil pra preview antes de confirmar.
+ */
+export function previewDiff(filePath: string, edits: FileEdit[]): { diff: string; error?: string } {
+    const replaceAll = edits.find((edit) => edit.type === "replace_all");
+    if (replaceAll) {
+        if (edits.length > 1) return { diff: "", error: "replace_all não pode ser combinado com outras edições." };
+        
+        const resolved = resolvePath(filePath);
+        let original: string;
+        try {
+            original = fs.readFileSync(resolved, "utf8");
+        } catch {
+            original = "";
+        }
+        const newContent = replaceAll.content;
+        return { diff: generateUnifiedDiff(original, newContent, filePath) };
+    }
+
+    const resolved = resolvePath(filePath);
+    let original: string;
+    try {
+        original = fs.readFileSync(resolved, "utf8");
+    } catch (err) {
+        if (edits.some((edit) => edit.type === "remove")) return { diff: "", error: `Não consegui ler "${filePath}" pra gerar diff: ${describe(err)}` };
+        original = "";
+    }
+
+    const lines = original.split("\n");
+    const ordered = [...edits].sort((a, b) => editPosition(b) - editPosition(a));
+
+    for (const edit of ordered) {
+        if (edit.type === "add") {
+            const insertAt = Math.max(0, Math.min(lines.length, edit.startLine - 1));
+            lines.splice(insertAt, 0, ...edit.content.split("\n"));
+        } else if (edit.type === "remove") {
+            const start = Math.max(0, edit.startLine - 1);
+            const count = Math.max(0, edit.endLine - edit.startLine + 1);
+            lines.splice(start, count);
+        }
+    }
+
+    const newContent = lines.join("\n");
+    return { diff: generateUnifiedDiff(original, newContent, filePath) };
+}
+
+/**
+ * Gera diff unificado simples (estilo `diff -u`).
+ */
+function generateUnifiedDiff(original: string, modified: string, filePath: string): string {
+    const origLines = original.split("\n");
+    const modLines = modified.split("\n");
+    
+    // Simple LCS-based diff for small files
+    const diff = computeDiff(origLines, modLines);
+    
+    const header = `--- a/${filePath}\n+++ b/${filePath}`;
+    if (diff.length === 0) return `${header}\n`;
+    
+    return `${header}\n${diff.join("\n")}`;
+}
+
+/**
+ * Computa diff estilo unified (simplificado, não LCS completo mas funcional).
+ */
+function computeDiff(orig: string[], mod: string[]): string[] {
+    const result: string[] = [];
+    let i = 0, j = 0;
+    const context = 3;
+    
+    while (i < orig.length || j < mod.length) {
+        if (i < orig.length && j < mod.length && orig[i] === mod[j]) {
+            i++; j++;
+            continue;
+        }
+        
+        // Find next match
+        let matchI = -1, matchJ = -1;
+        for (let ii = i; ii < Math.min(orig.length, i + 20); ii++) {
+            for (let jj = j; jj < Math.min(mod.length, j + 20); jj++) {
+                if (orig[ii] === mod[jj]) {
+                    matchI = ii; matchJ = jj;
+                    break;
+                }
+            }
+            if (matchI !== -1) break;
+        }
+        
+        if (matchI === -1) {
+            // No more matches, show remaining as changes
+            if (i < orig.length) {
+                result.push(`@@ -${i+1},${orig.length - i} +${j+1},${mod.length - j} @@`);
+                for (let k = i; k < orig.length; k++) result.push(`-${orig[k]}`);
+                for (let k = j; k < mod.length; k++) result.push(`+${mod[k]}`);
+            }
+            break;
+        }
+        
+        const beforeOrig = matchI - i;
+        const beforeMod = matchJ - j;
+        const chunkStartOrig = Math.max(0, i - context);
+        const chunkStartMod = Math.max(0, j - context);
+        
+        result.push(`@@ -${chunkStartOrig + 1},${matchI - chunkStartOrig + context} +${chunkStartMod + 1},${matchJ - chunkStartMod + context} @@`);
+        
+        // Context before
+        for (let k = chunkStartOrig; k < i; k++) result.push(` ${orig[k]}`);
+        for (let k = chunkStartMod; k < j; k++) result.push(` ${mod[k]}`);
+        
+        // Removed lines
+        for (let k = i; k < matchI; k++) result.push(`-${orig[k]}`);
+        // Added lines
+        for (let k = j; k < matchJ; k++) result.push(`+${mod[k]}`);
+        
+        // Context after
+        const afterOrig = Math.min(orig.length, matchI + context);
+        const afterMod = Math.min(mod.length, matchJ + context);
+        for (let k = matchI; k < afterOrig; k++) result.push(` ${orig[k]}`);
+        for (let k = matchJ; k < afterMod; k++) result.push(` ${mod[k]}`);
+        
+        i = matchI; j = matchJ;
+    }
+    
+    return result;
 }
 
 export interface DeleteFileResult {
