@@ -36,15 +36,6 @@ try {
     npm install
     if ($LASTEXITCODE -ne 0) { Write-Err "npm install falhou."; exit 1 }
 
-    # SEM build do painel web (Angular) de proposito — o painel foi
-    # DESABILITADO (2026-09-17, ver src/panel/server.ts): a CLI (`helena`) e
-    # a interface principal agora, o servidor local so serve endpoints
-    # internos (/health, /cli-session, /ws). Buildar o painel aqui builda
-    # algo que nunca e servido — so gasta tempo (Angular e lento/fragil de
-    # buildar no Windows) e cria mais um jeito de a instalacao falhar a toa.
-    # `npm run build:panel` continua existindo pra quem quiser retomar o
-    # desenvolvimento do painel manualmente depois (ver install.sh).
-
     $EnvFile = Join-Path $ClientDir ".env"
     $EnvExample = Join-Path $ClientDir ".env.example"
     if (-not (Test-Path $EnvFile)) {
@@ -81,7 +72,7 @@ try {
         Write-Warn "Nao esta rodando como Administrador — pulando instalacao do servico do Windows."
         Write-Info "Rode este script como Administrador pra instalar 'HelenaClient' como servico (inicia sozinho, mesmo sem login)."
         Write-Info "Ou rode 'npm start' manualmente sempre que quiser usar o client/."
-        Write-Info "Depois, rode 'helena' e digite /canais pra parear o WhatsApp escaneando o QR (aparece direto no terminal)."
+        Write-Info "Rode 'helena' e use /canais pra parear o WhatsApp (o QR aparece no terminal)."
         exit 0
     }
 
@@ -96,11 +87,7 @@ try {
     node scripts/install-windows-service.js
 
     Write-Host "Instalacao concluida." -ForegroundColor Cyan
-    if (-not (Read-EnvValue $EnvFile "BACKEND_V2_API_TOKEN")) {
-        Write-Info "Falta so um login pra ativar WhatsApp/Telegram/execucao remota — rode 'helena', cadastre-se ou entre, depois digite /canais pra parear o WhatsApp escaneando o QR (aparece direto no terminal). O token de longa duracao e gerado sozinho nesse login, sem precisar mexer no .env."
-    } else {
-        Write-Info "Rode 'helena' e digite /canais pra parear o WhatsApp escaneando o QR (aparece direto no terminal)."
-    }
+    Write-Info "Rode 'helena' e digite /canais pra parear o WhatsApp escaneando o QR (aparece no terminal)."
     Write-Info "'helena' ja esta disponivel — teste com: helena --help"
 } finally {
     Pop-Location

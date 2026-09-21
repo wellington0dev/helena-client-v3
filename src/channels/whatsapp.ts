@@ -1,10 +1,10 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { downloadMediaMessage, isJidGroup, makeWASocket, useMultiFileAuthState, DisconnectReason } from "baileys";
 import type { WAMessage, WASocket } from "baileys";
 import pino from "pino";
 import QRCode from "qrcode";
 import { config } from "../config.ts";
-import { updateWhatsapp } from "../panel/status-bus.ts";
+import { updateWhatsapp } from "../local-api/status-bus.ts";
 import { sendGroupInboundMessage, sendInboundMessage } from "./backend-client.ts";
 import { exceedsMediaLimit, mediaTooLargeMessage } from "./media-limit.ts";
 import { toWhatsappText } from "./markdown-format.ts";
@@ -32,6 +32,8 @@ const logger = pino({ level: "silent" });
 
 /** Instância ativa, pro outbound-poller conseguir mandar mensagem por iniciativa do backend (lembrete de calendário, aviso de pagamento — ver outbound-poller.ts). `undefined` enquanto não conectado. */
 let currentSock: WASocket | undefined;
+/** Socket em andamento (inclusive antes do `open`, ex.: aguardando o QR) — `currentSock` só existe depois de conectado, então parar/desvincular durante o QR precisa desta. */
+let activeSock: WASocket | undefined;
 
 /**
  * `true` só durante um `stopWhatsapp()` em andamento — evita que o handler
@@ -254,6 +256,7 @@ async function handleGroupMessage(msg: WAMessage): Promise<void> {
 async function connect(): Promise<void> {
     const { state, saveCreds } = await useMultiFileAuthState(config.whatsappAuthDir);
     const sock = makeWASocket({ auth: state, logger, printQRInTerminal: false });
+    activeSock = sock;
 
     sock.ev.on("creds.update", () => {
         pendingCredsSave = saveCreds().catch((error) => console.error("[whatsapp] falha ao salvar credenciais:", error));
@@ -279,6 +282,7 @@ async function connect(): Promise<void> {
             currentSock = undefined;
             const statusCode = (lastDisconnect?.error as { output?: { statusCode?: number } } | undefined)?.output?.statusCode;
             if (statusCode === DisconnectReason.loggedOut) {
+                activeSock = undefined; // sessão morreu: permite `start`/`logout` pela API local sem ficar preso no guard de idempotência
                 const message = "sessão desconectada (logout) — apague o diretório de auth e reinicie pra escanear um QR novo.";
                 console.error(`[whatsapp] ${message}`);
                 updateWhatsapp({ status: "error", error: message, qrDataUrl: undefined, qrText: undefined });
@@ -310,6 +314,8 @@ export function startWhatsapp(): void {
         return;
     }
 
+    if (currentSock || activeSock) return; // já conectado/conectando — idempotente (start pela API local não duplica o socket)
+    shuttingDown = false; // permite religar depois de um stop/logout feito pela API local
     updateWhatsapp({ status: "connecting" });
     connect().catch((error) => {
         console.error("[whatsapp] falha ao conectar:", error);
@@ -330,10 +336,36 @@ export function startWhatsapp(): void {
  */
 export async function stopWhatsapp(): Promise<void> {
     shuttingDown = true;
-    currentSock?.end(undefined);
+    (activeSock ?? currentSock)?.end(undefined);
+    activeSock = undefined;
     try {
         await pendingCredsSave;
     } catch {
         // já logado dentro do próprio saveCreds acima — aqui só garante que o await não derruba o shutdown.
     }
+}
+
+/**
+ * Desvincula o aparelho de verdade (`sock.logout()` invalida a sessão no WhatsApp) e apaga o diretório de auth
+ * local — o próximo `startWhatsapp()` pede um QR novo. Diferente de `stopWhatsapp` (restart de rotina, que
+ * PRESERVA a sessão). Chamado só por ação explícita do usuário (`POST /v1/channels/whatsapp/logout`).
+ */
+export async function logoutWhatsapp(): Promise<void> {
+    shuttingDown = true;
+    const sock = activeSock ?? currentSock;
+    try {
+        await sock?.logout();
+    } catch (error) {
+        console.error("[whatsapp] logout no servidor falhou (segue apagando o auth local):", error);
+    }
+    sock?.end(undefined);
+    activeSock = undefined;
+    currentSock = undefined;
+    try {
+        await pendingCredsSave;
+    } catch {
+        // idem stopWhatsapp
+    }
+    rmSync(config.whatsappAuthDir, { recursive: true, force: true });
+    updateWhatsapp({ status: "disconnected", qrDataUrl: undefined, qrText: undefined, error: undefined });
 }

@@ -560,7 +560,7 @@ export function App(props: AppProps): React.ReactElement {
         return fullScreen(h(McpScreen, { backendUrl, token, onExit: () => setScreen("chat"), onUnauthorized }));
     }
     if (screen === "channels") {
-        return fullScreen(h(ChannelsScreen, { panelPort: config.panelPort, onExit: () => setScreen("chat") }));
+        return fullScreen(h(ChannelsScreen, { localPort: config.localPort, onExit: () => setScreen("chat") }));
     }
     if (screen === "usage") {
         return fullScreen(h(UsageScreen, { backendUrl, token, onExit: () => setScreen("chat"), onUnauthorized }));

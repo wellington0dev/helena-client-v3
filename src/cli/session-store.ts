@@ -12,6 +12,8 @@ const SESSION_PATH = path.join(os.homedir(), ".config", "helena", "session.json"
 
 interface StoredSession {
     accessToken: string;
+    /** Refresh token rotativo (backend `POST /auth/refresh`). Ausente em sessões legadas (JWT obtido direto, sem refresh). */
+    refreshToken?: string;
 }
 
 export function loadSession(): StoredSession | undefined {
@@ -24,9 +26,15 @@ export function loadSession(): StoredSession | undefined {
     }
 }
 
-export function saveSession(accessToken: string): void {
-    fs.mkdirSync(path.dirname(SESSION_PATH), { recursive: true });
-    fs.writeFileSync(SESSION_PATH, JSON.stringify({ accessToken } satisfies StoredSession), { mode: 0o600 });
+/**
+ * Grava de forma ATÔMICA (temp + rename, 0600): o refresh token é rotativo — se o processo cair no meio da
+ * escrita e o arquivo ficar truncado, a sessão inteira se perde. Quem renova grava ANTES de usar o par novo.
+ */
+export function saveSession(accessToken: string, refreshToken?: string): void {
+    fs.mkdirSync(path.dirname(SESSION_PATH), { recursive: true, mode: 0o700 });
+    const tmp = `${SESSION_PATH}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify({ accessToken, ...(refreshToken ? { refreshToken } : {}) } satisfies StoredSession), { mode: 0o600 });
+    fs.renameSync(tmp, SESSION_PATH);
 }
 
 export function clearSession(): void {

@@ -6,6 +6,7 @@ import { render } from "ink";
 import { config } from "../config.ts";
 import { reportError } from "../telemetry.ts";
 import { login } from "./backend.ts";
+import { readLocalToken } from "../local-api/local-token.ts";
 import { clearSession, loadSession, saveSession } from "./session-store.ts";
 import { App, type HistoryItem, type SessionOutcome } from "./ink/app.ts";
 
@@ -143,7 +144,7 @@ function unstickStdinAfterReadline(): void {
 /**
  * Best-effort: avisa o processo `client/` (daemon nesta MESMA máquina, se
  * estiver rodando) que um login acabou de acontecer — reusa o endpoint
- * que já existia pro sentido painel→CLI (ver panel/server.ts#handleCliSession),
+ * que já existia pro sentido painel→CLI (ver local-api/server.ts#handleCliSession),
  * agora também na direção CLI→daemon. É o que deixa `helena login` sozinho
  * provisionar o token de longa duração (WhatsApp/Telegram/execução
  * remota) sem precisar abrir o painel nenhuma vez — mas nunca é
@@ -153,9 +154,11 @@ function unstickStdinAfterReadline(): void {
  */
 async function notifyLocalDaemon(token: string): Promise<void> {
     try {
-        await fetch(`http://localhost:${config.panelPort}/cli-session`, {
+        const localToken = readLocalToken(); // sem token = daemon nunca subiu nesta máquina
+        if (!localToken) return;
+        await fetch(`http://127.0.0.1:${config.localPort}/cli-session`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${localToken}` },
             body: JSON.stringify({ accessToken: token }),
             signal: AbortSignal.timeout(2000),
         });
