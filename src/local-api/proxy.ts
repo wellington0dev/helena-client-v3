@@ -18,6 +18,7 @@ export const BACKEND_ALLOWLIST = [
     "feedback",
     "auth/me", // cobre auth/me e auth/me/* (preferências, owner-identity)
     "auth/api-tokens",
+    "auth/sessions", // dispositivos/sessões ativas (refresh token) e revogação
 ] as const;
 
 const ALLOWED_METHODS = new Set(["GET", "POST", "PATCH", "PUT", "DELETE"]);

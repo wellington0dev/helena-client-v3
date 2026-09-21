@@ -131,6 +131,18 @@ test("allowlist: prefixos fora da lista, login do backend e traversal são recus
     assert.equal(seen.length, 0);
 });
 
+test("allowlist: auth/sessions (dispositivos/revogação) passa; auth/refresh e auth/logout do backend não", async () => {
+    seen = [];
+    assert.equal((await fetch(`${apiUrl}/v1/backend/auth/sessions`, { headers: auth })).status, 200);
+    assert.equal(seen[0].url, "/auth/sessions");
+    seen = [];
+    for (const p of ["auth/refresh", "auth/logout"]) {
+        const r = await fetch(`${apiUrl}/v1/backend/${p}`, { method: "POST", headers: auth });
+        assert.ok([403, 404].includes(r.status), `${p} → ${r.status}`);
+    }
+    assert.equal(seen.length, 0);
+});
+
 test("chat: POST /v1/chat/messages injeta machineName e preserva o resto; GET mantém a query", async () => {
     seen = [];
     await fetch(`${apiUrl}/v1/chat/messages`, { method: "POST", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify({ text: "olá", sessionId: "s1" }) });

@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "node src/main.ts",
-    "test": "node --test",
+    "test": "node --test \"src/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
     "service:install:windows": "node scripts/install-windows-service.js",
     "service:uninstall:windows": "node scripts/uninstall-windows-service.js"
