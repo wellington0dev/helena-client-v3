@@ -12,7 +12,7 @@
  * Cobrança/Uso) só entram aqui quando a tela correspondente for entregue
  * — nunca um `/comando` morto aparecendo no `/help` antes de existir.
  */
-export type Screen = "chat" | "config" | "contacts" | "mcp" | "channels" | "usage" | "billing" | "projects";
+export type Screen = "chat" | "config" | "contacts" | "mcp" | "channels" | "usage" | "billing" | "projects" | "permissions";
 
 export interface CommandContext {
     setScreen: (screen: Screen) => void;
@@ -64,6 +64,12 @@ export const COMMANDS: Command[] = [
         name: "projetos",
         description: "Equipe de dev — criar, acompanhar, revisar, conversar com cada agente",
         run: (ctx) => ctx.setScreen("projects"),
+    },
+    {
+        name: "permissoes",
+        aliases: ["permissions"],
+        description: 'Comandos "sempre permitidos" — ver e revogar',
+        run: (ctx) => ctx.setScreen("permissions"),
     },
     {
         name: "worktree",

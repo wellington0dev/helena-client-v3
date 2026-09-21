@@ -8,6 +8,7 @@ import { appendInputHistory, loadInputHistory, newerEntry, NOT_NAVIGATING, older
 import { connectLocalWs } from "./local-ws-client.ts";
 import { statusBarParts } from "./status-bar.ts";
 import type { ClientState } from "../../local-api/status-bus.ts";
+import { PermissionsScreen } from "./permissions-screen.ts";
 import { measurePermissionDialog, PermissionDialog, type PermissionDecision } from "./permission-dialog.ts";
 import { readWorktree, renderWorktreeLines, truncateToWidth } from "./worktree.ts";
 import { resolveInterrupt, sendMessage, UnauthorizedError, type PendingConfirmation, type SendMessageResult } from "../backend.ts";
@@ -756,6 +757,10 @@ export function App(props: AppProps): React.ReactElement {
     // conteúdo dela é mais curto que o terminal, em vez de deixar o resto
     // da tela vazio fora do controle do Ink (ver chat.ts pro alt-screen).
     const fullScreen = (child: React.ReactElement): React.ReactElement => h(Box, { flexDirection: "column", height: usableRows }, child);
+
+    if (screen === "permissions") {
+        return fullScreen(h(PermissionsScreen, { backendUrl, token, onExit: () => setScreen("chat"), onUnauthorized }));
+    }
 
     if (screen === "config") {
         return fullScreen(h(ConfigScreen, { backendUrl, token, onExit: () => setScreen("chat"), onUnauthorized }));
