@@ -81,7 +81,7 @@ try {
     node scripts/install-windows-service.js
 
     Write-Host "Instalacao concluida." -ForegroundColor Cyan
-    Write-Info "Use o atalho 'Painel Helena' na area de trabalho pra abrir o painel e parear o WhatsApp escaneando o QR."
+    Write-Info "Rode 'helena' e digite /canais pra parear o WhatsApp escaneando o QR (aparece no terminal)."
     Write-Info "'helena' ja esta disponivel — teste com: helena --help"
 } finally {
     Pop-Location
