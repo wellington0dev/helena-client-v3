@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { looksLikeMouse, MOUSE_OFF, MOUSE_ON, parseMouse } from "./mouse.ts";
+import { looksLikeMouse, MOUSE_OFF, MOUSE_ON, parseMouse, stripMouse } from "./mouse.ts";
 
 test("parseMouse: clique esquerdo (press/release) converte de 1-based pra 0-based", () => {
     const { events, rest } = parseMouse("[<0;10;5M[<0;10;5m");
@@ -45,4 +45,12 @@ test("MOUSE_ON/OFF: ligar usa 1003+1006; desligar cobre todos os modos (nunca de
     assert.match(MOUSE_ON, /1003h/);
     assert.match(MOUSE_ON, /1006h/);
     for (const mode of ["1003l", "1002l", "1000l", "1006l"]) assert.ok(MOUSE_OFF.includes(mode), `falta ${mode}`);
+});
+
+test("stripMouse: tira sequências de mouse do texto digitado e preserva o resto (inclusive colchetes e < legítimos)", () => {
+    assert.equal(stripMouse("8683914328[<0;20;12m"), "8683914328");
+    assert.equal(stripMouse("a[<0;1;1Mb[<0;1;1mc"), "abc");
+    assert.equal(stripMouse("x\x1b[<35;2;3My"), "xy");
+    assert.equal(stripMouse("array[<T>] e a[0]"), "array[<T>] e a[0]");
+    assert.equal(stripMouse(""), "");
 });

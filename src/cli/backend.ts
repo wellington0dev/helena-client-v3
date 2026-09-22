@@ -145,3 +145,11 @@ export function createApiToken(baseUrl: string, token: string, label?: string): 
 export function revokeApiToken(baseUrl: string, token: string, id: string): Promise<{ revoked: boolean }> {
     return authed(baseUrl, token, "DELETE", `/auth/api-tokens/${id}`);
 }
+
+/**
+ * "Meu WhatsApp/Telegram é este número/id" — sem isso, mensagens do PRÓPRIO dono por esses canais seriam tratadas como
+ * contato externo (ver `PATCH /auth/me/owner-identity` no backend-v2). O backend guarda só os dígitos.
+ */
+export function setOwnerIdentity(baseUrl: string, token: string, channel: "whatsapp" | "telegram", contactId: string): Promise<{ channel: string; contactId: string; whatsappOwnerNumber?: string; telegramOwnerId?: string }> {
+    return authed(baseUrl, token, "PATCH", "/auth/me/owner-identity", { channel, contactId });
+}

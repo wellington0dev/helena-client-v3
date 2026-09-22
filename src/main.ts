@@ -15,7 +15,7 @@ import { createSessionManager } from "./local-api/session-manager.ts";
 import { clearSession, loadSession, saveSession } from "./cli/session-store.ts";
 import { getState, onStateChange } from "./local-api/status-bus.ts";
 import { logoutWhatsapp, startWhatsapp, stopWhatsapp } from "./channels/whatsapp.ts";
-import { startTelegram, stopTelegram } from "./channels/telegram.ts";
+import { startTelegram, stopTelegram, validateTelegramToken } from "./channels/telegram.ts";
 import { startMachineAgent } from "./machine-agent.ts";
 import { startOutboundPoller } from "./outbound-poller.ts";
 import { reportError } from "./telemetry.ts";
@@ -78,7 +78,11 @@ startLocalApi({
         telegram: {
             start: startTelegram,
             stop: stopTelegram,
-            setToken(token) {
+            async setToken(token) {
+                if (token !== "") {
+                    const checked = await validateTelegramToken(token);
+                    if (!checked.ok) return { ok: false, error: checked.error };
+                }
                 const result = patchFileConfig({ telegramBotToken: token === "" ? null : token });
                 if (!result.ok) return { ok: false, error: Object.values(result.errors).join("; ") };
                 if (token === "") config.telegramBotToken = "";

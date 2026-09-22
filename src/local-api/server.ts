@@ -33,7 +33,7 @@ export interface LocalApiOptions {
 export interface ChannelsController {
     info(): { telegramTokenSet: boolean };
     whatsapp: { start(): void | Promise<void>; stop(): Promise<void>; logout(): Promise<void> };
-    telegram: { start(): void | Promise<void>; stop(): Promise<void>; setToken(token: string): { ok: true } | { ok: false; error: string } };
+    telegram: { start(): void | Promise<void>; stop(): Promise<void>; setToken(token: string): Promise<{ ok: true } | { ok: false; error: string }> };
 }
 
 export interface ConfigApi {
@@ -153,13 +153,13 @@ export function startLocalApi(options: LocalApiOptions): Server {
         }
         if (path === "/v1/channels/telegram/token" && (method === "PUT" || method === "DELETE")) {
             if (method === "DELETE") {
-                const removed = controller.telegram.setToken("");
+                const removed = await controller.telegram.setToken("");
                 return removed.ok ? sendJson(res, 200, { ok: true }) : deny(res, 422, "invalid_token", removed.error);
             }
             const body = await readJson(req, res);
             if (!body) return;
             if (typeof body.token !== "string") return deny(res, 400, "invalid_body", "Informe { token }.");
-            const result = controller.telegram.setToken(body.token);
+            const result = await controller.telegram.setToken(body.token); // valida contra a API do Telegram antes de gravar (ver validateTelegramToken)
             return result.ok ? sendJson(res, 200, { ok: true }) : deny(res, 422, "invalid_token", result.error); // nunca ecoa o token
         }
         return deny(res, 404, "not_found", "Rota de canal desconhecida.");

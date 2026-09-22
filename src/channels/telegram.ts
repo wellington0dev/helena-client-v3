@@ -1,4 +1,4 @@
-import { Bot, InputFile, type Context } from "grammy";
+import { Api, Bot, InputFile, type Context } from "grammy";
 import { hydrateFiles, type FileFlavor } from "@grammyjs/files";
 import { config } from "../config.ts";
 import { updateTelegram } from "../local-api/status-bus.ts";
@@ -181,4 +181,32 @@ export async function stopTelegram(): Promise<void> {
         console.error("[telegram] falha ao parar:", error);
     }
     updateTelegram({ status: "disconnected", error: undefined });
+}
+
+/**
+ * Confere se o token FALA DE VERDADE com a API do Telegram, ANTES de persistir (`GET /v1/channels/telegram/token`) —
+ * achado ao vivo (2026-09-21): um token com o FORMATO certo (dígitos:segredo, ver `validateBotToken` no client) mas
+ * corrompido (ex: caracteres fora de ordem) passava na validação de formato e só falhava depois, silenciosamente,
+ * quando o `startTelegram()` seguinte não conseguia autenticar — o dono via "conectando..." parado, sem erro claro.
+ * `new Api(token)` não abre conexão persistente nem interfere no bot já rodando (`startTelegram`/`stopTelegram`
+ * usam sua PRÓPRIA instância de `Bot`) — é só uma chamada HTTP avulsa.
+ */
+export async function validateTelegramToken(token: string, timeoutMs = 10_000): Promise<{ ok: true; botUsername: string } | { ok: false; error: string }> {
+    try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        let me: Awaited<ReturnType<Api["getMe"]>>;
+        try {
+            // grammy tipa `signal` contra o polyfill do pacote `abort-controller`, não o AbortSignal nativo do Node — mesma
+            // interface em runtime (EventTarget com `aborted`/evento "abort"), só o nome nominal do tipo diverge.
+            me = await new Api(token).getMe(controller.signal as unknown as Parameters<Api["getMe"]>[0]);
+        } finally {
+            clearTimeout(timer);
+        }
+        return { ok: true, botUsername: me!.username };
+    } catch (error) {
+        // grammy embrulha o erro da API do Telegram (401 = token inválido/revogado) — a mensagem já vem em português-friendly o bastante.
+        const message = error instanceof Error ? error.message : String(error);
+        return { ok: false, error: `Não consegui validar o token com o Telegram: ${message}` };
+    }
 }

@@ -1,6 +1,7 @@
 import React from "react";
 import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
+import { stripMouse } from "./mouse.ts";
 import { c, theme, panel } from "./theme.ts";
 
 const h = React.createElement;
@@ -26,6 +27,8 @@ export interface FormField {
 
 export interface FormProps {
     title?: string;
+    /** Linhas de ajuda (texto muted) logo abaixo do título — ex: "onde acho esse valor". */
+    description?: string[];
     fields: FormField[];
     onSubmit: (values: Record<string, string>) => void;
     onCancel: () => void;
@@ -35,7 +38,7 @@ export interface FormProps {
 }
 
 export function Form(props: FormProps): React.ReactElement {
-    const { title, fields, onSubmit, onCancel, submitLabel = "Enter confirma", busy = false, error } = props;
+    const { title, description, fields, onSubmit, onCancel, submitLabel = "Enter confirma", busy = false, error } = props;
     const [values, setValues] = React.useState<Record<string, string>>(() => Object.fromEntries(fields.map((f) => [f.key, f.initialValue ?? ""])));
     const [current, setCurrent] = React.useState(0);
 
@@ -70,6 +73,7 @@ export function Form(props: FormProps): React.ReactElement {
         Box,
         { flexDirection: "column", ...panel("border") },
         title ? h(Text, { bold: true, color: theme.primary }, title) : null,
+        ...(description ?? []).map((line, i) => h(Text, { key: `desc-${i}`, color: theme.textMuted }, line)),
         title ? h(Box, { marginTop: 1 }) : null,
         ...fields.map((field, i) =>
             h(
@@ -78,7 +82,7 @@ export function Form(props: FormProps): React.ReactElement {
                 h(Text, null, `${field.label}${field.optional ? c.muted(" (opcional)") : ""}:`),
                 h(TextInput, {
                     value: values[field.key] ?? "",
-                    onChange: (v: string) => setValues((prev) => ({ ...prev, [field.key]: v })),
+                    onChange: (v: string) => setValues((prev) => ({ ...prev, [field.key]: stripMouse(v) })),
                     onSubmit: handleFieldSubmit,
                     focus: !busy && i === current,
                     mask: field.mask,

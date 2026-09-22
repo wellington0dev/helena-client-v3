@@ -169,7 +169,7 @@ before(async () => {
             telegram: {
                 start: () => void calls.push("tg.start"),
                 stop: async () => void calls.push("tg.stop"),
-                setToken: (t) => (t.startsWith("1") || t === "" ? (calls.push(`tg.token:${t === "" ? "vazio" : "ok"}`), { ok: true }) : { ok: false, error: "formato inválido" }),
+                setToken: async (t) => (t.startsWith("1") || t === "" ? (calls.push(`tg.token:${t === "" ? "vazio" : "ok"}`), { ok: true }) : { ok: false, error: "formato inválido" }),
             },
         },
         configApi: { get: () => ({ file: {}, effective: {} }), patch: (p) => (p.ruim ? { ok: false, errors: { ruim: "não" } } : { ok: true, config: p, changed: Object.keys(p), restartRequired: [] }) },

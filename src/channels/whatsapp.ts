@@ -4,7 +4,7 @@ import type { WAMessage, WASocket } from "baileys";
 import pino from "pino";
 import QRCode from "qrcode";
 import { config } from "../config.ts";
-import { updateWhatsapp } from "../local-api/status-bus.ts";
+import { getState, updateWhatsapp } from "../local-api/status-bus.ts";
 import { sendGroupInboundMessage, sendInboundMessage } from "./backend-client.ts";
 import { exceedsMediaLimit, mediaTooLargeMessage } from "./media-limit.ts";
 import { toWhatsappText } from "./markdown-format.ts";
@@ -343,6 +343,9 @@ export async function stopWhatsapp(): Promise<void> {
     } catch {
         // já logado dentro do próprio saveCreds acima — aqui só garante que o await não derruba o shutdown.
     }
+    // O handler de "close" sai cedo quando `shuttingDown` (pra não reconectar) e por isso NUNCA atualizava o status: cancelar
+    // a conexão/QR pela API local deixava o estado preso em "qr"/"connecting" com o QR velho na tela. Sessão preservada; só o status muda.
+    if (getState().whatsapp.status !== "error") updateWhatsapp({ status: "disconnected", qrDataUrl: undefined, qrText: undefined });
 }
 
 /**

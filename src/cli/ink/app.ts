@@ -11,6 +11,7 @@ import type { ClientState } from "../../local-api/status-bus.ts";
 import { loadCliPrefs, saveCliPrefs } from "./cli-prefs.ts";
 import { SettingsModal, type SettingsTarget } from "./settings-modal.ts";
 import { PermissionsScreen } from "./permissions-screen.ts";
+import { stripMouse } from "./mouse.ts";
 import { getSessionHistory, type SessionSummary } from "../api/sessions.ts";
 import { historyEntriesToItems, SessionsScreen } from "./sessions-screen.ts";
 import { measurePermissionDialog, PermissionDialog, type PermissionDecision } from "./permission-dialog.ts";
@@ -412,7 +413,7 @@ export function App(props: AppProps): React.ReactElement {
     /** Digitou de verdade (não foi ↑/↓): sai do modo navegação. */
     function handleInputChange(value: string): void {
         navRef.current = NOT_NAVIGATING;
-        setInputValue(value);
+        setInputValue(stripMouse(value)); // sequência de mouse solta (toque rápido) nunca entra na mensagem
     }
 
     // O menu só some em DUAS situações, de propósito (pedido explícito):
@@ -838,7 +839,7 @@ export function App(props: AppProps): React.ReactElement {
         return fullScreen(h(McpScreen, { backendUrl, token, onExit: leaveScreen, onUnauthorized }));
     }
     if (screen === "channels") {
-        return fullScreen(h(ChannelsScreen, { localPort: config.localPort, onExit: leaveScreen }));
+        return fullScreen(h(ChannelsScreen, { localPort: config.localPort, backendUrl, token, onExit: leaveScreen, onUnauthorized }));
     }
     if (screen === "usage") {
         return fullScreen(h(UsageScreen, { backendUrl, token, onExit: leaveScreen, onUnauthorized }));

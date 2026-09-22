@@ -52,6 +52,15 @@ export function parseMouse(input: string): { events: MouseEvent[]; rest: string 
     return { events, rest };
 }
 
+/**
+ * Remove sequências de mouse de um texto digitado. Todo campo de texto (`ink-text-input`) passa o valor por aqui: um toque
+ * rápido no trackpad manda "pressionar" e "soltar" em poucos ms — o "soltar" pode chegar DEPOIS de a tela trocar pro
+ * formulário e antes de o rastreamento do mouse ser desligado, e o Ink entrega isso como se fosse texto digitado.
+ */
+export function stripMouse(text: string): string {
+    return text.replace(SGR, "");
+}
+
 export function looksLikeMouse(input: string): boolean {
     SGR.lastIndex = 0;
     return SGR.test(input);
