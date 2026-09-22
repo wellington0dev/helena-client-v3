@@ -108,7 +108,8 @@ export function resumeProject(baseUrl: string, token: string, id: string): Promi
     return authed(baseUrl, token, "POST", `/projects/${id}/resume`);
 }
 
-export function cancelProject(baseUrl: string, token: string, id: string, reason?: string): Promise<{ ok: boolean; error?: string }> {
+/** `interrupted` (quando `ok`) — quantos agentes estavam rodando de verdade agora e foram interrompidos na hora (ver `RunningStepsRegistry` no backend). 0 = nenhum estava em execução. */
+export function cancelProject(baseUrl: string, token: string, id: string, reason?: string): Promise<{ ok: boolean; error?: string; interrupted?: number }> {
     return authed(baseUrl, token, "POST", `/projects/${id}/cancel`, { reason });
 }
 

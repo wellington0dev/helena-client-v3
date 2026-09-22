@@ -49,6 +49,7 @@ export function ProjectDetailScreen(props: {
     const [detail, setDetail] = React.useState<ProjectDetail | undefined>(undefined);
     const [busy, setBusy] = React.useState(false);
     const [error, setError] = React.useState<string | undefined>(undefined);
+    const [notice, setNotice] = React.useState<string | undefined>(undefined);
     const [screen, setScreen] = React.useState<DetailScreenState>({ kind: "overview" });
     const [cursor, setCursor] = React.useState(0);
 
@@ -116,6 +117,7 @@ export function ProjectDetailScreen(props: {
 
     async function handleResume(): Promise<void> {
         setBusy(true);
+        setNotice(undefined);
         try {
             const result = await resumeProject(backendUrl, token, project.id);
             if (result.error) setError(result.error);
@@ -155,6 +157,8 @@ export function ProjectDetailScreen(props: {
         try {
             const result = await cancelProject(backendUrl, token, project.id, values.reason?.trim() || undefined);
             if (result.error) setError(result.error);
+            // interrupted > 0 = tinha agente rodando de verdade agora e foi cortado na hora (ver RunningStepsRegistry no backend) — antes disso o turno em voo continuava sozinho até o fim.
+            else setNotice(result.interrupted ? `Cancelado — interrompi ${result.interrupted} agente${result.interrupted > 1 ? "s" : ""} que estava${result.interrupted > 1 ? "m" : ""} rodando agora.` : "Cancelado.");
             setScreen({ kind: "overview" });
             await reload();
         } catch (err) {
@@ -166,6 +170,7 @@ export function ProjectDetailScreen(props: {
 
     async function handleEdit(values: Record<string, string>): Promise<void> {
         setBusy(true);
+        setNotice(undefined);
         try {
             const rawCap = values.costCap?.trim() ?? "";
             const costCapValue = rawCap === "" ? null : Number(rawCap);
@@ -297,6 +302,7 @@ export function ProjectDetailScreen(props: {
         { flexDirection: "column", ...panel("border") },
         h(Text, { bold: true, color: theme.primary }, detail.project.spec),
         h(Text, { color: theme.textMuted }, `Status: ${STATUS_LABEL[project.status]} · Custo estimado: ${cost.toLocaleString("pt-BR")} tokens${project.machine ? ` · Máquina: ${project.machine}` : ""}`),
+        notice ? h(Text, { color: theme.success }, notice) : null,
         h(Box, { marginTop: 1 }),
         h(Text, { color: theme.textMuted }, "Equipe:"),
         ...steps.map((step, i) => {
