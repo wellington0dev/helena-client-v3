@@ -112,6 +112,17 @@ export function cancelProject(baseUrl: string, token: string, id: string, reason
     return authed(baseUrl, token, "POST", `/projects/${id}/cancel`, { reason });
 }
 
+/** `null` em `costCapValue` desliga o teto. Funciona em qualquer status (nunca `spec`/`rootDirectory`/`machine` — ver o DTO no backend). */
+export interface UpdateProjectInput {
+    costCapValue?: number | null;
+    gitPushAllowed?: boolean;
+    requireApprovalBeforeExecution?: boolean;
+}
+
+export function updateProject(baseUrl: string, token: string, id: string, patch: UpdateProjectInput): Promise<ProjectSummary> {
+    return authed(baseUrl, token, "PATCH", `/projects/${id}`, patch);
+}
+
 export function deleteProject(baseUrl: string, token: string, id: string): Promise<{ ok: boolean; error?: string }> {
     return authed(baseUrl, token, "DELETE", `/projects/${id}`);
 }

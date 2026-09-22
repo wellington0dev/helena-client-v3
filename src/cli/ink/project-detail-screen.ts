@@ -8,6 +8,7 @@ import {
     requestRevision,
     resumeProject,
     sendStepMessage,
+    updateProject,
     type ProjectDetail,
     type ProjectStep,
     type ProjectSummary,
@@ -18,7 +19,7 @@ import { Form } from "./form.ts";
 import { sumTokensSpent } from "./project-cost.ts";
 import { roleLabelFor } from "./project-progress.ts";
 import type { ChatProgressEvent } from "./progress-client.ts";
-import { canCancel, canDelete, canRequestRevision, canResume, orderSteps, STATUS_LABEL } from "./project-status.ts";
+import { canCancel, canDelete, canRequestRevision, canResume, deleteConfirmText, isTerminal, orderSteps, STATUS_LABEL } from "./project-status.ts";
 import { c, theme, panel } from "./theme.ts";
 
 const h = React.createElement;
@@ -33,6 +34,7 @@ type DetailScreenState =
     | { kind: "step"; role: string }
     | { kind: "revision-form" }
     | { kind: "cancel-form" }
+    | { kind: "edit-form" }
     | { kind: "confirm-delete" };
 
 export function ProjectDetailScreen(props: {
@@ -108,6 +110,7 @@ export function ProjectDetailScreen(props: {
         if (input === "v" && canRequestRevision(project.status)) setScreen({ kind: "revision-form" });
         else if (input === "u" && canResume(project.status)) void handleResume();
         else if (input === "c" && canCancel(project.status)) setScreen({ kind: "cancel-form" });
+        else if (input === "e") setScreen({ kind: "edit-form" });
         else if (input === "x" && canDelete(project.status)) setScreen({ kind: "confirm-delete" });
     });
 
@@ -161,9 +164,43 @@ export function ProjectDetailScreen(props: {
         }
     }
 
+    async function handleEdit(values: Record<string, string>): Promise<void> {
+        setBusy(true);
+        try {
+            const rawCap = values.costCap?.trim() ?? "";
+            const costCapValue = rawCap === "" ? null : Number(rawCap);
+            if (rawCap !== "" && (!Number.isFinite(costCapValue) || costCapValue! <= 0)) {
+                setError("Teto de custo precisa ser um número positivo (ou vazio, pra desligar).");
+                return;
+            }
+            const gitPush = values.gitPush?.trim().toLowerCase();
+            const requireApproval = values.requireApproval?.trim().toLowerCase();
+            await updateProject(backendUrl, token, project.id, {
+                costCapValue,
+                ...(gitPush === "s" || gitPush === "n" ? { gitPushAllowed: gitPush === "s" } : {}),
+                ...(requireApproval === "s" || requireApproval === "n" ? { requireApprovalBeforeExecution: requireApproval === "s" } : {}),
+            });
+            setScreen({ kind: "overview" });
+            await reload();
+        } catch (err) {
+            handleAsyncError(err);
+        } finally {
+            setBusy(false);
+        }
+    }
+
     async function handleDelete(): Promise<void> {
         setBusy(true);
         try {
+            // Não terminal: cancela primeiro (ProjectsService#remove exige status terminal) — a confirmação já avisou isso.
+            if (!isTerminal(project.status)) {
+                const cancelResult = await cancelProject(backendUrl, token, project.id, "Apagado pelo dono antes de terminar.");
+                if (cancelResult.error) {
+                    setError(cancelResult.error);
+                    setScreen({ kind: "overview" });
+                    return;
+                }
+            }
             const result = await deleteProject(backendUrl, token, project.id);
             if (result.error) {
                 setError(result.error);
@@ -223,15 +260,28 @@ export function ProjectDetailScreen(props: {
         });
     }
 
+    if (screen.kind === "edit-form") {
+        return h(Form, {
+            title: "Editar Project",
+            description: ["Só ajustes operacionais — pra mudar o que o Project FAZ, cancele e crie outro.", "Deixe um campo em branco pra não mudar (teto de custo em branco = desliga o teto)."],
+            fields: [
+                { key: "costCap", label: "Teto de custo (R$)", initialValue: project.costCapValue != null ? String(project.costCapValue) : "", optional: true },
+                { key: "gitPush", label: "Permitir git push (s/n)", initialValue: "", optional: true },
+                { key: "requireApproval", label: "Exigir aprovação antes de executar (s/n)", initialValue: "", optional: true },
+            ],
+            onSubmit: (values) => void handleEdit(values),
+            onCancel: () => setScreen({ kind: "overview" }),
+            busy,
+            error,
+        });
+    }
+
     if (screen.kind === "confirm-delete") {
-        return h(
-            ConfirmPrompt,
-            {
-                message: "Apagar este Project? Essa ação não pode ser desfeita.",
-                busy,
-                onAnswer: (yes: boolean) => (yes ? void handleDelete() : setScreen({ kind: "overview" })),
-            },
-        );
+        return h(ConfirmPrompt, {
+            message: deleteConfirmText(project.status, project.spec),
+            busy,
+            onAnswer: (yes: boolean) => (yes ? void handleDelete() : setScreen({ kind: "overview" })),
+        });
     }
 
     const cost = sumTokensSpent(detail.steps);
@@ -239,6 +289,7 @@ export function ProjectDetailScreen(props: {
     if (canRequestRevision(project.status)) hints.push("v pede revisão");
     if (canResume(project.status)) hints.push("u retoma");
     if (canCancel(project.status)) hints.push("c cancela");
+    hints.push("e edita");
     if (canDelete(project.status)) hints.push("x apaga");
 
     return h(

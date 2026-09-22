@@ -1,13 +1,13 @@
 import React from "react";
 import { Box, Text, useInput } from "ink";
 import { AGENT_ROLES, DEFAULT_AGENT_NAMES, listAgentPersonas, resetAgentPersona, setAgentPersonaName } from "../api/agent-personas.ts";
-import { createProject, listAutonomyPolicies, listProjects, setAutonomyPolicy, type AutonomyDecision, type AutonomyMode, type ProjectSummary } from "../api/projects.ts";
+import { cancelProject, createProject, deleteProject, listAutonomyPolicies, listProjects, setAutonomyPolicy, type AutonomyDecision, type AutonomyMode, type ProjectSummary } from "../api/projects.ts";
 import { UnauthorizedError } from "../backend.ts";
 import { CrudScreen } from "./crud-screen.ts";
 import { Form } from "./form.ts";
 import { ProjectDetailScreen } from "./project-detail-screen.ts";
 import type { ChatProgressEvent } from "./progress-client.ts";
-import { STATUS_LABEL } from "./project-status.ts";
+import { deleteConfirmText, isTerminal, STATUS_LABEL } from "./project-status.ts";
 import { c, theme, panel } from "./theme.ts";
 
 const h = React.createElement;
@@ -18,6 +18,8 @@ const ProjectCrudScreen = CrudScreen as unknown as (props: {
     itemLabel: (item: ProjectSummary) => { label: string; hint?: string };
     onSelect: (item: ProjectSummary) => void;
     onCreate: () => void;
+    onDelete: (item: ProjectSummary) => Promise<void>;
+    deleteConfirmLabel: (item: ProjectSummary) => string;
     busy: boolean;
     error?: string;
     onExit: () => void;
@@ -179,12 +181,32 @@ export function ProjectsScreen(props: {
         });
     }
 
+    async function handleDelete(project: ProjectSummary): Promise<void> {
+        setBusy(true);
+        try {
+            // Não terminal: cancela primeiro (`ProjectsService#remove` exige status terminal) — a confirmação já avisou isso, ver deleteConfirmText.
+            if (!isTerminal(project.status)) {
+                const cancelResult = await cancelProject(backendUrl, token, project.id, "Apagado pelo dono antes de terminar.");
+                if (cancelResult.error) throw new Error(cancelResult.error);
+            }
+            const result = await deleteProject(backendUrl, token, project.id);
+            if (result.error) throw new Error(result.error);
+            await reload();
+        } catch (err) {
+            handleAsyncError(err);
+        } finally {
+            setBusy(false);
+        }
+    }
+
     return h(ProjectCrudScreen, {
         title: "Projetos — a: políticas de autonomia · p: nomes da equipe",
         items: projects,
         itemLabel: projectLabel,
         onSelect: (project) => setScreen({ kind: "detail", project }),
         onCreate: () => setScreen({ kind: "create" }),
+        onDelete: handleDelete,
+        deleteConfirmLabel: (project) => deleteConfirmText(project.status, project.spec),
         busy,
         onExit,
     });
