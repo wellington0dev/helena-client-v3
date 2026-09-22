@@ -4,52 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import stringWidth from "string-width";
-import { readGitignoreNames, readWorktree, renderWorktreeLines, truncateToWidth, type WorktreeEntry } from "./worktree.ts";
-
-test("readWorktree: pastas primeiro, ignora node_modules/.git/dist e respeita a profundidade", () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "wt-"));
-    try {
-        fs.mkdirSync(path.join(root, "src", "deep", "deeper", "deepest"), { recursive: true });
-        fs.mkdirSync(path.join(root, "node_modules", "x"), { recursive: true });
-        fs.mkdirSync(path.join(root, ".git"));
-        fs.mkdirSync(path.join(root, "dist"));
-        fs.writeFileSync(path.join(root, "b.txt"), "");
-        fs.writeFileSync(path.join(root, "a.txt"), "");
-        fs.writeFileSync(path.join(root, "src", "index.ts"), "");
-        const entries = readWorktree(root, 3);
-        const names = entries.map((e) => `${e.depth}:${e.name}`);
-        assert.deepEqual(names.slice(0, 4), ["0:src", "1:deep", "2:deeper", "1:index.ts"]);
-        assert.ok(!names.some((n) => /node_modules|\.git|dist|deepest/.test(n)));
-        assert.deepEqual(names.slice(-2), ["0:a.txt", "0:b.txt"]);
-    } finally {
-        fs.rmSync(root, { recursive: true, force: true });
-    }
-});
-
-test("readWorktree: diretório inexistente devolve vazio, sem lançar", () => {
-    assert.deepEqual(readWorktree("/caminho/que/nao/existe"), []);
-});
-
-test("renderWorktreeLines: só indentação (sem ├─/└─); pasta aberta ▾, fechada ▸, arquivo alinhado", () => {
-    const entries: WorktreeEntry[] = [
-        { name: "src", depth: 0, isDir: true },
-        { name: "main.ts", depth: 1, isDir: false },
-        { name: "vazia", depth: 1, isDir: true },
-        { name: "README.md", depth: 0, isDir: false },
-    ];
-    const lines = renderWorktreeLines(entries, 40, 10);
-    assert.deepEqual(lines.map((l) => l.text), ["▾ src/", "    main.ts", "  ▸ vazia/", "  README.md"]);
-    assert.deepEqual(lines.map((l) => l.isDir), [true, false, true, false]);
-    for (const l of lines) assert.ok(!/[├└│─]/.test(l.text), `sem linhas de árvore: "${l.text}"`);
-});
-
-test("renderWorktreeLines: nunca passa da largura nem do orçamento de linhas", () => {
-    const entries: WorktreeEntry[] = Array.from({ length: 30 }, (_, i) => ({ name: `arquivo-com-nome-bem-comprido-${i}.ts`, depth: i % 3, isDir: i % 5 === 0 }));
-    const lines = renderWorktreeLines(entries, 20, 8);
-    assert.equal(lines.length, 8);
-    for (const line of lines) assert.ok(stringWidth(line.text) <= 20, `"${line.text}" passou de 20 colunas`);
-    assert.match(lines[7]!.text, /^… \+\d+ itens$/);
-});
+import { ignoredNames, readGitignoreNames, truncateToWidth } from "./worktree.ts";
 
 test("truncateToWidth: corta com … e conta largura visível (acento/emoji)", () => {
     assert.equal(truncateToWidth("abc", 5), "abc");
@@ -58,18 +13,21 @@ test("truncateToWidth: corta com … e conta largura visível (acento/emoji)", (
     assert.equal(truncateToWidth("x", 0), "");
 });
 
-test("readGitignoreNames/readWorktree: respeita nomes simples do .gitignore da raiz e ignora glob/negação", () => {
+test("readGitignoreNames/ignoredNames: respeita nomes simples do .gitignore da raiz, ignora glob/negação, e ignoredNames soma com os fixos (node_modules etc.)", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "wt-"));
     try {
         fs.writeFileSync(path.join(root, ".gitignore"), "# c\nout/\n/tmp\n*.log\n!keep\nsub/dir\n.env\n");
-        fs.mkdirSync(path.join(root, "out"));
-        fs.mkdirSync(path.join(root, "tmp"));
-        fs.mkdirSync(path.join(root, "src"));
-        fs.writeFileSync(path.join(root, ".env"), "");
-        fs.writeFileSync(path.join(root, "a.log"), "");
-        assert.deepEqual([...readGitignoreNames(root)].sort(), [".env", "out", "tmp"]);
-        assert.deepEqual(readWorktree(root).map((e) => e.name), ["src", ".gitignore", "a.log"]);
+        const gitignoreNames = readGitignoreNames(root);
+        assert.deepEqual([...gitignoreNames].sort(), [".env", "out", "tmp"]);
+
+        const combined = ignoredNames(root);
+        assert.ok(combined.has(".env") && combined.has("out") && combined.has("tmp"));
+        assert.ok(combined.has("node_modules") && combined.has(".git")); // fixos, mesmo sem estar no .gitignore.
     } finally {
         fs.rmSync(root, { recursive: true, force: true });
     }
+});
+
+test("readGitignoreNames: diretório sem .gitignore devolve vazio, sem lançar", () => {
+    assert.deepEqual(readGitignoreNames("/caminho/que/nao/existe"), new Set());
 });

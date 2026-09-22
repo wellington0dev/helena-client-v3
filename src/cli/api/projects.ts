@@ -71,7 +71,15 @@ export interface CreateProjectInput {
     requireApprovalBeforeExecution?: boolean;
 }
 
-/** `HTTP 201` não significa sucesso aqui — o backend devolve `{error}` (ex: nenhuma máquina conectada) com status 201 mesmo assim. Sempre checar `.error` antes de considerar que criou. */
+/**
+ * `HTTP 201` não significa sucesso aqui — o backend devolve `{error}` (ex: nenhuma máquina conectada) com status 201
+ * mesmo assim. Sempre checar `.error` antes de considerar que criou.
+ *
+ * Desde §16 (2026-09-22, backend-v2/docs/agent-team-architecture.md): a Arquiteta despacha em BACKGROUND — esta
+ * chamada devolve só `projectId` assim que o Project é criado, `plan`/`executionMode` NUNCA vêm preenchidos aqui
+ * (ficam `undefined` pra sempre nesta resposta). O plano em si chega depois via evento de Project (painel/WhatsApp/
+ * Telegram) — pra ver o plano no painel, recarregue o detalhe do Project (`getProject`) depois de pronto.
+ */
 export interface CreateProjectOutcome {
     projectId?: string;
     plan?: string;

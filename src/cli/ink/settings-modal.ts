@@ -26,7 +26,7 @@ export interface SettingsModalProps {
 /** Monta os itens a partir do estado atual. `me === undefined` = conta ainda carregando (toggles da conta ficam sem valor, não ativáveis). */
 export function buildSettingItems(me: CurrentUser | undefined, sidebarOn: boolean): SettingItem[] {
     return [
-        { id: "sidebar", section: "Interface", label: "Worktree na lateral", kind: "toggle", value: sidebarOn, description: "Árvore de arquivos do diretório onde você abriu o helena (também: /worktree). Some sozinha em terminal estreito." },
+        { id: "sidebar", section: "Interface", label: "Sessões na lateral", kind: "toggle", value: sidebarOn, description: "Lista clicável de conversas recentes + criar nova, ao lado do chat (também: /sidebar). Some sozinha em terminal estreito." },
         { id: "auto-shell", section: "Segurança", label: "Sempre permitir comandos shell", kind: "toggle", value: me?.autoApproveShell, description: "Liga: a Helena roda qualquer comando sem pedir confirmação. Desliga: ela pergunta antes de comandos que não são claramente seguros." },
         { id: "permissions", section: "Segurança", label: "Comandos sempre permitidos", kind: "link", description: 'Ver e revogar os comandos que você marcou como "sempre permitir".' },
         { id: "telemetry", section: "Privacidade", label: "Telemetria (erros/desempenho)", kind: "toggle", value: me?.telemetryConsent, description: "Envia erros e dados de desempenho para ajudar a melhorar a Helena. Não envia o conteúdo das conversas." },

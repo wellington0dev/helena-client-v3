@@ -43,8 +43,6 @@ export const theme = {
     textMuted: "#7982a9",
     /** Texto principal. */
     text: "#c0caf5",
-    /** Pastas na worktree. */
-    folder: "#7aa2f7",
     /** Trechos de código inline. */
     code: "#7dcfff",
     /** Legado: bordas não existem mais, mas telas ainda passam `theme.border` em alguns lugares. */

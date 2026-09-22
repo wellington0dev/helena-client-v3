@@ -17,7 +17,7 @@ export type Screen = "chat" | "config" | "contacts" | "mcp" | "channels" | "usag
 export interface CommandContext {
     setScreen: (screen: Screen) => void;
     pushNotice: (text: string, tone: "success" | "warn" | "danger" | "info") => void;
-    /** Mostra/esconde a sidebar de worktree do chat. */
+    /** Mostra/esconde a sidebar de sessões do chat. */
     toggleSidebar: () => void;
     /** Começa uma conversa nova (limpa a tela e solta a sessão atual). */
     newSession: () => void;
@@ -81,8 +81,8 @@ export const COMMANDS: Command[] = [
         run: (ctx) => ctx.setScreen("permissions"),
     },
     {
-        name: "worktree",
-        description: "Mostra/esconde a sidebar com a árvore de arquivos (some sozinha em terminal estreito)",
+        name: "sidebar",
+        description: "Mostra/esconde a sidebar de sessões (clique pra retomar ou criar nova — some sozinha em terminal estreito)",
         run: (ctx) => ctx.toggleSidebar(),
     },
     {

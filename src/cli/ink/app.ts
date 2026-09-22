@@ -11,11 +11,11 @@ import type { ClientState } from "../../local-api/status-bus.ts";
 import { loadCliPrefs, saveCliPrefs } from "./cli-prefs.ts";
 import { SettingsModal, type SettingsTarget } from "./settings-modal.ts";
 import { PermissionsScreen } from "./permissions-screen.ts";
-import { stripMouse } from "./mouse.ts";
-import { getSessionHistory, type SessionSummary } from "../api/sessions.ts";
-import { historyEntriesToItems, SessionsScreen } from "./sessions-screen.ts";
+import { stripMouse, useMouse, type MouseEvent } from "./mouse.ts";
+import { getSessionHistory, listSessionSummaries, type SessionSummary } from "../api/sessions.ts";
+import { formatWhen, historyEntriesToItems, sessionLabel, SessionsScreen } from "./sessions-screen.ts";
 import { measurePermissionDialog, PermissionDialog, type PermissionDecision } from "./permission-dialog.ts";
-import { readWorktree, renderWorktreeLines, truncateToWidth } from "./worktree.ts";
+import { truncateToWidth } from "./worktree.ts";
 import { resolveInterrupt, sendMessage, UnauthorizedError, type PendingConfirmation, type SendMessageResult } from "../backend.ts";
 import { findCommand, matchCommands, type Command, type Screen } from "./commands.ts";
 import { ConfigScreen } from "./config-screen.ts";
@@ -294,25 +294,78 @@ function shortPath(cwd: string): string {
 const SIDEBAR_WIDTH = 30;
 const MIN_COLUMNS_FOR_SIDEBAR = 100;
 
+/** Linhas fixas antes da lista clicável: título(0) + path(1) + linha em branco(2) + "+ Nova sessão"(3). */
+const SIDEBAR_NEW_SESSION_ROW = 3;
+const SIDEBAR_SESSIONS_START_ROW = 4;
+
+/** "prévia da mensagem · hoje 14:32", cortando só a prévia (o horário nunca é cortado — é o que ajuda a diferenciar duas conversas com prévia parecida). */
+function sidebarSessionLine(session: SessionSummary, width: number): string {
+    const when = formatWhen(session.updatedAt);
+    const suffix = when ? ` · ${when}` : "";
+    return truncateToWidth(sessionLabel(session), Math.max(1, width - suffix.length)) + suffix;
+}
+
 /**
- * Worktree à esquerda (`/worktree` esconde/mostra). Altura fixa = tela útil e cada linha é truncada
- * (nunca quebra), então não mexe na conta de linhas do chat — só desconta SIDEBAR_WIDTH das colunas.
+ * Sidebar de sessões à esquerda (`/sidebar` esconde/mostra) — substitui a árvore de arquivos (2026-09-22, pedido do
+ * dono: "remover a tree, deixar só path, lista de sessões selecionáveis e criar nova sessão", clicável por mouse em
+ * vez de teclado pra não disputar ↑↓ com a navegação de histórico do composer). Altura fixa e cada linha truncada
+ * (nunca quebra) — mesma restrição de layout que a árvore antiga já tinha.
  */
-function Sidebar({ cwd, entries, height }: { cwd: string; entries: ReturnType<typeof readWorktree>; height: number }): React.ReactElement {
+function Sidebar({
+    cwd,
+    sessions,
+    activeSessionId,
+    height,
+    interactive,
+    onSelectSession,
+    onNewSession,
+    onOpenAllSessions,
+}: {
+    cwd: string;
+    sessions: SessionSummary[];
+    activeSessionId?: string;
+    height: number;
+    /** `false` enquanto um modal (ex: configurações) cobre a sidebar — ela continua visível por baixo, mas clique não deve fazer nada (ver comentário no App sobre `screen === "settings"`). */
+    interactive: boolean;
+    onSelectSession: (session: SessionSummary) => void;
+    onNewSession: () => void;
+    onOpenAllSessions: () => void;
+}): React.ReactElement {
     const contentWidth = SIDEBAR_WIDTH - 3; // paddingX 1 (esq/dir) + 1 de folga
-    const treeRows = Math.max(0, height - 3); // título + pasta + linha em branco
-    const lines = renderWorktreeLines(entries, contentWidth, treeRows);
+    const sessionRows = Math.max(0, height - SIDEBAR_SESSIONS_START_ROW);
+    const overflow = sessions.length > sessionRows;
+    const visibleCount = overflow ? Math.max(0, sessionRows - 1) : sessions.length;
+    const visible = sessions.slice(0, visibleCount);
     const home = process.env.HOME ?? "";
     const shownPath = home && cwd.startsWith(home) ? `~${cwd.slice(home.length)}` : cwd;
+
+    useMouse((event: MouseEvent) => {
+        if (event.type !== "press" || event.button !== "left" || event.x >= SIDEBAR_WIDTH) return;
+        if (event.y === SIDEBAR_NEW_SESSION_ROW) onNewSession();
+        else if (overflow && event.y === SIDEBAR_SESSIONS_START_ROW + visibleCount) onOpenAllSessions();
+        else {
+            const index = event.y - SIDEBAR_SESSIONS_START_ROW;
+            if (index >= 0 && index < visible.length) onSelectSession(visible[index]!);
+        }
+    }, interactive);
+
     return h(
         Box,
         { flexDirection: "column", width: SIDEBAR_WIDTH, height, backgroundColor: bg.panel, paddingX: 1 },
-        h(Text, { color: theme.primary, bold: true, wrap: "truncate" }, "Worktree"),
+        h(Text, { color: theme.primary, bold: true, wrap: "truncate" }, "Sessões"),
         h(Text, { color: theme.textMuted, wrap: "truncate-start" }, shownPath),
         h(Text, null, " "),
-        ...(lines.length > 0
-            ? lines.map((line, i) => h(Text, { key: i, wrap: "truncate", color: line.isDir ? theme.folder : undefined }, line.text))
-            : [h(Text, { key: "empty", color: theme.textMuted }, "(vazio)")]),
+        h(Text, { color: theme.success, wrap: "truncate" }, truncateToWidth("+ Nova sessão", contentWidth)),
+        ...(visible.length > 0
+            ? visible.map((session) =>
+                  h(
+                      Text,
+                      { key: session.id, wrap: "truncate", color: session.id === activeSessionId ? theme.primary : undefined, bold: session.id === activeSessionId },
+                      sidebarSessionLine(session, contentWidth),
+                  ),
+              )
+            : [h(Text, { key: "empty", color: theme.textMuted }, "(nenhuma conversa)")]),
+        overflow ? h(Text, { key: "overflow", color: theme.textMuted, wrap: "truncate" }, truncateToWidth(`… +${sessions.length - visibleCount} conversas`, contentWidth)) : null,
     );
 }
 
@@ -363,29 +416,41 @@ export function App(props: AppProps): React.ReactElement {
     const { columns, rows } = useWindowSize();
     const usableRows = Math.max(1, rows - 1);
 
-    // Sidebar de worktree (`/worktree`). `mainColumns` é a largura REAL do chat — toda medição de altura
+    // Sidebar de sessões (`/sidebar`). `mainColumns` é a largura REAL do chat — toda medição de altura
     // abaixo usa ela, não `columns`, senão o histórico estoura as linhas (ver viewport.ts).
     const [sidebarOpen, setSidebarOpen] = React.useState(() => loadCliPrefs().sidebar ?? true);
     function changeSidebar(on: boolean): void {
         setSidebarOpen(on);
         saveCliPrefs({ sidebar: on }); // lembra entre sessões do helena (só desta máquina)
     }
-    // O menu de configurações é um modal SOBRE o chat — o layout de trás (inclusive a sidebar) não muda enquanto ele está aberto.
+    // O menu de configurações é um modal SOBRE o chat — o layout de trás (inclusive a sidebar) não muda enquanto ele está aberto, mas fica INTERATIVA só em "chat" (ver prop `interactive` do Sidebar) — clique não deve atravessar o modal.
     const sidebarVisible = sidebarOpen && (screen === "chat" || screen === "settings") && columns >= MIN_COLUMNS_FOR_SIDEBAR;
     const mainColumns = sidebarVisible ? columns - SIDEBAR_WIDTH : columns;
-    const [worktree, setWorktree] = React.useState(() => readWorktree(props.invocationCwd));
-    // Relê ao começar/terminar cada turno — é quando o agente pode ter criado/apagado arquivos.
-    // E a cada 3 s enquanto visível (arquivo criado por fora do agente); só troca o estado se a árvore mudou — sem re-render à toa.
+    const [sidebarSessions, setSidebarSessions] = React.useState<SessionSummary[]>([]);
+    // Relê ao começar/terminar cada turno (pode ter mudado a prévia/horário desta própria conversa) e a cada 5 s
+    // enquanto visível (outra sessão pode ter avançado enquanto esta fica ociosa); só troca o estado se a lista
+    // mudou — sem re-render à toa. Falha de rede não derruba o chat (mesma tolerância que a árvore antiga tinha pra
+    // erro de leitura de disco) — a sidebar só fica com a última lista boa.
     React.useEffect(() => {
         if (!sidebarVisible) return;
+        let cancelled = false;
         const refresh = (): void => {
-            const next = readWorktree(props.invocationCwd);
-            setWorktree((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
+            listSessionSummaries(backendUrl, token, 20)
+                .then((next) => {
+                    if (cancelled) return;
+                    setSidebarSessions((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
+                })
+                .catch((err: unknown) => {
+                    if (err instanceof UnauthorizedError) onUnauthorized();
+                });
         };
         refresh();
-        const timer = setInterval(refresh, 3000);
-        return () => clearInterval(timer);
-    }, [sending, sidebarVisible, props.invocationCwd]);
+        const timer = setInterval(refresh, 5000);
+        return () => {
+            cancelled = true;
+            clearInterval(timer);
+        };
+    }, [sending, sidebarVisible, backendUrl, token]);
 
     // Barra de status: tokens acumulados da conversa, branch e estado dos canais (WS do daemon local).
     const [totals, setTotals] = React.useState({ tokensIn: 0, tokensOut: 0, turns: 0 });
@@ -822,7 +887,9 @@ export function App(props: AppProps): React.ReactElement {
     const fullScreen = (child: React.ReactElement): React.ReactElement => h(Box, { flexDirection: "column", height: usableRows, width: columns, backgroundColor: bg.base }, child);
 
     if (screen === "sessions") {
-        return fullScreen(h(SessionsScreen, { backendUrl, token, onPick: (session: SessionSummary) => void resumeSession(session), onExit: leaveScreen, onUnauthorized }));
+        return fullScreen(
+            h(SessionsScreen, { backendUrl, token, activeSessionId: sessionId, onPick: (session: SessionSummary) => void resumeSession(session), onDeleteActive: newSession, onExit: leaveScreen, onUnauthorized }),
+        );
     }
 
     if (screen === "permissions") {
@@ -885,7 +952,23 @@ export function App(props: AppProps): React.ReactElement {
         h(StatusBar, { info: statusInfo, width: mainColumns }),
     );
 
-    const base = sidebarVisible ? h(Box, { flexDirection: "row", height: usableRows }, h(Sidebar, { cwd: props.invocationCwd, entries: worktree, height: usableRows }), chat) : chat;
+    const base = sidebarVisible
+        ? h(
+              Box,
+              { flexDirection: "row", height: usableRows },
+              h(Sidebar, {
+                  cwd: props.invocationCwd,
+                  sessions: sidebarSessions,
+                  activeSessionId: sessionId,
+                  height: usableRows,
+                  interactive: screen === "chat",
+                  onSelectSession: (session) => void resumeSession(session),
+                  onNewSession: newSession,
+                  onOpenAllSessions: () => setScreen("sessions"),
+              }),
+              chat,
+          )
+        : chat;
     if (screen !== "settings") return base;
     return h(
         Box,

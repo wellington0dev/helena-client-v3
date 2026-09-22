@@ -8,7 +8,7 @@ import { configDir } from "../../local-api/paths.ts";
  * Preferências da CONTA (telemetria, auto-approve...) moram no backend, não aqui. Nunca lança.
  */
 export interface CliPrefs {
-    /** Sidebar de worktree ligada. Ausente = padrão (ligada). */
+    /** Sidebar de sessões ligada. Ausente = padrão (ligada). */
     sidebar?: boolean;
 }
 

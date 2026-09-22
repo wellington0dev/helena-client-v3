@@ -31,3 +31,8 @@ export function listSessionSummaries(baseUrl: string, token: string, limit = 30)
 export function getSessionHistory(baseUrl: string, token: string, sessionId: string, limit = 60, offset = 0): Promise<PaginatedHistory> {
     return authed(baseUrl, token, "GET", `/chat/sessions/${encodeURIComponent(sessionId)}/history?limit=${limit}&offset=${offset}`);
 }
+
+/** Apaga a conversa PERMANENTEMENTE (histórico + snapshot do Genkit no backend) — sem volta. */
+export function deleteSession(baseUrl: string, token: string, sessionId: string): Promise<{ deleted: true }> {
+    return authed(baseUrl, token, "DELETE", `/chat/sessions/${encodeURIComponent(sessionId)}`);
+}

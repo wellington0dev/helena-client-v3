@@ -1,6 +1,6 @@
 import React from "react";
 import { useWindowSize } from "ink";
-import { listSessionSummaries, type HistoryEntry, type SessionSummary } from "../api/sessions.ts";
+import { deleteSession, listSessionSummaries, type HistoryEntry, type SessionSummary } from "../api/sessions.ts";
 import { UnauthorizedError } from "../backend.ts";
 import { CrudScreen } from "./crud-screen.ts";
 import { historyItem, type HistoryItem } from "./history-item.ts";
@@ -12,6 +12,8 @@ const SessionsCrudScreen = CrudScreen as unknown as (props: {
     items: SessionSummary[] | undefined;
     itemLabel: (item: SessionSummary) => { label: string; hint?: string };
     onSelect: (item: SessionSummary) => void;
+    onDelete: (item: SessionSummary) => Promise<void>;
+    deleteConfirmLabel: (item: SessionSummary) => string;
     busy: boolean;
     error?: string;
     onExit: () => void;
@@ -50,10 +52,16 @@ export function historyEntriesToItems(entries: HistoryEntry[]): HistoryItem[] {
     return items;
 }
 
-/** `/sessoes` — conversas recentes do dono; Enter retoma a escolhida (o `onPick` carrega o histórico no chat). */
-export function SessionsScreen(props: { backendUrl: string; token: string; onPick: (session: SessionSummary) => void; onExit: () => void; onUnauthorized: () => void }): React.ReactElement {
-    const { backendUrl, token, onPick, onExit, onUnauthorized } = props;
+/**
+ * `/sessoes` — conversas recentes do dono; Enter retoma a escolhida (o `onPick` carrega o histórico no chat), `x`
+ * apaga PERMANENTEMENTE (com confirmação — `CrudScreen` já garante isso). `activeSessionId`/`onDeleteActive`
+ * (pedido do dono, 2026-09-22): se a conversa apagada for a que está aberta no chat AGORA, o `App` precisa saber pra
+ * soltar essa sessão (senão a próxima mensagem bateria numa sessão que não existe mais no backend).
+ */
+export function SessionsScreen(props: { backendUrl: string; token: string; activeSessionId?: string; onPick: (session: SessionSummary) => void; onDeleteActive: () => void; onExit: () => void; onUnauthorized: () => void }): React.ReactElement {
+    const { backendUrl, token, activeSessionId, onPick, onDeleteActive, onExit, onUnauthorized } = props;
     const [sessions, setSessions] = React.useState<SessionSummary[] | undefined>(undefined);
+    const [busy, setBusy] = React.useState(false);
     const [error, setError] = React.useState<string | undefined>(undefined);
     // Linhas do terminal - moldura/título/rodapé/marcadores da lista (~11); no mínimo 3 itens visíveis.
     const { rows } = useWindowSize();
@@ -69,12 +77,28 @@ export function SessionsScreen(props: { backendUrl: string; token: string; onPic
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [backendUrl, token]);
 
+    async function handleDelete(session: SessionSummary): Promise<void> {
+        setBusy(true);
+        try {
+            await deleteSession(backendUrl, token, session.id);
+            setSessions((prev) => prev?.filter((s) => s.id !== session.id));
+            if (session.id === activeSessionId) onDeleteActive();
+        } catch (err) {
+            if (err instanceof UnauthorizedError) onUnauthorized();
+            else setError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setBusy(false);
+        }
+    }
+
     return h(SessionsCrudScreen, {
-        title: "Conversas recentes — Enter retoma",
+        title: "Conversas recentes — Enter retoma, x apaga",
         items: sessions,
         itemLabel: (session) => ({ label: sessionLabel(session), hint: formatWhen(session.updatedAt) }),
         onSelect: onPick,
-        busy: false,
+        onDelete: handleDelete,
+        deleteConfirmLabel: (session) => `Apagar permanentemente a conversa:\n${sessionLabel(session)}\nSem volta.`,
+        busy,
         error,
         onExit,
         maxVisible,
