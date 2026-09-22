@@ -81,6 +81,14 @@ export function ContactsScreen(props: { backendUrl: string; token: string; onExi
     // Esc sobe: grant-tools -> edit (mesmos dados) -> list -> chat (onExit). Só reage quando NÃO estamos em "grant-tools" (essa tela trata o próprio Esc, ver GrantToolsScreen, senão ambos os useInput reagiriam ao mesmo Esc).
     useInput((_input, key) => {
         if (!key.escape) return;
+        // Erro visível (tela abaixo renderiza só "Erro: ... — Esc pra voltar ao chat") sai direto pro chat, não
+        // importa o `screen.kind` — bug real encontrado em revisão (2026-09-22): sem isso, um erro em "grant-tools"
+        // travava a TUI (nem este handler nem o de GrantToolsScreen reagiam), e um erro em "edit" exigia DOIS Esc
+        // (o primeiro só voltava screen.kind pra "list" por baixo do próprio texto de erro, que nunca era limpo).
+        if (error) {
+            onExit();
+            return;
+        }
         if (screen.kind === "list") onExit();
         else if (screen.kind === "edit") setScreen({ kind: "list" });
     });

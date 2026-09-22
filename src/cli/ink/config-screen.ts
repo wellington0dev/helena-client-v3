@@ -87,6 +87,14 @@ export function ConfigScreen(props: { backendUrl: string; token: string; startAt
     // Esc sempre sobe UM nível na hierarquia menu → tokens → create-token/token-created — nunca pula direto pro chat de um nível mais fundo. `useInput` roda independente de qual componente tem `focus` (isso só afeta o TextInput capturar a DIGITAÇÃO, não os hooks de tecla), então funciona igual em toda tela, inclusive create-token. Não se aplica à tela "tokens" — o próprio `CrudScreen` já trata Esc (chamando `onExit` que passamos abaixo).
     useInput((_input, key) => {
         if (!key.escape) return;
+        // Erro visível (tela abaixo renderiza só "Erro: ... — Esc pra voltar ao chat") sai direto pro chat, não
+        // importa o `screen.kind` — bug real encontrado em revisão (2026-09-22): sem isso, um erro em "tokens" (sem
+        // `startAt === "tokens"`) travava a TUI (nem este handler nem o Esc do próprio CrudScreen, desmontado,
+        // reagiam), e um erro em "create-token"/"token-created" exigia DOIS Esc (o erro nunca era limpo).
+        if (error) {
+            onExit();
+            return;
+        }
         if (screen.kind === "menu" || (screen.kind === "tokens" && startAt === "tokens")) onExit();
         else if (screen.kind === "create-token" || screen.kind === "token-created") setScreen({ kind: "tokens" });
     });

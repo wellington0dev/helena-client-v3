@@ -96,6 +96,13 @@ export function ProjectsScreen(props: {
     }, [reload]);
 
     useInput((input, key) => {
+        // Erro visível (tela abaixo renderiza só "Erro: ... — Esc pra voltar ao chat") tem que sair de QUALQUER
+        // `screen.kind`, nunca só de "list" — bug real encontrado em revisão (2026-09-22): o guard abaixo fazia Esc
+        // não fazer NADA quando o erro acontecia fora da tela "list" (ex: falha ao criar Project), travando a TUI.
+        if (error) {
+            if (key.escape) onExit();
+            return;
+        }
         if (screen.kind !== "list") return;
         if (key.escape) {
             onExit();

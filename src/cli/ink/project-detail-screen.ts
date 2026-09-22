@@ -86,6 +86,17 @@ export function ProjectDetailScreen(props: {
     const steps = detail ? orderSteps(detail.steps) : [];
 
     useInput((input, key) => {
+        // Erro visível ("Esc volta pra visão geral (Esc de novo sai)") precisa funcionar em QUALQUER `screen.kind`,
+        // nunca só em "overview" — bug real encontrado em revisão (2026-09-22): o guard abaixo fazia Esc não fazer
+        // NADA quando o erro acontecia fora de "overview" (ex: falha ao pedir revisão/cancelar/editar), travando a
+        // TUI mesmo o texto prometendo uma saída em dois Esc.
+        if (error) {
+            if (key.escape) {
+                if (screen.kind === "overview") onBack();
+                else setScreen({ kind: "overview" });
+            }
+            return;
+        }
         if (screen.kind !== "overview" || busy) return;
         if (key.escape) {
             onBack();
