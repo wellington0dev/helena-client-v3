@@ -10,6 +10,7 @@ import { statusBarParts } from "./status-bar.ts";
 import type { ClientState } from "../../local-api/status-bus.ts";
 import { loadCliPrefs, saveCliPrefs } from "./cli-prefs.ts";
 import { SettingsModal, type SettingsTarget } from "./settings-modal.ts";
+import { CommandPaletteModal } from "./command-palette.ts";
 import { PermissionsScreen } from "./permissions-screen.ts";
 import { stripMouse, useMouse, type MouseEvent } from "./mouse.ts";
 import { getSessionHistory, listSessionSummaries, type SessionSummary } from "../api/sessions.ts";
@@ -17,7 +18,7 @@ import { formatWhen, historyEntriesToItems, sessionLabel, SessionsScreen } from 
 import { measurePermissionDialog, PermissionDialog, type PermissionDecision } from "./permission-dialog.ts";
 import { truncateToWidth } from "./worktree.ts";
 import { resolveInterrupt, sendMessage, UnauthorizedError, type PendingConfirmation, type SendMessageResult } from "../backend.ts";
-import { findCommand, matchCommands, type Command, type Screen } from "./commands.ts";
+import { findCommand, matchCommands, type Command, type CommandContext, type Screen } from "./commands.ts";
 import { ConfigScreen } from "./config-screen.ts";
 import { ChannelsScreen } from "./channels-screen.ts";
 import { ContactsScreen } from "./contacts-screen.ts";
@@ -401,6 +402,11 @@ export function App(props: AppProps): React.ReactElement {
         setScreen(({ tokens: "config", permissions: "permissions", usage: "usage", billing: "billing", contacts: "contacts", mcp: "mcp", channels: "channels", projects: "projects", sessions: "sessions" } as const)[target]);
     }
     const [commandMenuIndex, setCommandMenuIndex] = React.useState(0);
+    // Paleta de comandos (Ctrl+P) — modal sobre o chat, mesmo padrão do menu de configurações (`screen === "settings"`
+    // abaixo), mas SEM entrar no state machine de `Screen`: ela só existe em cima de "chat" (nunca substitui uma
+    // tela cheia), então um boolean à parte evita todo o vaivém de `returnTo`/`leaveScreen` que aquele mecanismo
+    // precisa pra saber pra onde voltar.
+    const [paletteOpen, setPaletteOpen] = React.useState(false);
     // Incrementado só quando o Tab preenche o composer programaticamente —
     // vira `key` do TextInput (ver Composer) pra forçar o cursor pro fim.
     const [composerResetKey, setComposerResetKey] = React.useState(0);
@@ -425,6 +431,7 @@ export function App(props: AppProps): React.ReactElement {
     }
     // O menu de configurações é um modal SOBRE o chat — o layout de trás (inclusive a sidebar) não muda enquanto ele está aberto, mas fica INTERATIVA só em "chat" (ver prop `interactive` do Sidebar) — clique não deve atravessar o modal.
     const sidebarVisible = sidebarOpen && (screen === "chat" || screen === "settings") && columns >= MIN_COLUMNS_FOR_SIDEBAR;
+    // A paleta só abre em cima de "chat" (ver useInput do Ctrl+P) — não precisa entrar na condição acima, ela já vale.
     const mainColumns = sidebarVisible ? columns - SIDEBAR_WIDTH : columns;
     const [sidebarSessions, setSidebarSessions] = React.useState<SessionSummary[]>([]);
     // Relê ao começar/terminar cada turno (pode ter mudado a prévia/horário desta própria conversa) e a cada 5 s
@@ -487,12 +494,12 @@ export function App(props: AppProps): React.ReactElement {
     // espaço + texto depois de um nome já completo, já que nenhum prefixo
     // bate com "config " sobrando). Nada de Esc, nada de cortar no espaço
     // manualmente — é só "ainda casa com algo?".
-    const commandQuery = screen === "chat" && !sending && !pending && inputValue.startsWith("/") ? inputValue.slice(1) : undefined;
+    const commandQuery = screen === "chat" && !sending && !pending && !paletteOpen && inputValue.startsWith("/") ? inputValue.slice(1) : undefined;
     const filteredCommands = commandQuery !== undefined ? matchCommands(commandQuery) : [];
     const showCommandMenu = filteredCommands.length > 0;
 
     // Autocomplete de `@arquivo`: só no chat, fora de turno/confirmação e sem competir com o menu de `/comando`.
-    const mentionToken = screen === "chat" && !sending && !pending && !showCommandMenu ? findMentionToken(inputValue) : undefined;
+    const mentionToken = screen === "chat" && !sending && !pending && !paletteOpen && !showCommandMenu ? findMentionToken(inputValue) : undefined;
     const fileIndexRef = React.useRef<{ files: string[]; at: number } | undefined>(undefined);
     const mentionMatches = React.useMemo(() => {
         if (mentionToken === undefined) return [];
@@ -651,6 +658,13 @@ export function App(props: AppProps): React.ReactElement {
             onDone({ type: "exit" });
             return;
         }
+        // Só abre/fecha em cima do chat de verdade — nas telas cheias (Contatos/MCP/etc) cada uma já tem seu
+        // próprio Esc/atalho, e abrir a paleta por cima delas exigiria o mesmo `returnTo` que o menu de
+        // configurações usa (ver comentário no state acima) só pra um atalho que "/" já cobre em qualquer tela.
+        if (key.ctrl && input === "p") {
+            if (screen === "chat" && !sendingRef.current && !pending) setPaletteOpen((open) => !open);
+            return;
+        }
         if (key.ctrl && input === "c") {
             const now = Date.now();
             if (now - lastCtrlCRef.current < 2000) {
@@ -709,7 +723,7 @@ export function App(props: AppProps): React.ReactElement {
             setInputValue(step.value);
             setComposerResetKey((k) => k + 1); // cursor no fim do texto recuperado
         },
-        { isActive: screen === "chat" && !sending && !pending && !showCommandMenu && !showMentionMenu },
+        { isActive: screen === "chat" && !sending && !pending && !paletteOpen && !showCommandMenu && !showMentionMenu },
     );
 
     // PageUp/PageDown navegam o histórico — `ink-text-input` já ignora
@@ -731,7 +745,7 @@ export function App(props: AppProps): React.ReactElement {
                 setScrollAnchor(nextEnd >= history.length ? null : nextEnd);
             }
         },
-        { isActive: screen === "chat" },
+        { isActive: screen === "chat" && !paletteOpen },
     );
 
     async function runTurn(action: (signal: AbortSignal) => Promise<SendMessageResult>): Promise<void> {
@@ -811,6 +825,8 @@ export function App(props: AppProps): React.ReactElement {
         }
     }
 
+    const commandContext: CommandContext = { setScreen, pushNotice: (text, tone) => setHistory((prev) => [...prev, noticeItem(text, tone)]), toggleSidebar: () => changeSidebar(!sidebarOpen), newSession };
+
     function handleCommand(raw: string): void {
         const name = raw.slice(1).trim().toLowerCase();
         const command = findCommand(name);
@@ -818,12 +834,18 @@ export function App(props: AppProps): React.ReactElement {
             setHistory((prev) => [...prev, noticeItem(`Comando desconhecido: "${raw}" — digite /help pra ver os comandos disponíveis.`, "warn")]);
             return;
         }
-        command.run({
-            setScreen,
-            pushNotice: (text, tone) => setHistory((prev) => [...prev, noticeItem(text, tone)]),
-            toggleSidebar: () => changeSidebar(!sidebarOpen),
-            newSession,
-        });
+        command.run(commandContext);
+    }
+
+    /** Comando escolhido na paleta (Ctrl+P) — roda de dentro de QUALQUER seção (Conta/Integrações/etc, não só as
+     * navegáveis a partir do chat), então volta pro chat por padrão antes de rodar; se o comando pedir uma tela
+     * própria (`config`, `contatos`, etc.), `command.run` chama `setScreen` DEPOIS e vence (mesmo tick de estado,
+     * a última chamada pra um `useState` é a que fica) — comandos sem tela própria (`novo`, `sidebar`, `help`)
+     * simplesmente terminam no chat, que é exatamente onde "/" já os deixaria hoje. */
+    function runFromPalette(command: Command): void {
+        setPaletteOpen(false);
+        setScreen("chat");
+        command.run(commandContext);
     }
 
     function handleSubmit(text: string): void {
@@ -929,7 +951,7 @@ export function App(props: AppProps): React.ReactElement {
     let liveRegion: React.ReactElement;
     if (pending) liveRegion = h(PermissionDialog, { pending, onAnswer: handleConfirmation });
     else if (sending) liveRegion = h(StatusLine, { text: statusLine });
-    else liveRegion = h(Composer, { value: inputValue, onChange: handleInputChange, onSubmit: handleSubmit, disabled: screen === "settings", resetKey: composerResetKey });
+    else liveRegion = h(Composer, { value: inputValue, onChange: handleInputChange, onSubmit: handleSubmit, disabled: screen === "settings" || paletteOpen, resetKey: composerResetKey });
 
     const chat = h(
         Box,
@@ -961,7 +983,7 @@ export function App(props: AppProps): React.ReactElement {
                   sessions: sidebarSessions,
                   activeSessionId: sessionId,
                   height: usableRows,
-                  interactive: screen === "chat",
+                  interactive: screen === "chat" && !paletteOpen,
                   onSelectSession: (session) => void resumeSession(session),
                   onNewSession: newSession,
                   onOpenAllSessions: () => setScreen("sessions"),
@@ -969,6 +991,9 @@ export function App(props: AppProps): React.ReactElement {
               chat,
           )
         : chat;
+    if (paletteOpen) {
+        return h(Box, { width: columns, height: usableRows }, base, h(CommandPaletteModal, { columns, usableRows, onRun: runFromPalette, onClose: () => setPaletteOpen(false) }));
+    }
     if (screen !== "settings") return base;
     return h(
         Box,

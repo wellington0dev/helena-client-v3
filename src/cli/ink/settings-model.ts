@@ -2,16 +2,21 @@ import wrapAnsi from "wrap-ansi";
 import { visibleWindow } from "./crud-screen.ts";
 
 /**
- * Modelo PURO do menu de configurações (`settings-modal.ts` só desenha): itens agrupados por seção, filtro por texto,
- * janela de rolagem, geometria do modal e hit-test do mouse. Tudo aqui é aritmética sobre a MESMA lista que a tela
- * desenha — é assim que o clique acerta a linha que se vê (o Ink não expõe coordenadas de tela, ver mouse.ts).
+ * Modelo PURO de modal em lista agrupada por seção (`settings-modal.ts` e `command-palette.ts` só desenham): filtro
+ * por texto, janela de rolagem, geometria do modal e hit-test do mouse — genérico sobre QUALQUER item com
+ * `id`/`section`/`label`/`description` (`SettingItem`, mais embaixo, é só a variante do menu de configurações, com
+ * os campos extras de toggle/link). Tudo aqui é aritmética sobre a MESMA lista que a tela desenha — é assim que o
+ * clique acerta a linha que se vê (o Ink não expõe coordenadas de tela, ver mouse.ts).
  */
 
-export interface SettingItem {
+export interface SectionedItem {
     id: string;
     section: string;
     label: string;
     description: string;
+}
+
+export interface SettingItem extends SectionedItem {
     kind: "toggle" | "link";
     /** Só toggle: `undefined` = ainda carregando/indisponível (não ativável). */
     value?: boolean;
@@ -19,7 +24,7 @@ export interface SettingItem {
     hint?: string;
 }
 
-export type DisplayRow = { kind: "header"; section: string } | { kind: "item"; item: SettingItem; itemIndex: number };
+export type DisplayRow<T extends SectionedItem = SettingItem> = { kind: "header"; section: string } | { kind: "item"; item: T; itemIndex: number };
 
 /** minúsculas e sem acento — "configurações" casa com "config". */
 export function normalize(text: string): string {
@@ -27,7 +32,7 @@ export function normalize(text: string): string {
 }
 
 /** Todas as palavras da busca precisam aparecer em rótulo, descrição ou seção. Busca vazia = tudo. */
-export function filterItems(items: SettingItem[], query: string): SettingItem[] {
+export function filterItems<T extends SectionedItem>(items: T[], query: string): T[] {
     const words = normalize(query).split(/\s+/).filter(Boolean);
     if (words.length === 0) return items;
     return items.filter((item) => {
@@ -37,8 +42,8 @@ export function filterItems(items: SettingItem[], query: string): SettingItem[] 
 }
 
 /** Agrupa por seção (na ordem em que aparecem), inserindo o cabeçalho antes do 1º item de cada uma. */
-export function buildRows(items: SettingItem[]): DisplayRow[] {
-    const rows: DisplayRow[] = [];
+export function buildRows<T extends SectionedItem>(items: T[]): DisplayRow<T>[] {
+    const rows: DisplayRow<T>[] = [];
     let current: string | undefined;
     items.forEach((item, itemIndex) => {
         if (item.section !== current) {
@@ -51,7 +56,7 @@ export function buildRows(items: SettingItem[]): DisplayRow[] {
 }
 
 /** Janela [start,end) de `listRows` linhas que mantém o item selecionado visível; se ela começa logo abaixo de um cabeçalho, inclui o cabeçalho. */
-export function windowRows(rows: DisplayRow[], selectedItemIndex: number, listRows: number): { start: number; end: number } {
+export function windowRows<T extends SectionedItem>(rows: DisplayRow<T>[], selectedItemIndex: number, listRows: number): { start: number; end: number } {
     if (rows.length <= listRows) return { start: 0, end: rows.length };
     const cursor = Math.max(0, rows.findIndex((row) => row.kind === "item" && row.itemIndex === selectedItemIndex));
     let { start, end } = visibleWindow(rows.length, cursor, listRows);

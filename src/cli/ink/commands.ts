@@ -25,68 +25,85 @@ export interface CommandContext {
 
 export interface Command {
     name: string;
+    /** Agrupamento no menu de comandos (Ctrl+P, ver command-palette.ts) — mesmo campo/mesmo agrupamento visual do menu de configurações (settings-model.ts). */
+    section: string;
     description: string;
     run: (ctx: CommandContext) => void;
 }
 
+// Ordem AQUI é a do "/" no composer e do /help — não mexer só por causa do agrupamento visual do menu de comandos
+// (Ctrl+P, ver command-palette.ts): ele reagrupa por `section` na hora de desenhar, sem depender da ordem deste
+// array (`commands.test.ts` já fixa esta ordem/relação pra matchCommands).
 export const COMMANDS: Command[] = [
     {
         name: "config",
+        section: "Conta",
         description: "Configurações — preferências, segurança, conta e atalhos (com mouse)",
         run: (ctx) => ctx.setScreen("settings"),
     },
     {
         name: "contatos",
+        section: "Integrações",
         description: "Editar/apagar contatos (WhatsApp/Telegram) e permissões extras",
         run: (ctx) => ctx.setScreen("contacts"),
     },
     {
         name: "integracoes",
+        section: "Integrações",
         description: "Conexões MCP (integrações de terceiros) + guia de como montar um servidor compatível",
         run: (ctx) => ctx.setScreen("mcp"),
     },
     {
         name: "canais",
+        section: "Integrações",
         description: "Status do WhatsApp/Telegram/execução remota (só leitura)",
         run: (ctx) => ctx.setScreen("channels"),
     },
     {
         name: "uso",
+        section: "Conta",
         description: "Chamadas de chat por canal e nos últimos 7 dias (só leitura)",
         run: (ctx) => ctx.setScreen("usage"),
     },
     {
         name: "cobranca",
+        section: "Conta",
         description: "Saldo de tokens da plataforma, comprar mais",
         run: (ctx) => ctx.setScreen("billing"),
     },
     {
         name: "projetos",
+        section: "Integrações",
         description: "Equipe de dev — criar, acompanhar, revisar, conversar com cada agente",
         run: (ctx) => ctx.setScreen("projects"),
     },
     {
         name: "sessoes",
+        section: "Conversa",
         description: "Conversas recentes — retomar uma delas",
         run: (ctx) => ctx.setScreen("sessions"),
     },
     {
         name: "novo",
+        section: "Conversa",
         description: "Nova conversa (limpa a tela e começa outra sessão)",
         run: (ctx) => ctx.newSession(),
     },
     {
         name: "permissoes",
+        section: "Conta",
         description: 'Comandos "sempre permitidos" — ver e revogar',
         run: (ctx) => ctx.setScreen("permissions"),
     },
     {
         name: "sidebar",
+        section: "Conversa",
         description: "Mostra/esconde a sidebar de sessões (clique pra retomar ou criar nova — some sozinha em terminal estreito)",
         run: (ctx) => ctx.toggleSidebar(),
     },
     {
         name: "help",
+        section: "Ajuda",
         description: "Esta lista",
         run: (ctx) => ctx.pushNotice(formatHelpText(), "info"),
     },
@@ -108,5 +125,5 @@ export function formatHelpText(): string {
     const lines = COMMANDS.map((cmd) => {
         return `  /${cmd.name}  ${cmd.description}`;
     });
-    return ["Comandos disponíveis:", ...lines, "  @arquivo                Cita um arquivo do diretório aberto (autocompleta; Tab/Enter)", "  ↑ / ↓                   Mensagens anteriores (histórico salvo entre sessões)", "  \\ + Enter               Nova linha na mensagem", "  Esc                     Interrompe a resposta em andamento", "  Ctrl+C (2x) ou Ctrl+D   Sair"].join("\n");
+    return ["Comandos disponíveis:", ...lines, "  @arquivo                Cita um arquivo do diretório aberto (autocompleta; Tab/Enter)", "  ↑ / ↓                   Mensagens anteriores (histórico salvo entre sessões)", "  \\ + Enter               Nova linha na mensagem", "  Ctrl+P                  Abre esta mesma lista num modal, agrupada por seção", "  Esc                     Interrompe a resposta em andamento", "  Ctrl+C (2x) ou Ctrl+D   Sair"].join("\n");
 }
