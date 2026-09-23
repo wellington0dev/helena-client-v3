@@ -3,6 +3,7 @@ import { startWhatsapp } from "./channels/whatsapp.ts";
 import { config } from "./config.ts";
 import { saveDeviceToken } from "./device-token.ts";
 import { startMachineAgent } from "./machine-agent.ts";
+import { captureError } from "./telemetry.ts";
 
 /**
  * Provisiona sozinho o token de longa duração desta máquina (WhatsApp/
@@ -31,7 +32,7 @@ export async function ensureDeviceToken(jwt: string): Promise<void> {
             body: JSON.stringify({ label: "client (automático)" }),
         });
         if (!response.ok) {
-            console.error(`[device-auth] falha ao provisionar token (${response.status}) — WhatsApp/Telegram/execução remota continuam desligados até o próximo login.`);
+            captureError("device-auth", `falha ao provisionar token (${response.status}) — WhatsApp/Telegram/execução remota continuam desligados até o próximo login.`);
             return;
         }
         const { token } = (await response.json()) as { token: string };
@@ -43,6 +44,6 @@ export async function ensureDeviceToken(jwt: string): Promise<void> {
         startMachineAgent(config.backendUrl, config.backendApiToken);
     } catch (err) {
         // Nunca lança — mesmo espírito de handleCliSession (best-effort, nunca bloqueia o login em si).
-        console.error("[device-auth] falha ao provisionar token:", err);
+        captureError("device-auth", "falha ao provisionar token", err);
     }
 }

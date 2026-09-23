@@ -2,6 +2,7 @@ import { fetchPendingOutbound, type PendingOutboundMessage } from "./channels/ba
 import { sendTelegramMessage, sendTelegramSticker } from "./channels/telegram.ts";
 import { sendWhatsappMessage, sendWhatsappSticker } from "./channels/whatsapp.ts";
 import { config, hasBackendConfig } from "./config.ts";
+import { captureError } from "./telemetry.ts";
 
 /**
  * Consulta periodicamente `GET /channels/pending-outbound` — o backend-v2
@@ -28,7 +29,7 @@ async function deliverOne(message: PendingOutboundMessage): Promise<void> {
         if (message.text) await sendTelegramMessage(message.contactId, message.text);
         if (message.sticker) await sendTelegramSticker(message.contactId, message.sticker.base64);
     } else {
-        console.error(`[outbound-poller] canal desconhecido: ${message.channel}`);
+        captureError("outbound-poller", `canal desconhecido: ${message.channel}`, undefined, "warn");
     }
 }
 
@@ -38,7 +39,7 @@ async function pollOnce(): Promise<void> {
         try {
             await deliverOne(message);
         } catch (error) {
-            console.error(`[outbound-poller] falha ao entregar mensagem ${message.id} (${message.channel}):`, error);
+            captureError("outbound-poller", `falha ao entregar mensagem (${message.channel})`, error);
         }
     }
 }
@@ -47,6 +48,6 @@ export function startOutboundPoller(): void {
     if (!hasBackendConfig()) return; // sem backend configurado, nada a consultar — mesmo critério de startWhatsapp/startTelegram.
 
     setInterval(() => {
-        pollOnce().catch((error) => console.error("[outbound-poller] loop:", error));
+        pollOnce().catch((error) => captureError("outbound-poller", "loop", error));
     }, POLL_INTERVAL_MS);
 }

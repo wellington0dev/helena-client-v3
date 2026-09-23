@@ -6,6 +6,8 @@
  * `extractMessage` abaixo).
  */
 
+import { reportTelemetry } from "../../telemetry.ts";
+
 /** Distinta de um erro genérico pra quem chama saber quando vale a pena relogar em vez de só mostrar o erro. */
 export class UnauthorizedError extends Error {}
 
@@ -40,10 +42,20 @@ export async function parseOrThrow<T>(response: Response): Promise<T> {
 
 /** Endpoints autenticados (JWT do login por email/senha) — mesmo protocolo REST que o painel fala. */
 export async function authed<T>(baseUrl: string, token: string, method: "GET" | "POST" | "PATCH" | "DELETE", path: string, body?: unknown): Promise<T> {
-    const response = await fetch(`${baseUrl}${path}`, {
-        method,
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        ...(body !== undefined && { body: JSON.stringify(body) }),
-    });
+    // Rota sem query string (pode carregar filtro digitado pelo dono) — só método + caminho + status, nunca corpo.
+    const route = `${method} ${path.split("?")[0]}`;
+    let response: Response;
+    try {
+        response = await fetch(`${baseUrl}${path}`, {
+            method,
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            ...(body !== undefined && { body: JSON.stringify(body) }),
+        });
+    } catch (err) {
+        void reportTelemetry("warn", `cli: backend inalcançável em ${route} (${err instanceof Error ? err.message : String(err)})`, { source: "cli:http", token });
+        throw err;
+    }
+    // 4xx é resposta legítima (validação, 403 de admin, 404) — só 5xx é defeito do backend que ninguém veria de outro jeito.
+    if (response.status >= 500) void reportTelemetry("error", `cli: ${route} → ${response.status}`, { source: "cli:http", token });
     return parseOrThrow<T>(response);
 }

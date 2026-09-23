@@ -8,6 +8,7 @@ import {
 import { config } from "./config.ts";
 import { deleteFile, globFiles, grepFiles, listFiles, previewDiff, readFile, searchFiles, writeFile, type FileEdit } from "./local-files.ts";
 import { runCommand, type StreamCallbacks } from "./local-shell.ts";
+import { captureError } from "./telemetry.ts";
 
 /**
  * MCP Server que expõe as capacidades locais do client/ (shell, file ops, etc)
@@ -273,7 +274,7 @@ export async function startMcpServer(): Promise<void> {
     };
     
     transport.onerror = (err) => {
-        console.error("[MCP Server] Transport error:", err);
+        captureError("mcp-server", "erro no transporte stdio", err);
     };
     
     await server.connect(transport);
@@ -285,10 +286,10 @@ export async function startMcpServer(): Promise<void> {
         console.error("[MCP Server] stdin closed");
     });
     process.stdin.on("error", (err) => {
-        console.error("[MCP Server] stdin error:", err);
+        captureError("mcp-server", "erro no stdin", err);
     });
     process.stdout.on("error", (err) => {
-        console.error("[MCP Server] stdout error:", err);
+        captureError("mcp-server", "erro no stdout", err);
     });
 
     // Keep the process alive - wait indefinitely
@@ -298,8 +299,9 @@ export async function startMcpServer(): Promise<void> {
 // Auto-start when run directly (e.g., `node src/mcp-server.ts` or `helena mcp-server`)
 if (import.meta.url === `file://${process.argv[1]}`) {
     startMcpServer().catch((err) => {
-        console.error("[MCP Server] falha ao iniciar:", err);
-        process.exit(1);
+        captureError("mcp-server", "falha ao iniciar", err);
+        // dá 2 s pro relato sair antes de morrer (fetch best-effort, nunca segura mais que isso).
+        setTimeout(() => process.exit(1), 2000).unref();
     });
 }
 

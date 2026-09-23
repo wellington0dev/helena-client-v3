@@ -5,6 +5,7 @@ import { updateTelegram } from "../local-api/status-bus.ts";
 import { sendGroupInboundMessage, sendInboundMessage } from "./backend-client.ts";
 import { exceedsMediaLimit, mediaTooLargeMessage } from "./media-limit.ts";
 import { toTelegramHtml } from "./markdown-format.ts";
+import { captureError } from "../telemetry.ts";
 
 /** Telegram tem 3 formatos de figurinha, bem diferentes — webp (estática), TGS/Lottie (animada) e webm (vídeo). `getFile()` não devolve o mimetype certo sozinho, então infere pelas flags do próprio sticker. Exportada só pra teste (lógica pura). */
 export function stickerMimeType(sticker: { is_animated: boolean; is_video: boolean }): string {
@@ -103,7 +104,7 @@ async function handlePrivateMessage(ctx: TelegramContext): Promise<void> {
         await ctx.reply(toTelegramHtml(result.text), { parse_mode: "HTML" });
         if (result.sticker) await ctx.replyWithSticker(new InputFile(Buffer.from(result.sticker.base64, "base64")));
     } catch (error) {
-        console.error("[telegram] falha ao processar mensagem:", error);
+        captureError("telegram", "falha ao processar mensagem", error);
     }
 }
 
@@ -128,7 +129,7 @@ async function handleGroupMessage(ctx: Context): Promise<void> {
 
         await ctx.reply(toTelegramHtml(result.text), { parse_mode: "HTML" });
     } catch (error) {
-        console.error("[telegram] falha ao processar mensagem de grupo:", error);
+        captureError("telegram", "falha ao processar mensagem de grupo", error);
     }
 }
 
@@ -150,7 +151,7 @@ export function startTelegram(): void {
     bot.api.config.use(hydrateFiles(bot.token));
 
     bot.catch((error) => {
-        console.error("[telegram] erro não tratado:", error);
+        captureError("telegram", "erro não tratado no bot", error);
         updateTelegram({ status: "error", error: error instanceof Error ? error.message : String(error) });
     });
 
@@ -178,7 +179,7 @@ export async function stopTelegram(): Promise<void> {
     try {
         await bot?.stop();
     } catch (error) {
-        console.error("[telegram] falha ao parar:", error);
+        captureError("telegram", "falha ao parar", error, "warn");
     }
     updateTelegram({ status: "disconnected", error: undefined });
 }

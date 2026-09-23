@@ -233,7 +233,9 @@ export function startMachineAgent(backendUrl: string, apiToken: string): void {
             let message: AgentServerEvent;
             try {
                 message = JSON.parse(String(event.data));
-            } catch {
+            } catch (err) {
+                // nunca o conteúdo cru (pode ser um comando shell) — só que o protocolo quebrou.
+                void reportTelemetry("warn", `machine-agent: mensagem WS não é JSON válido (${err instanceof Error ? err.name : "erro"})`, { source: "machine-agent" });
                 return;
             }
             if (message.type === "exec") {

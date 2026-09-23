@@ -18,7 +18,8 @@ import { logoutWhatsapp, startWhatsapp, stopWhatsapp } from "./channels/whatsapp
 import { startTelegram, stopTelegram, validateTelegramToken } from "./channels/telegram.ts";
 import { startMachineAgent } from "./machine-agent.ts";
 import { startOutboundPoller } from "./outbound-poller.ts";
-import { reportError } from "./telemetry.ts";
+import { captureError, reportError } from "./telemetry.ts";
+import { startMachineMetrics } from "./machine-metrics.ts";
 import { startMcpServer, stopMcpServer } from "./mcp-server.ts";
 
 /**
@@ -109,10 +110,11 @@ startWhatsapp();
 startTelegram();
 startMachineAgent(config.backendUrl, config.backendApiToken);
 startOutboundPoller();
+startMachineMetrics();
 
 // MCP Server opcional (via env var)
 if (config.mcpServerEnabled) {
-    startMcpServer().catch((err) => console.error("[MCP Server] falha ao iniciar:", err));
+    startMcpServer().catch((err) => captureError("mcp-server", "falha ao iniciar", err));
 }
 
 /**
@@ -136,7 +138,7 @@ process.on("unhandledRejection", (reason) => reportError(reason, "client:unhandl
 const SHUTDOWN_TIMEOUT_MS = 5000;
 
 async function shutdown(): Promise<void> {
-    await Promise.race([stopWhatsapp().catch((error) => console.error("[main] falha ao encerrar WhatsApp:", error)), new Promise((resolve) => setTimeout(resolve, SHUTDOWN_TIMEOUT_MS))]);
+    await Promise.race([stopWhatsapp().catch((error) => captureError("main", "falha ao encerrar WhatsApp", error, "warn")), new Promise((resolve) => setTimeout(resolve, SHUTDOWN_TIMEOUT_MS))]);
     await stopMcpServer().catch(() => undefined);
     process.exit(0);
 }

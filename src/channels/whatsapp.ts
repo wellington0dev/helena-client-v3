@@ -8,6 +8,7 @@ import { getState, updateWhatsapp } from "../local-api/status-bus.ts";
 import { sendGroupInboundMessage, sendInboundMessage } from "./backend-client.ts";
 import { exceedsMediaLimit, mediaTooLargeMessage } from "./media-limit.ts";
 import { toWhatsappText } from "./markdown-format.ts";
+import { captureError } from "../telemetry.ts";
 
 /**
  * Ponte de WhatsApp pro backend-v2 (Fase 5 — ver docs/architecture-v2.md
@@ -118,7 +119,7 @@ function resolvePhoneContactId(remoteJid: string, senderPn: string | undefined):
         try {
             writeFileSync(config.whatsappLidPinsFile, JSON.stringify(lidPins, null, 2), "utf8");
         } catch (error) {
-            console.error("[whatsapp] falha ao gravar pin de lid→telefone:", error);
+            captureError("whatsapp", "falha ao gravar pin de lid→telefone", error, "warn");
         }
     }
 
@@ -195,7 +196,7 @@ async function handleMessage(msg: WAMessage, sock: WASocket): Promise<void> {
         await sendWhatsappMessage(remoteJid, result.text);
         if (result.sticker) await sendWhatsappSticker(remoteJid, result.sticker.base64);
     } catch (error) {
-        console.error("[whatsapp] falha ao processar mensagem:", error);
+        captureError("whatsapp", "falha ao processar mensagem", error);
     }
 }
 
@@ -233,7 +234,7 @@ async function handleGroupMessage(msg: WAMessage): Promise<void> {
         const metadata = await currentSock?.groupMetadata(remoteJid);
         if (metadata?.subject) groupName = metadata.subject;
     } catch (error) {
-        console.error(`[whatsapp] falha ao buscar nome do grupo ${remoteJid}:`, error);
+        captureError("whatsapp", "falha ao buscar nome do grupo", error, "warn");
     }
 
     try {
@@ -249,7 +250,7 @@ async function handleGroupMessage(msg: WAMessage): Promise<void> {
 
         await sendWhatsappMessage(remoteJid, result.text);
     } catch (error) {
-        console.error("[whatsapp] falha ao processar mensagem de grupo:", error);
+        captureError("whatsapp", "falha ao processar mensagem de grupo", error);
     }
 }
 
@@ -259,7 +260,7 @@ async function connect(): Promise<void> {
     activeSock = sock;
 
     sock.ev.on("creds.update", () => {
-        pendingCredsSave = saveCreds().catch((error) => console.error("[whatsapp] falha ao salvar credenciais:", error));
+        pendingCredsSave = saveCreds().catch((error) => captureError("whatsapp", "falha ao salvar credenciais", error));
     });
 
     sock.ev.on("connection.update", (update) => {
@@ -269,7 +270,7 @@ async function connect(): Promise<void> {
             updateWhatsapp({ status: "qr", qrText: qr });
             QRCode.toDataURL(qr)
                 .then((qrDataUrl) => updateWhatsapp({ status: "qr", qrDataUrl, qrText: qr }))
-                .catch((error) => console.error("[whatsapp] falha ao gerar QR pro painel:", error));
+                .catch((error) => captureError("whatsapp", "falha ao gerar QR pro painel", error, "warn"));
         }
 
         if (connection === "open") {
@@ -284,13 +285,13 @@ async function connect(): Promise<void> {
             if (statusCode === DisconnectReason.loggedOut) {
                 activeSock = undefined; // sessão morreu: permite `start`/`logout` pela API local sem ficar preso no guard de idempotência
                 const message = "sessão desconectada (logout) — apague o diretório de auth e reinicie pra escanear um QR novo.";
-                console.error(`[whatsapp] ${message}`);
+                captureError("whatsapp", message, undefined, "warn");
                 updateWhatsapp({ status: "error", error: message, qrDataUrl: undefined, qrText: undefined });
                 return;
             }
             if (shuttingDown) return; // fomos nós que fechamos (stopWhatsapp) — não reconecta brigando com o processo saindo.
             updateWhatsapp({ status: "connecting", qrDataUrl: undefined, qrText: undefined });
-            setTimeout(() => connect().catch((error) => console.error("[whatsapp] falha ao reconectar:", error)), RECONNECT_DELAY_MS);
+            setTimeout(() => connect().catch((error) => captureError("whatsapp", "falha ao reconectar", error)), RECONNECT_DELAY_MS);
         }
     });
 
@@ -299,9 +300,9 @@ async function connect(): Promise<void> {
         for (const msg of messages) {
             const remoteJid = msg.key.remoteJid;
             if (remoteJid && isJidGroup(remoteJid)) {
-                handleGroupMessage(msg).catch((error) => console.error("[whatsapp] erro processando mensagem de grupo:", error));
+                handleGroupMessage(msg).catch((error) => captureError("whatsapp", "erro processando mensagem de grupo", error));
             } else {
-                handleMessage(msg, sock).catch((error) => console.error("[whatsapp] erro processando mensagem:", error));
+                handleMessage(msg, sock).catch((error) => captureError("whatsapp", "erro processando mensagem", error));
             }
         }
     });
@@ -318,7 +319,7 @@ export function startWhatsapp(): void {
     shuttingDown = false; // permite religar depois de um stop/logout feito pela API local
     updateWhatsapp({ status: "connecting" });
     connect().catch((error) => {
-        console.error("[whatsapp] falha ao conectar:", error);
+        captureError("whatsapp", "falha ao conectar", error);
         updateWhatsapp({ status: "error", error: error instanceof Error ? error.message : String(error) });
     });
 }
@@ -359,7 +360,7 @@ export async function logoutWhatsapp(): Promise<void> {
     try {
         await sock?.logout();
     } catch (error) {
-        console.error("[whatsapp] logout no servidor falhou (segue apagando o auth local):", error);
+        captureError("whatsapp", "logout no servidor falhou (segue apagando o auth local)", error, "warn");
     }
     sock?.end(undefined);
     activeSock = undefined;
