@@ -36,7 +36,7 @@ import { formatProjectChecklist, formatProjectSummary, type ProjectStepsByRole }
 import { renderMarkdownAnsi } from "./render-markdown.ts";
 import { countWrappedLines, fitToViewport, measureHistoryItem } from "./viewport.ts";
 import { Banner } from "./banner.ts";
-import { bg, c, theme, panel, MESSAGE_PADDING_X, MESSAGE_PADDING_Y } from "./theme.ts";
+import { bg, c, theme, panel, MESSAGE_PADDING_X, MESSAGE_PADDING_Y, SPACE } from "./theme.ts";
 
 /**
  * Comandos por barra — padrão opencode/Hermes Agent CLI: tudo dentro do
@@ -81,21 +81,21 @@ function HistoryLine({ item }: { item: HistoryItem }): React.ReactElement {
         return h(Box, null, h(Text, { color: theme.textMuted }, "● ", formatToolCall(item.name, item.input)));
     }
     if (item.role === "tool_result") {
-        return h(Box, { flexDirection: "column", marginBottom: 1, paddingLeft: 2 }, h(Text, { color: theme.textMuted }, "⎿ ", formatToolResult(item.name, item.output)));
+        return h(Box, { flexDirection: "column", marginBottom: SPACE.tight, paddingLeft: SPACE.loose }, h(Text, { color: theme.textMuted }, "⎿ ", formatToolResult(item.name, item.output)));
     }
     // Avisos e mensagens são CAIXAS de fundo colorido (sem bordas) — ver theme.ts. measureHistoryItem (viewport.ts)
     // mede com os mesmos MESSAGE_PADDING_*; mudou o layout aqui, muda lá.
     const box = (background: string, paddingY = MESSAGE_PADDING_Y): { marginBottom: number; backgroundColor: string; paddingX: number; paddingY: number } => ({
-        marginBottom: 1,
+        marginBottom: SPACE.tight,
         backgroundColor: background,
         paddingX: MESSAGE_PADDING_X,
         paddingY,
     });
     if (item.role === "notice") {
-        return h(Box, { marginBottom: 1 }, h(Banner, { tone: item.tone, text: item.text }));
+        return h(Box, { marginBottom: SPACE.tight }, h(Banner, { tone: item.tone, text: item.text }));
     }
     if (item.role === "usage") {
-        return h(Box, { marginBottom: 1 }, h(Text, { color: theme.textMuted }, formatUsageLine(item.usage)));
+        return h(Box, { marginBottom: SPACE.tight }, h(Text, { color: theme.textMuted }, formatUsageLine(item.usage)));
     }
     if (item.role === "user") {
         // Inline de propósito (rótulo + texto na MESMA linha, quebrando como um parágrafo só se precisar).
@@ -111,7 +111,7 @@ function ProjectProgressPanel({ projectSteps }: { projectSteps: Map<string, Proj
 
     return h(
         Box,
-        { flexDirection: "column", marginBottom: 1 },
+        { flexDirection: "column", marginBottom: SPACE.tight },
         ...[...projectSteps.entries()].map(([projectId, steps]) =>
             h(
                 Box,
@@ -145,8 +145,8 @@ function PlanPanel({ plan }: { plan: AgentPlan | null }): React.ReactElement | n
 
     return h(
         Box,
-        { flexDirection: "column", marginBottom: 1, ...panel("border") },
-        h(Box, { gap: 1 },
+        { flexDirection: "column", marginBottom: SPACE.tight, ...panel("border") },
+        h(Box, { gap: SPACE.tight },
             h(Text, { color: theme.accent, bold: true }, `Plano: ${plan.title}`),
             h(Text, { color: statusColor, bold: true }, statusLabel),
         ),
@@ -208,7 +208,7 @@ function Composer(props: { value: string; onChange: (v: string) => void; onSubmi
         // a mais que o composer sem caixa — measureComposer abaixo desconta as duas coisas.
         { ...panel("border") },
         // marginRight em vez de `gap`: com texto longo (quebrando) o gap sumia e o "❯" colava na 1ª letra.
-        h(Box, { flexShrink: 0, marginRight: 1 }, h(Text, { color: theme.success, bold: true }, "❯")),
+        h(Box, { flexShrink: 0, marginRight: SPACE.tight }, h(Text, { color: theme.success, bold: true }, "❯")),
         // `key: resetKey` força o TextInput a REMONTAR quando o Tab do menu de
         // comandos preenche `value` programaticamente — sem isto, o cursor
         // interno do ink-text-input (só se ajusta ao digitar, ver seu
@@ -284,7 +284,7 @@ function measureMentionMenu(files: string[]): number {
 function StatusBar(props: { info: Parameters<typeof statusBarParts>[0]; width: number }): React.ReactElement {
     // Fundo `panel` (mais escuro que o chat) com 1 coluna de respiro de cada lado — sem linha separando.
     const { main, alert } = statusBarParts(props.info, props.width - 2);
-    return h(Box, { justifyContent: "space-between", width: props.width, backgroundColor: bg.panel, paddingX: 1 }, h(Text, { color: theme.textMuted, wrap: "truncate" }, main), alert ? h(Text, { color: theme.warning, wrap: "truncate" }, alert) : null);
+    return h(Box, { justifyContent: "space-between", width: props.width, backgroundColor: bg.panel, paddingX: SPACE.tight }, h(Text, { color: theme.textMuted, wrap: "truncate" }, main), alert ? h(Text, { color: theme.warning, wrap: "truncate" }, alert) : null);
 }
 
 function shortPath(cwd: string): string {
@@ -353,7 +353,7 @@ function Sidebar({
 
     return h(
         Box,
-        { flexDirection: "column", width: SIDEBAR_WIDTH, height, backgroundColor: bg.panel, paddingX: 1 },
+        { flexDirection: "column", width: SIDEBAR_WIDTH, height, backgroundColor: bg.panel, paddingX: SPACE.tight },
         h(Text, { color: theme.primary, bold: true, wrap: "truncate" }, "Sessões"),
         h(Text, { color: theme.textMuted, wrap: "truncate-start" }, shownPath),
         h(Text, null, " "),

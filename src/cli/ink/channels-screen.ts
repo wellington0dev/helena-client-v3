@@ -4,10 +4,11 @@ import { daemon, DaemonUnavailableError } from "../api/daemon.ts";
 import { getMe, setOwnerIdentity, UnauthorizedError, type CurrentUser } from "../backend.ts";
 import { connectLocalWs } from "./local-ws-client.ts";
 import { actionIndexOfRow, actionRows, buildChannelRows, validateBotToken, validateOwnerId, type ChannelActionId, type ChannelRow } from "./channels-model.ts";
+import { Confirm } from "./confirm.ts";
 import { Form } from "./form.ts";
 import { useMouse, type MouseEvent } from "./mouse.ts";
 import { qrModules, qrRowCount, renderQr } from "./qr-render.ts";
-import { bg, panel, theme } from "./theme.ts";
+import { bg, panel, SPACE, theme } from "./theme.ts";
 import type { ChannelStatus, ClientState } from "../../local-api/status-bus.ts";
 
 const h = React.createElement;
@@ -155,12 +156,10 @@ export function ChannelsScreen(props: { localPort: number; backendUrl: string; t
     }
 
     useInput(
-        (input, key) => {
-            if (mode.kind === "confirm") {
-                if (input.toLowerCase() === "s") confirm(mode.action);
-                else if (input.toLowerCase() === "n" || key.escape) setMode({ kind: "list" });
-                return;
-            }
+        (_input, key) => {
+            // Enquanto confirma, quem trata s/n/Esc é o <Confirm> montado abaixo — nunca os dois ao mesmo tempo
+            // (ver comentário em confirm.ts).
+            if (mode.kind === "confirm") return;
             if (key.escape) {
                 if (qrVisible) activate("wa-cancel");
                 else onExit();
@@ -190,7 +189,7 @@ export function ChannelsScreen(props: { localPort: number; backendUrl: string; t
             { flexDirection: "column", ...panel("surface") },
             h(Text, { bold: true, color: theme.primary }, "Canais"),
             h(Text, { color: theme.textMuted }, `Daemon local não detectado nesta máquina (porta ${localPort}) — sem status ao vivo nem ações. Suba o serviço do client.`),
-            h(Box, { marginTop: 1 }),
+            h(Box, { marginTop: SPACE.tight }),
             h(Text, { color: theme.textMuted }, "Esc volta"),
         );
     }
@@ -218,13 +217,14 @@ export function ChannelsScreen(props: { localPort: number; backendUrl: string; t
     }
 
     if (mode.kind === "confirm") {
-        const text =
+        const message =
             mode.action === "wa-logout"
                 ? "Desconectar o WhatsApp e apagar a sessão local? Para voltar, será preciso escanear um QR de novo."
                 : mode.action === "wa-reset"
                   ? "A sessão local do WhatsApp está inválida — apagar e gerar um QR novo?"
                   : "Remover o token do bot do Telegram? O bot para de responder até você definir outro.";
-        return h(Box, { flexDirection: "column", ...panel("danger") }, h(Text, { bold: true, color: theme.danger }, text), h(Box, { marginTop: 1 }), h(Text, null, "Confirmar? (s/n)"));
+        const action = mode.action;
+        return h(Confirm, { message, onConfirm: () => confirm(action), onCancel: () => setMode({ kind: "list" }) });
     }
 
     if (qrVisible && state?.whatsapp.qrText) {
@@ -238,7 +238,7 @@ export function ChannelsScreen(props: { localPort: number; backendUrl: string; t
             h(Text, { bold: true, color: theme.primary }, "WhatsApp — escaneie o QR"),
             h(Text, { color: theme.textMuted }, "No celular: WhatsApp → Configurações → Aparelhos conectados → Conectar um aparelho."),
             tooSmall ? h(Text, { color: theme.warning }, `A janela está pequena para o QR (precisa de ~${qrLines + 7} linhas) — aumente o terminal.`) : null,
-            h(Box, { marginTop: 1 }),
+            h(Box, { marginTop: SPACE.tight }),
             h(Text, null, renderQr(qrText)),
             h(Text, { color: theme.textMuted }, "O QR renova sozinho. Esc cancela."),
         );
@@ -258,9 +258,9 @@ export function ChannelsScreen(props: { localPort: number; backendUrl: string; t
             const active = actions[current]?.id === row.id;
             return h(
                 Box,
-                { key: row.id, justifyContent: "space-between", paddingX: 1, ...(active ? { backgroundColor: bg.selected } : {}) },
+                { key: row.id, justifyContent: "space-between", paddingX: SPACE.tight, ...(active ? { backgroundColor: bg.selected } : {}) },
                 h(Text, { bold: active, color: row.danger ? theme.danger : undefined, wrap: "truncate" }, row.label),
-                row.hint ? h(Box, { flexShrink: 0, marginLeft: 2 }, h(Text, { color: theme.textMuted }, row.hint)) : null,
+                row.hint ? h(Box, { flexShrink: 0, marginLeft: SPACE.loose }, h(Text, { color: theme.textMuted }, row.hint)) : null,
             );
         }),
         h(Text, null, " "),

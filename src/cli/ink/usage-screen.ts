@@ -2,8 +2,10 @@ import React from "react";
 import { Box, Text, useInput } from "ink";
 import { getUsage, type UsageSummary } from "../api/usage.ts";
 import { UnauthorizedError } from "../backend.ts";
+import { ErrorPanel } from "./error-panel.ts";
+import { Loader } from "./loader.ts";
 import { buildUsageView } from "./usage-view.ts";
-import { c, theme, panel } from "./theme.ts";
+import { c, theme, panel, SPACE } from "./theme.ts";
 
 const h = React.createElement;
 
@@ -32,12 +34,8 @@ export function UsageScreen(props: { backendUrl: string; token: string; onExit: 
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [backendUrl, token]);
 
-    if (error) {
-        return h(Text, { color: theme.danger }, `Erro: ${error} — Esc pra voltar ao chat`);
-    }
-    if (!usage) {
-        return h(Text, { color: theme.textMuted }, "Carregando uso...");
-    }
+    if (error) return h(ErrorPanel, { error });
+    if (!usage) return h(Loader, { text: "Carregando uso..." });
 
     const { channelTiles, weekBars } = buildUsageView(usage);
 
@@ -46,12 +44,12 @@ export function UsageScreen(props: { backendUrl: string; token: string; onExit: 
         { flexDirection: "column", ...panel("border") },
         h(Text, { bold: true, color: theme.primary }, "Uso — chamadas de chat"),
         h(Text, { color: theme.textMuted }, `Total: ${usage.totalCalls}${usage.firstCallAt ? ` · desde ${new Date(usage.firstCallAt).toLocaleDateString("pt-BR")}` : ""}`),
-        h(Box, { marginTop: 1, gap: 3 }, ...channelTiles.map((tile) => h(Text, { key: tile.key }, `${tile.label}: `, c.primary.bold(String(tile.value))))),
-        h(Box, { marginTop: 1 }),
+        h(Box, { marginTop: SPACE.tight, gap: SPACE.loose }, ...channelTiles.map((tile) => h(Text, { key: tile.key }, `${tile.label}: `, c.primary.bold(String(tile.value))))),
+        h(Box, { marginTop: SPACE.tight }),
         h(Text, { color: theme.textMuted }, "Últimos 7 dias:"),
         h(
             Box,
-            { flexDirection: "row", gap: 1, marginTop: 1, alignItems: "flex-end" },
+            { flexDirection: "row", gap: SPACE.tight, marginTop: SPACE.tight, alignItems: "flex-end" },
             ...weekBars.map((bar) => {
                 const rows = Math.max(1, Math.round((bar.heightPct / 100) * BAR_HEIGHT_ROWS));
                 return h(
@@ -64,7 +62,7 @@ export function UsageScreen(props: { backendUrl: string; token: string; onExit: 
                 );
             }),
         ),
-        h(Box, { marginTop: 1 }),
+        h(Box, { marginTop: SPACE.tight }),
         h(Text, { color: theme.textMuted }, "Esc volta"),
     );
 }

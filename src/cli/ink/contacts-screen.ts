@@ -2,9 +2,11 @@ import React from "react";
 import { Box, Text, useInput } from "ink";
 import { deleteContact, listContacts, updateContact, type Contact, type GrantableTool } from "../api/contacts.ts";
 import { UnauthorizedError } from "../backend.ts";
+import { Badge } from "./badge.ts";
 import { CrudScreen } from "./crud-screen.ts";
+import { ErrorPanel } from "./error-panel.ts";
 import { Form } from "./form.ts";
-import { c, theme, panel } from "./theme.ts";
+import { theme, panel, SPACE } from "./theme.ts";
 
 const h = React.createElement;
 
@@ -93,9 +95,7 @@ export function ContactsScreen(props: { backendUrl: string; token: string; onExi
         else if (screen.kind === "edit") setScreen({ kind: "list" });
     });
 
-    if (error) {
-        return h(Box, { flexDirection: "column", ...panel("danger") }, h(Text, { color: theme.danger }, `Erro: ${error}`), h(Text, { color: theme.textMuted }, "Esc pra voltar ao chat"));
-    }
+    if (error) return h(ErrorPanel, { error });
 
     async function handleDelete(contact: Contact): Promise<void> {
         setBusy(true);
@@ -205,12 +205,9 @@ function GrantToolsScreen(props: {
         { flexDirection: "column", ...panel("border") },
         h(Text, { bold: true, color: theme.primary }, `Permissões extras — ${contactLabel}`),
         h(Text, { color: theme.textMuted }, "O que este contato pode gerenciar SOZINHO (além de conversar com a Helena)."),
-        h(Box, { marginTop: 1 }),
-        ...GRANTABLE_TOOLS.map((tool, i) => {
-            const enabled = grantedTools.includes(tool.key);
-            return h(Text, { key: tool.key }, `${i + 1}) `, tool.label, "  ", enabled ? c.success("concedido") : c.muted("não concedido"));
-        }),
-        h(Box, { marginTop: 1 }),
+        h(Box, { marginTop: SPACE.tight }),
+        ...GRANTABLE_TOOLS.map((tool, i) => h(Box, { key: tool.key, gap: SPACE.tight }, h(Text, null, `${i + 1}) ${tool.label}`), h(Badge, grantedTools.includes(tool.key) ? { tone: "success", label: "● concedido" } : { tone: "muted", label: "○ não concedido" }))),
+        h(Box, { marginTop: SPACE.tight }),
         h(Text, { color: theme.textMuted }, busy ? "salvando..." : "1-3 alterna · Enter salva · Esc volta pro formulário"),
     );
 }

@@ -3,12 +3,15 @@ import { Box, Text, useInput } from "ink";
 import { AGENT_ROLES, DEFAULT_AGENT_NAMES, listAgentPersonas, resetAgentPersona, setAgentPersonaName } from "../api/agent-personas.ts";
 import { cancelProject, createProject, deleteProject, listAutonomyPolicies, listProjects, setAutonomyPolicy, type AutonomyDecision, type AutonomyMode, type ProjectSummary } from "../api/projects.ts";
 import { UnauthorizedError } from "../backend.ts";
+import { Badge } from "./badge.ts";
 import { CrudScreen } from "./crud-screen.ts";
+import { ErrorPanel } from "./error-panel.ts";
 import { Form } from "./form.ts";
+import { Loader } from "./loader.ts";
 import { ProjectDetailScreen } from "./project-detail-screen.ts";
 import type { ChatProgressEvent } from "./progress-client.ts";
 import { deleteConfirmText, isTerminal, STATUS_LABEL } from "./project-status.ts";
-import { c, theme, panel } from "./theme.ts";
+import { theme, panel, SPACE } from "./theme.ts";
 
 const h = React.createElement;
 
@@ -112,9 +115,7 @@ export function ProjectsScreen(props: {
         else if (input === "p") setScreen({ kind: "personas" });
     });
 
-    if (error) {
-        return h(Box, { flexDirection: "column", ...panel("danger") }, h(Text, { color: theme.danger }, `Erro: ${error}`), h(Text, { color: theme.textMuted }, "Esc pra voltar ao chat"));
-    }
+    if (error) return h(ErrorPanel, { error });
 
     async function handleCreate(values: Record<string, string>): Promise<void> {
         const spec = values.spec?.trim();
@@ -270,8 +271,8 @@ function AutonomyScreen(props: { backendUrl: string; token: string; onUnauthoriz
         }
     }
 
-    if (error) return h(Text, { color: theme.danger }, `Erro: ${error} — Esc volta`);
-    if (!policies) return h(Text, { color: theme.textMuted }, "Carregando políticas...");
+    if (error) return h(ErrorPanel, { error, hint: "Esc volta" });
+    if (!policies) return h(Loader, { text: "Carregando políticas..." });
 
     const decisions: AutonomyDecision[] = ["qa_failure", "revision_scope_change"];
     return h(
@@ -279,13 +280,17 @@ function AutonomyScreen(props: { backendUrl: string; token: string; onUnauthoriz
         { flexDirection: "column", ...panel("border") },
         h(Text, { bold: true, color: theme.primary }, "Políticas de autonomia"),
         h(Text, { color: theme.textMuted }, "Quando a equipe de dev topa decidir sozinha, e quando prefere te perguntar."),
-        h(Box, { marginTop: 1 }),
+        h(Box, { marginTop: SPACE.tight }),
         ...decisions.map((decision, i) => {
             const mode = policies[decision];
-            const modeLabel = mode === "auto" ? c.success("decide sozinha") : c.warning("pergunta antes");
-            return h(Text, { key: decision }, `${i + 1}) ${AUTONOMY_LABELS[decision]}  `, modeLabel);
+            return h(
+                Box,
+                { key: decision, gap: SPACE.tight },
+                h(Text, null, `${i + 1}) ${AUTONOMY_LABELS[decision]}`),
+                h(Badge, mode === "auto" ? { tone: "success", label: "decide sozinha" } : { tone: "warn", label: "pergunta antes" }),
+            );
         }),
-        h(Box, { marginTop: 1 }),
+        h(Box, { marginTop: SPACE.tight }),
         h(Text, { color: theme.textMuted }, busy ? "aplicando..." : "1-2 alterna · Esc volta"),
     );
 }
@@ -323,7 +328,11 @@ function PersonasScreen(props: {
         void reload();
     }, [reload]);
 
-    if (error) return h(Text, { color: theme.danger }, `Erro: ${error} — Esc volta`);
+    // Bug real encontrado nesta revisão (2026-09-23): `error` também é setado pelo formulário de renomear (nome
+    // vazio, ver handleRename) — mostrar a tela cheia de erro AQUI, antes do `screen.kind === "persona-rename"`
+    // abaixo, escondia o próprio formulário no meio da digitação. Só toma a tela inteira fora desse formulário
+    // (falha ao carregar/restaurar); dentro dele, o próprio `Form` já mostra `error` inline.
+    if (error && screen.kind !== "persona-rename") return h(ErrorPanel, { error, hint: "Esc volta" });
 
     async function handleReset(role: string): Promise<void> {
         setBusy(true);
@@ -364,7 +373,7 @@ function PersonasScreen(props: {
         });
     }
 
-    if (!personas) return h(Text, { color: theme.textMuted }, "Carregando nomes da equipe...");
+    if (!personas) return h(Loader, { text: "Carregando nomes da equipe..." });
 
     const items: PersonaItem[] = AGENT_ROLES.map((role) => ({ id: role, label: `${personas[role] ?? DEFAULT_AGENT_NAMES[role]} (${role})` }));
 

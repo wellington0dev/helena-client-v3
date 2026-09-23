@@ -1,7 +1,7 @@
 import React from "react";
 import { Box, Text, useInput } from "ink";
 import { TextField } from "./text-field.ts";
-import { theme, panel } from "./theme.ts";
+import { theme, panel, SPACE } from "./theme.ts";
 
 const h = React.createElement;
 
@@ -73,7 +73,7 @@ export function Form(props: FormProps): React.ReactElement {
         { flexDirection: "column", ...panel("border") },
         title ? h(Text, { bold: true, color: theme.primary }, title) : null,
         ...(description ?? []).map((line, i) => h(Text, { key: `desc-${i}`, color: theme.textMuted }, line)),
-        title ? h(Box, { marginTop: 1 }) : null,
+        title ? h(Box, { marginTop: SPACE.tight }) : null,
         ...fields.map((field, i) =>
             h(TextField, {
                 key: field.key,
@@ -86,7 +86,7 @@ export function Form(props: FormProps): React.ReactElement {
                 mask: field.mask,
             }),
         ),
-        h(Box, { marginTop: 1 }),
+        h(Box, { marginTop: SPACE.tight }),
         error ? h(Text, { color: theme.danger }, `Erro: ${error}`) : null,
         h(Text, { color: theme.textMuted }, busy ? "enviando..." : `Tab/↑↓ troca campo · ${submitLabel} · Esc cancela`),
     );

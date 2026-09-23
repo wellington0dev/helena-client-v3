@@ -1,11 +1,11 @@
 import React from "react";
-import { Text, useInput } from "ink";
+import { useInput } from "ink";
 import { createMcpConnection, deleteMcpConnection, listMcpConnections, updateMcpConnection, type McpConnectionSummary } from "../api/mcp.ts";
 import { UnauthorizedError } from "../backend.ts";
 import { CrudScreen } from "./crud-screen.ts";
+import { ErrorPanel } from "./error-panel.ts";
 import { Form } from "./form.ts";
 import { McpGuideScreen } from "./mcp-guide-screen.ts";
-import { theme } from "./theme.ts";
 
 const h = React.createElement;
 
@@ -93,9 +93,7 @@ export function McpScreen(props: { backendUrl: string; token: string; onExit: ()
         if (input === "g") setScreen({ kind: "guide" });
     });
 
-    if (error) {
-        return h(Text, { color: theme.danger }, `Erro: ${error} — Esc pra voltar ao chat`);
-    }
+    if (error) return h(ErrorPanel, { error });
 
     async function handleDelete(conn: McpConnectionSummary): Promise<void> {
         setBusy(true);

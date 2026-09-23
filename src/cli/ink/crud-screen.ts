@@ -2,7 +2,8 @@ import React from "react";
 import { Box, Text, useInput } from "ink";
 import { Confirm } from "./confirm.ts";
 import { EmptyState } from "./empty-state.ts";
-import { c, theme, panel } from "./theme.ts";
+import { Loader } from "./loader.ts";
+import { c, theme, panel, SPACE } from "./theme.ts";
 
 const h = React.createElement;
 
@@ -129,9 +130,9 @@ export function CrudScreen<Item extends { id: string }>(props: CrudScreenProps<I
         Box,
         { flexDirection: "column", ...panel("border") },
         h(Text, { bold: true, color: theme.primary }, title),
-        h(Box, { marginTop: 1 }),
+        h(Box, { marginTop: SPACE.tight }),
         !items
-            ? h(Text, { color: theme.textMuted }, "Carregando...")
+            ? h(Loader, { text: "Carregando..." })
             : h(
                   Box,
                   { flexDirection: "column" },
@@ -149,7 +150,7 @@ export function CrudScreen<Item extends { id: string }>(props: CrudScreenProps<I
                   }),
                   windowed ? h(Text, { key: "__below__", color: theme.textMuted }, win.end < rows.length ? `  ↓ ${rows.length - win.end} abaixo` : " ") : null,
               ),
-        h(Box, { marginTop: 1 }),
+        h(Box, { marginTop: SPACE.tight }),
         error ? h(Text, { color: theme.danger }, `Erro: ${error}`) : null,
         h(Text, { color: theme.textMuted }, busy ? "aplicando..." : `1-9, ↑↓+Enter navega${onDelete ? " · x apaga" : ""} · Esc volta`),
     );

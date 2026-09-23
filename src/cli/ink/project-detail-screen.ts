@@ -15,12 +15,15 @@ import {
     type StepTranscript,
 } from "../api/projects.ts";
 import { UnauthorizedError } from "../backend.ts";
+import { Confirm } from "./confirm.ts";
+import { ErrorPanel } from "./error-panel.ts";
 import { Form } from "./form.ts";
+import { Loader } from "./loader.ts";
 import { sumTokensSpent } from "./project-cost.ts";
 import { roleLabelFor } from "./project-progress.ts";
 import type { ChatProgressEvent } from "./progress-client.ts";
 import { canCancel, canDelete, canRequestRevision, canResume, deleteConfirmText, isTerminal, orderSteps, STATUS_LABEL } from "./project-status.ts";
-import { c, theme, panel } from "./theme.ts";
+import { c, theme, panel, SPACE } from "./theme.ts";
 
 const h = React.createElement;
 
@@ -231,12 +234,8 @@ export function ProjectDetailScreen(props: {
         }
     }
 
-    if (error) {
-        return h(Box, { flexDirection: "column", ...panel("danger") }, h(Text, { color: theme.danger }, `Erro: ${error}`), h(Text, { color: theme.textMuted }, "Esc volta pra visão geral (Esc de novo sai)"));
-    }
-    if (!detail) {
-        return h(Text, { color: theme.textMuted }, "Carregando Project...");
-    }
+    if (error) return h(ErrorPanel, { error, hint: "Esc volta pra visão geral (Esc de novo sai)" });
+    if (!detail) return h(Loader, { text: "Carregando Project..." });
 
     if (screen.kind === "step") {
         const step = steps.find((s) => s.role === screen.role);
@@ -293,11 +292,7 @@ export function ProjectDetailScreen(props: {
     }
 
     if (screen.kind === "confirm-delete") {
-        return h(ConfirmPrompt, {
-            message: deleteConfirmText(project.status, project.spec),
-            busy,
-            onAnswer: (yes: boolean) => (yes ? void handleDelete() : setScreen({ kind: "overview" })),
-        });
+        return h(Confirm, { message: deleteConfirmText(project.status, project.spec), busy, onConfirm: () => void handleDelete(), onCancel: () => setScreen({ kind: "overview" }) });
     }
 
     const cost = sumTokensSpent(detail.steps);
@@ -314,7 +309,7 @@ export function ProjectDetailScreen(props: {
         h(Text, { bold: true, color: theme.primary }, detail.project.spec),
         h(Text, { color: theme.textMuted }, `Status: ${STATUS_LABEL[project.status]} · Custo estimado: ${cost.toLocaleString("pt-BR")} tokens${project.machine ? ` · Máquina: ${project.machine}` : ""}`),
         notice ? h(Text, { color: theme.success }, notice) : null,
-        h(Box, { marginTop: 1 }),
+        h(Box, { marginTop: SPACE.tight }),
         h(Text, { color: theme.textMuted }, "Equipe:"),
         ...steps.map((step, i) => {
             const active = i === cursor;
@@ -324,7 +319,7 @@ export function ProjectDetailScreen(props: {
             const tokens = step.tokensSpentEstimate ? c.muted(`  ${step.tokensSpentEstimate.toLocaleString("pt-BR")} tokens`) : "";
             return h(Text, { key: step.role }, pointer, number, active ? c.primary(label) : label, tokens);
         }),
-        h(Box, { marginTop: 1 }),
+        h(Box, { marginTop: SPACE.tight }),
         h(Text, { color: theme.textMuted }, busy ? "aplicando..." : `1-9/↑↓+Enter abre a conversa do agente${hints.length ? ` · ${hints.join(" · ")}` : ""} · Esc volta`),
     );
 }
@@ -335,21 +330,6 @@ function FallbackBack(props: { message: string; onBack: () => void }): React.Rea
         if (key.escape) props.onBack();
     });
     return h(Text, { color: theme.textMuted }, `${props.message} Esc volta.`);
-}
-
-function ConfirmPrompt(props: { message: string; busy: boolean; onAnswer: (yes: boolean) => void }): React.ReactElement {
-    useInput((input) => {
-        if (props.busy) return;
-        const normalized = input.trim().toLowerCase();
-        if (normalized === "s") props.onAnswer(true);
-        else if (normalized === "n") props.onAnswer(false);
-    });
-    return h(
-        Box,
-        { flexDirection: "column", ...panel("warning") },
-        h(Text, { bold: true, color: theme.warning }, props.message),
-        h(Text, null, props.busy ? "aplicando..." : "Confirmar? (s/n)"),
-    );
 }
 
 /** Transcrição de UM agente/papel — só aceita mensagem nova quando o step está PARADO (done/failed), nunca `running`. */
@@ -419,15 +399,15 @@ function StepScreen(props: { backendUrl: string; token: string; projectId: strin
         });
     }
 
-    if (!transcript) return h(Text, { color: theme.textMuted }, "Carregando conversa...");
+    if (!transcript) return h(Loader, { text: "Carregando conversa..." });
 
     return h(
         Box,
         { flexDirection: "column", ...panel("border") },
         h(Text, { bold: true, color: theme.primary }, `${roleLabelFor(step.role)} — ${STEP_STATUS_LABEL[step.status]}`),
         transcript.error ? h(Text, { color: theme.danger }, transcript.error) : null,
-        h(Box, { marginTop: 1, flexDirection: "column" }, ...transcript.messages.map((msg, i) => h(TranscriptLine, { key: i, msg }))),
-        h(Box, { marginTop: 1 }),
+        h(Box, { marginTop: SPACE.tight, flexDirection: "column" }, ...transcript.messages.map((msg, i) => h(TranscriptLine, { key: i, msg }))),
+        h(Box, { marginTop: SPACE.tight }),
         error ? h(Text, { color: theme.danger }, `Erro: ${error}`) : null,
         h(Text, { color: theme.textMuted }, isIdle ? "m manda mensagem · Esc volta" : "Agente ainda rodando — não dá pra mandar mensagem agora · Esc volta"),
     );
@@ -440,5 +420,5 @@ function TranscriptLine(props: { msg: { role: string; parts: { text?: string; re
         .filter(Boolean)
         .join("\n");
     const label = msg.role === "user" ? c.primary.bold("Dono") : c.accent.bold("Agente");
-    return h(Box, { flexDirection: "column", marginBottom: 1 }, h(Text, null, `${label}:`), h(Text, null, text || c.muted("(sem texto)")));
+    return h(Box, { flexDirection: "column", marginBottom: SPACE.tight }, h(Text, null, `${label}:`), h(Text, null, text || c.muted("(sem texto)")));
 }

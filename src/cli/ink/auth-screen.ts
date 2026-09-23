@@ -2,7 +2,7 @@ import React from "react";
 import { Box, Text, useInput, useWindowSize } from "ink";
 import { login, register, type AuthOutcome } from "../backend.ts";
 import { Form } from "./form.ts";
-import { bg, theme } from "./theme.ts";
+import { bg, theme, SPACE } from "./theme.ts";
 
 const h = React.createElement;
 
@@ -120,7 +120,7 @@ export function AuthScreen(props: { backendUrl: string; onDone: (outcome: AuthSc
                 busy,
                 error,
             }),
-            h(Box, { marginTop: 1 }),
+            h(Box, { marginTop: SPACE.tight }),
             h(Text, { color: theme.textMuted }, mode === "login" ? "Não tem conta? Ctrl+R cria uma" : "Já tem conta? Ctrl+L (ou Esc) volta pro login"),
         ),
     );

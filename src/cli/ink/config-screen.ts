@@ -14,9 +14,11 @@ import {
     type CurrentUser,
 } from "../backend.ts";
 import { CrudScreen } from "./crud-screen.ts";
+import { ErrorPanel } from "./error-panel.ts";
 import { Form } from "./form.ts";
+import { Loader } from "./loader.ts";
 import { SelectMenu, type SelectMenuItem } from "./select-menu.ts";
-import { c, theme, panel } from "./theme.ts";
+import { c, theme, panel, SPACE } from "./theme.ts";
 
 const h = React.createElement;
 
@@ -99,10 +101,8 @@ export function ConfigScreen(props: { backendUrl: string; token: string; startAt
         else if (screen.kind === "create-token" || screen.kind === "token-created") setScreen({ kind: "tokens" });
     });
 
-    if (error) {
-        return h(Box, { flexDirection: "column", ...panel("danger") }, h(Text, { color: theme.danger }, `Erro: ${error}`), h(Text, { color: theme.textMuted }, "Esc pra voltar ao chat"));
-    }
-    if (!me) return h(Text, { color: theme.textMuted }, "Carregando configurações...");
+    if (error) return h(ErrorPanel, { error });
+    if (!me) return h(Loader, { text: "Carregando configurações..." });
 
     async function toggle(action: () => Promise<unknown>): Promise<void> {
         if (busy) return;
@@ -128,7 +128,7 @@ export function ConfigScreen(props: { backendUrl: string; token: string; startAt
             Box,
             { flexDirection: "column", ...panel("border") },
             h(Text, { bold: true, color: theme.primary }, `Configurações — ${me.email}`),
-            h(Box, { marginTop: 1 }),
+            h(Box, { marginTop: SPACE.tight }),
             h(StringSelectMenu, {
                 items,
                 onSelect: (value: string) => {
@@ -140,7 +140,7 @@ export function ConfigScreen(props: { backendUrl: string; token: string; startAt
                     else if (value === "proactive") void toggle(() => setProactiveMessages(backendUrl, token, !me.allowProactiveMessages));
                 },
             }),
-            h(Box, { marginTop: 1 }),
+            h(Box, { marginTop: SPACE.tight }),
             h(Text, { color: theme.textMuted }, busy ? "salvando..." : "1-4 ou ↑↓+Enter · Esc volta pro chat"),
         );
     }
@@ -200,9 +200,9 @@ export function ConfigScreen(props: { backendUrl: string; token: string; startAt
         { flexDirection: "column", ...panel("success") },
         h(Text, { bold: true, color: theme.success }, "Token criado"),
         h(Text, { color: theme.textMuted }, "Copie agora — não vai aparecer de novo:"),
-        h(Box, { marginTop: 1 }),
+        h(Box, { marginTop: SPACE.tight }),
         h(Text, { color: theme.warning }, created.token),
-        h(Box, { marginTop: 1 }),
+        h(Box, { marginTop: SPACE.tight }),
         h(Text, { color: theme.textMuted }, "Esc volta pra lista de tokens"),
     );
 }

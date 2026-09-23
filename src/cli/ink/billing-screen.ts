@@ -4,7 +4,8 @@ import qrcodeTerminal from "qrcode-terminal";
 import { cancelPendingPurchase, getBillingBalance, purchaseTokens, type BillingBalance, type PurchaseResult } from "../api/billing.ts";
 import { UnauthorizedError } from "../backend.ts";
 import { Form } from "./form.ts";
-import { theme, panel } from "./theme.ts";
+import { Loader } from "./loader.ts";
+import { theme, panel, SPACE } from "./theme.ts";
 
 const h = React.createElement;
 
@@ -106,9 +107,7 @@ export function BillingScreen(props: { backendUrl: string; token: string; onExit
         }
     }
 
-    if (!balance) {
-        return h(Text, { color: theme.textMuted }, "Carregando saldo...");
-    }
+    if (!balance) return h(Loader, { text: "Carregando saldo..." });
 
     if (screen.kind === "form") {
         return h(Form, {
@@ -128,13 +127,13 @@ export function BillingScreen(props: { backendUrl: string; token: string; onExit
         Box,
         { flexDirection: "column", ...panel("border") },
         h(Text, { bold: true, color: theme.primary }, "Cobrança — saldo de tokens"),
-        h(Box, { marginTop: 1 }),
+        h(Box, { marginTop: SPACE.tight }),
         h(Text, null, `Saldo atual: ${fmtNum(balance.balance)} tokens`),
         h(Text, { color: theme.textMuted }, `Total recebido: ${fmtNum(balance.totalGranted)} · Total comprado: ${fmtNum(balance.totalPurchased)}`),
-        h(Box, { marginTop: 1 }),
+        h(Box, { marginTop: SPACE.tight }),
         error ? h(Text, { color: theme.danger }, `Erro: ${error}`) : null,
         balance.hasPendingPayment ? h(PendingPurchaseView, { balance, purchaseResult }) : null,
-        h(Box, { marginTop: 1 }),
+        h(Box, { marginTop: SPACE.tight }),
         h(
             Text,
             { color: theme.textMuted },
@@ -147,13 +146,13 @@ function PendingPurchaseView(props: { balance: BillingBalance; purchaseResult: P
     const { balance, purchaseResult } = props;
     return h(
         Box,
-        { flexDirection: "column", marginTop: 1, ...panel("warning") },
+        { flexDirection: "column", marginTop: SPACE.tight, ...panel("warning") },
         h(Text, { bold: true, color: theme.warning }, `Cobrança pendente — ${balance.pendingPurchaseTokens ? `${balance.pendingPurchaseTokens.toLocaleString("pt-BR")} tokens` : "aguardando pagamento"}`),
         purchaseResult?.pixPayload
-            ? h(Box, { flexDirection: "column", marginTop: 1 }, h(Text, { color: theme.textMuted }, "PIX (escaneie ou copie o código abaixo):"), h(Text, null, renderQrAscii(purchaseResult.pixPayload)))
+            ? h(Box, { flexDirection: "column", marginTop: SPACE.tight }, h(Text, { color: theme.textMuted }, "PIX (escaneie ou copie o código abaixo):"), h(Text, null, renderQrAscii(purchaseResult.pixPayload)))
             : null,
         purchaseResult?.invoiceUrl
-            ? h(Box, { flexDirection: "column", marginTop: 1 }, h(Text, { color: theme.textMuted }, "Ou pague por este link (cartão/boleto/PIX):"), h(Text, null, purchaseResult.invoiceUrl))
-            : h(Box, { marginTop: 1 }, h(Text, { color: theme.textMuted }, "Gerada numa sessão anterior — sem QR/link aqui pra reexibir. Cancele e gere uma nova se precisar.")),
+            ? h(Box, { flexDirection: "column", marginTop: SPACE.tight }, h(Text, { color: theme.textMuted }, "Ou pague por este link (cartão/boleto/PIX):"), h(Text, null, purchaseResult.invoiceUrl))
+            : h(Box, { marginTop: SPACE.tight }, h(Text, { color: theme.textMuted }, "Gerada numa sessão anterior — sem QR/link aqui pra reexibir. Cancele e gere uma nova se precisar.")),
     );
 }
