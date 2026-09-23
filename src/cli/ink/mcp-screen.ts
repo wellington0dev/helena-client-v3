@@ -23,7 +23,8 @@ const McpCrudScreen = CrudScreen as unknown as (props: {
 
 function connectionLabel(conn: McpConnectionSummary): { label: string; hint: string } {
     const status = conn.enabled ? "ligado" : "desligado";
-    return { label: conn.name, hint: `${conn.serverUrl} · ${status}${conn.hasAuthToken ? " · com token" : ""}` };
+    const routing = conn.machine ? `via ${conn.machine}` : "direto";
+    return { label: conn.name, hint: `${conn.serverUrl} · ${status} · ${routing}${conn.hasAuthToken ? " · com token" : ""}` };
 }
 
 /**
@@ -112,12 +113,15 @@ export function McpScreen(props: { backendUrl: string; token: string; onExit: ()
         setBusy(true);
         try {
             const enabled = resolveEnabledField(values.enabled, editing?.enabled);
+            const machineInput = values.machine?.trim();
             if (editing) {
                 await updateMcpConnection(backendUrl, token, editing.id, {
                     name: values.name?.trim() || editing.name,
                     serverUrl: values.serverUrl?.trim() || editing.serverUrl,
                     authToken: values.authToken?.trim() || undefined,
                     enabled,
+                    // Campo em branco: se já tinha máquina, LIMPA (null, volta a conectar direto); se nunca teve, não mexe (undefined).
+                    machine: machineInput || (editing.machine ? null : undefined),
                 });
             } else {
                 await createMcpConnection(backendUrl, token, {
@@ -125,6 +129,7 @@ export function McpScreen(props: { backendUrl: string; token: string; onExit: ()
                     serverUrl: values.serverUrl?.trim() ?? "",
                     authToken: values.authToken?.trim() || undefined,
                     enabled,
+                    machine: machineInput || undefined,
                 });
             }
             await reload();
@@ -162,6 +167,12 @@ export function McpScreen(props: { backendUrl: string; token: string; onExit: ()
             { key: "serverUrl", label: "URL do servidor", initialValue: editing?.serverUrl ?? "" },
             { key: "authToken", label: editing ? "Token (deixe em branco pra manter o já salvo)" : "Token", optional: true },
             { key: "enabled", label: "Ligado? (s/n)", initialValue: editing ? (editing.enabled ? "s" : "n") : "s" },
+            {
+                key: "machine",
+                label: "Máquina que conecta de verdade (nome do dispositivo, o mesmo do helena agent — único jeito de um servidor local/rede privada funcionar; em branco = backend conecta direto, exige servidor PÚBLICO)",
+                initialValue: editing?.machine ?? "",
+                optional: true,
+            },
         ],
         onSubmit: (values) => void handleFormSubmit(editing, values),
         onCancel: () => setScreen({ kind: "list" }),

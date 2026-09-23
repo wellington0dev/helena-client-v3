@@ -14,6 +14,8 @@ export interface McpConnectionSummary {
     serverUrl: string;
     hasAuthToken: boolean;
     enabled: boolean;
+    /** Ausente = backend conecta DIRETO no serverUrl (exige destino público). Setado = essa máquina do dono conecta de verdade — único jeito de um MCP em localhost/rede privada funcionar (2026-09-22, ver docs/agent-team-architecture.md e ssrf-guard.ts). */
+    machine?: string;
     createdAt: string;
     updatedAt: string;
 }
@@ -23,6 +25,7 @@ export interface McpConnectionInput {
     serverUrl: string;
     authToken?: string;
     enabled?: boolean;
+    machine?: string;
 }
 
 export function listMcpConnections(baseUrl: string, token: string): Promise<McpConnectionSummary[]> {
@@ -33,7 +36,8 @@ export function createMcpConnection(baseUrl: string, token: string, input: McpCo
     return authed(baseUrl, token, "POST", "/mcp-connections", input);
 }
 
-export function updateMcpConnection(baseUrl: string, token: string, id: string, patch: Partial<McpConnectionInput>): Promise<McpConnectionSummary> {
+/** `machine: null` limpa (volta a conectar direto pelo backend) — diferente de omitir, que mantém o que já estava. */
+export function updateMcpConnection(baseUrl: string, token: string, id: string, patch: Partial<Omit<McpConnectionInput, "machine">> & { machine?: string | null }): Promise<McpConnectionSummary> {
     return authed(baseUrl, token, "PATCH", `/mcp-connections/${id}`, patch);
 }
 
