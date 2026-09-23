@@ -19,7 +19,7 @@ export interface FormField {
     key: string;
     label: string;
     initialValue?: string;
-    /** Reusa o `mask` nativo do ink-text-input (substitui cada caractere por este) — nenhum campo hoje precisa, mas fica pronto. */
+    /** Reusa o `mask` nativo do TextInput (substitui cada caractere por este) — nenhum campo hoje precisa, mas fica pronto. */
     mask?: string;
     optional?: boolean;
 }

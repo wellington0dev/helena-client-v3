@@ -1,6 +1,6 @@
 import React from "react";
 import { Box, Text } from "ink";
-import TextInput from "ink-text-input";
+import TextInput from "./text-input.ts";
 import { stripMouse } from "./mouse.ts";
 import { c, SPACE } from "./theme.ts";
 
@@ -15,12 +15,12 @@ export interface TextFieldProps {
     onSubmit?: () => void;
     /** Default `true` — um campo solto fora de `Form` normalmente É o único campo da tela. */
     focus?: boolean;
-    /** Reusa o `mask` nativo do ink-text-input (substitui cada caractere por este) — ex: senha. */
+    /** Reusa o `mask` nativo do TextInput (substitui cada caractere por este) — ex: senha. */
     mask?: string;
 }
 
 /**
- * Rótulo + `ink-text-input`, lado a lado — extraído de `form.ts` (única tela com campo de texto até 2026-09-23),
+ * Rótulo + `TextInput` (fork de ink-text-input, ver text-input.ts), lado a lado — extraído de `form.ts` (única tela com campo de texto até 2026-09-23),
  * pra dar pra usar um campo solto fora de um formulário de múltiplos campos. `stripMouse` sempre aplicado: um
  * toque rápido no trackpad pode entregar sequência de mouse como se fosse texto digitado (ver mouse.ts).
  */

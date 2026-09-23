@@ -16,8 +16,7 @@ type Mode = "login" | "signup";
  * elimina de vez a categoria de bug documentada ali ("readline trava stdin antes do Ink"): não existe mais
  * NENHUMA transição readline→Ink, o login já é Ink desde o início.
  *
- * Ctrl+R alterna pra cadastro, Ctrl+L volta pro login — ver `resetGen` abaixo pra saber por que isso sozinho não
- * bastava (`ink-text-input` deixa a letra vazar no campo com foco em qualquer Ctrl+letra que não seja Ctrl+C).
+ * Ctrl+R alterna pra cadastro, Ctrl+L volta pro login.
  *
  * Fala DIRETO com o backend (`/auth/login`/`/auth/register`), nunca com o daemon local (`/v1/auth/*` em
  * local-api/session-manager.ts) — apesar do comentário lá dizer "a TUI nunca vê o token", isso é arquitetura órfã
@@ -32,13 +31,8 @@ export function AuthScreen(props: { backendUrl: string; onDone: (outcome: AuthSc
     const { columns, rows } = useWindowSize();
     const usableRows = Math.max(1, rows - 1);
     const [mode, setMode] = React.useState<Mode>("login");
-    // `ink-text-input` só ignora Ctrl+C explicitamente (conferido no código-fonte da lib) — Ctrl+R/Ctrl+L (e
-    // Ctrl+D) NÃO estão na lista de exceção dela, então digitam a letra literal no campo com foco, além de
-    // disparar a troca de modo aqui. `key: mode` sozinho só mascarava isso quando o modo REALMENTE mudava (Form
-    // remonta, descarta o valor "sujo"); apertar Ctrl+R já no cadastro (ou Ctrl+L já no login) vazava a letra no
-    // campo, sem remontar nada. `resetGen` incrementa em TODA tecla de atalho, force ou não uma troca de modo de
-    // verdade — garante que o Form (e o TextInput focado) remonta do zero sempre, nunca deixando a letra sobrar.
-    const [resetGen, setResetGen] = React.useState(0);
+    // Ctrl+R/Ctrl+L não vazam mais a letra pro campo com foco (ver text-input.ts) — o Form só remonta (`key: mode`)
+    // quando o modo muda de verdade, então apertar Ctrl+R já no cadastro não apaga o que foi digitado.
     const [busy, setBusy] = React.useState(false);
     const [error, setError] = React.useState<string | undefined>(undefined);
 
@@ -52,11 +46,9 @@ export function AuthScreen(props: { backendUrl: string; onDone: (outcome: AuthSc
         if (busy) return;
         if (key.ctrl && input === "r") {
             setMode("signup");
-            setResetGen((g) => g + 1);
             setError(undefined);
         } else if (key.ctrl && input === "l") {
             setMode("login");
-            setResetGen((g) => g + 1);
             setError(undefined);
         }
     });
@@ -105,7 +97,7 @@ export function AuthScreen(props: { backendUrl: string; onDone: (outcome: AuthSc
             Box,
             { flexDirection: "column", alignItems: "center" },
             h(Form, {
-                key: `${mode}-${resetGen}`,
+                key: mode,
                 title: mode === "login" ? `Entrar na Helena — ${backendUrl}` : `Criar conta na Helena — ${backendUrl}`,
                 fields,
                 onSubmit: (values) => void handleSubmit(values),

@@ -1,6 +1,6 @@
 import React from "react";
 import { Box, Text, useInput, useWindowSize } from "ink";
-import TextInput from "ink-text-input";
+import TextInput from "./text-input.ts";
 import { Loader } from "./loader.ts";
 import { applyMention, findMentionToken, listProjectFiles, matchFiles } from "./file-mentions.ts";
 import { readGitBranch } from "./git-branch.ts";
@@ -62,7 +62,7 @@ import { bg, c, theme, panel, MESSAGE_PADDING_X, MESSAGE_PADDING_Y, SPACE } from
  */
 export type { HistoryItem } from "./history-item.ts";
 
-/** `ink`/`ink-text-input`/`ink-spinner` só publicam `.js` sem JSX — client/ roda `.ts` DIRETO com `node` (sem build, ver bin/helena.js), e o type-stripping nativo do Node não faz transform de JSX. `React.createElement` evita precisar de bundler só pra isto. */
+/** `ink`/`ink-spinner` só publicam `.js` sem JSX — client/ roda `.ts` DIRETO com `node` (sem build, ver bin/helena.js), e o type-stripping nativo do Node não faz transform de JSX. `React.createElement` evita precisar de bundler só pra isto. */
 const h = React.createElement;
 
 export type SessionOutcome = { type: "exit" } | { type: "relogin"; history: HistoryItem[]; sessionId?: string };
@@ -212,7 +212,7 @@ function Composer(props: { value: string; onChange: (v: string) => void; onSubmi
         h(Box, { flexShrink: 0, marginRight: SPACE.tight }, h(Text, { color: theme.success, bold: true }, "❯")),
         // `key: resetKey` força o TextInput a REMONTAR quando o Tab do menu de
         // comandos preenche `value` programaticamente — sem isto, o cursor
-        // interno do ink-text-input (só se ajusta ao digitar, ver seu
+        // interno do TextInput (só se ajusta ao digitar, ver seu
         // useEffect) fica parado na posição de ANTES do completar, no meio
         // da palavra (ex: complete pra "/cobranca " mas cursor fica logo
         // depois de "/co") — daí a próxima tecla digitada quebraria a
@@ -682,7 +682,7 @@ export function App(props: AppProps): React.ReactElement {
         if (key.escape && sendingRef.current) abortTurn();
     });
 
-    // `ink-text-input` ignora de propósito upArrow/downArrow/tab (ver seu
+    // `TextInput` (text-input.ts) ignora de propósito upArrow/downArrow/tab (ver seu
     // código-fonte) — sobra livre pro menu de `/comando` sem disputar tecla
     // com o composer. Enter fica de fora daqui de propósito: quem decide o
     // Enter é só `handleSubmit`, senão os dois handlers disparariam juntos.
@@ -728,7 +728,7 @@ export function App(props: AppProps): React.ReactElement {
         { isActive: screen === "chat" && !sending && !pending && !paletteOpen && !showCommandMenu && !showMentionMenu },
     );
 
-    // PageUp/PageDown navegam o histórico — `ink-text-input` já ignora
+    // PageUp/PageDown navegam o histórico — `TextInput` já ignora
     // essas teclas (não fazem parte do texto digitado, ver
     // nonAlphanumericKeys no ink), então não competem com o composer.
     // PageUp ancora exatamente no início da janela atual (`historyStart`),

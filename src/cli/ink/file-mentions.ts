@@ -5,7 +5,7 @@ import { ignoredNames } from "./worktree.ts";
 /**
  * Autocomplete de `@arquivo` no composer. Três peças puras/quase puras:
  *  - `listProjectFiles`: índice de caminhos relativos do diretório aberto (ignora node_modules/.git/dist + .gitignore);
- *  - `findMentionToken`: acha o `@trecho` no FIM do texto digitado (o cursor do ink-text-input fica sempre no fim);
+ *  - `findMentionToken`: acha o `@trecho` no FIM do texto digitado (o cursor do TextInput fica sempre no fim);
  *  - `matchFiles`/`applyMention`: filtra/ordena e devolve o texto com o caminho completado.
  */
 
