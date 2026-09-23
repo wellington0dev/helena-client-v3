@@ -48,14 +48,30 @@ export interface SendMessageResult {
     usage?: TurnUsage;
 }
 
-export async function login(baseUrl: string, email: string, password: string): Promise<string> {
-    const response = await fetch(`${baseUrl}/auth/login`, {
+/** `email`/`senha` batem com `LoginDto`/`RegisterDto` do backend — `deviceLabel` só aparece em `GET /auth/sessions` do dono, nunca usado hoje pela TUI, mas já aceito pelo backend. */
+export interface AuthOutcome {
+    accessToken: string;
+    /** Refresh token rotativo (`POST /auth/refresh`) — ausente em conta legada/backend antigo. Ver session-store.ts#saveSession. */
+    refreshToken?: string;
+}
+
+async function authenticate(baseUrl: string, path: "login" | "register", body: Record<string, unknown>): Promise<AuthOutcome> {
+    const response = await fetch(`${baseUrl}/auth/${path}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ ...body, deviceLabel: "helena (TUI)" }),
     });
-    const { accessToken } = await parseOrThrow<{ accessToken: string }>(response);
-    return accessToken;
+    const parsed = await parseOrThrow<{ accessToken: string; refreshToken?: string }>(response);
+    return { accessToken: parsed.accessToken, refreshToken: parsed.refreshToken };
+}
+
+export function login(baseUrl: string, email: string, password: string): Promise<AuthOutcome> {
+    return authenticate(baseUrl, "login", { email, password });
+}
+
+/** `password` mínimo 8 caracteres (`RegisterDto` no backend) — validado lá, a tela só repassa o erro se vier curto demais. */
+export function register(baseUrl: string, email: string, password: string, displayName?: string): Promise<AuthOutcome> {
+    return authenticate(baseUrl, "register", { email, password, ...(displayName ? { displayName } : {}) });
 }
 
 export interface SendMessageInput {

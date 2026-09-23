@@ -1,14 +1,13 @@
 import "dotenv/config";
 import os from "node:os";
-import { createInterface, type Interface } from "node:readline/promises";
 import React from "react";
 import { render } from "ink";
 import { config } from "../config.ts";
 import { reportError } from "../telemetry.ts";
-import { login } from "./backend.ts";
 import { readLocalToken } from "../local-api/local-token.ts";
 import { clearSession, loadSession, saveSession } from "./session-store.ts";
 import { App, type HistoryItem, type SessionOutcome } from "./ink/app.ts";
+import { AuthScreen, type AuthScreenOutcome } from "./ink/auth-screen.ts";
 import { MOUSE_OFF } from "./ink/mouse.ts";
 
 /**
@@ -19,13 +18,11 @@ import { MOUSE_OFF } from "./ink/mouse.ts";
  * backend-v2). `React.createElement` em vez de JSX: ver comentário em
  * ink/app.ts sobre o modelo "zero build" deste pacote.
  *
- * Login (email/senha) continua por `readline` puro, ANTES de montar o Ink
- * — reimplementar prompt de senha mascarada dentro do Ink não teria ganho
- * real, e como resultado os prompts de login acontecem no buffer NORMAL
- * (só o chat em si é fullscreen) — de quebra, se o login falhar, dá pra
- * rolar o terminal e ver o que aconteceu, coisa que o buffer alternativo
- * não permite. `cwd`/`machineName` vão em TODO turno (ver ink/app.ts),
- * mesmo contexto advisório de antes.
+ * Login/cadastro (`AuthScreen`, ver ink/auth-screen.ts) são Ink desde 2026-09-23 — mesmo fullscreen do chat, mesmo
+ * `render()`/`onDone` de `runInkSession` (ver `runAuthScreen` abaixo). Antes era `readline` puro, no buffer normal;
+ * virou Ink pra ficar consistente com o resto do app (Ctrl+R cria conta/Ctrl+L entra, erro inline, sem mais o
+ * workaround de stdin "travado" na transição readline→Ink, ver nota histórica removida daqui). `cwd`/`machineName`
+ * vão em TODO turno de chat (ver ink/app.ts), mesmo contexto advisório de antes.
  */
 
 const h = React.createElement;
@@ -74,75 +71,6 @@ const backendUrl = config.backendUrl;
 const invocationCwd = process.env.HELENA_CLI_CWD || process.cwd();
 const machineName = os.hostname();
 
-/** Só sequência de escape ANSI (mover cursor, limpar linha/tela) — nunca contém o texto digitado, pode passar direto. */
-const ANSI_ESCAPE_ONLY = /^(\x1b\[[0-9;]*[A-Za-z])+$/;
-
-/**
- * Prompt de senha MASCARADA (pedido explícito do dono, 2026-09-09) — cada
- * tecla vira um "*" na tela.
- *
- * Achado ao vivo enquanto implementava isto (testado com um pty de
- * verdade, via `python3 -c "import pty..."`, não só typecheck): a versão
- * anterior (`questionHidden`, e a que eu tinha escrito primeiro pra isto)
- * dependia de sobrescrever `rl._writeToOutput` — uma propriedade PRIVADA
- * do readline que existia em versões antigas do Node, mas SUMIU na versão
- * deste projeto (`node --version` = v26.8.1; `Object.getOwnPropertyNames
- * (Object.getPrototypeOf(rl))` só tem `constructor`/`question`). Ou seja:
- * a senha vinha sendo ecoada em TEXTO PURO na tela há tempos — a
- * sobrescrita nunca fazia nada, silenciosamente.
- *
- * Fix de verdade: intercepta no nível do STREAM (`process.stdout.write`),
- * não da instância do readline — funciona não importa a versão interna,
- * porque QUALQUER eco do readline (raw mode, TTY) tem que passar pelo
- * `write()` do stdout mais cedo ou mais tarde. Nunca confia no CONTEÚDO
- * do que o readline mandou escrever (pode ser o caractere de verdade) —
- * só usa como gatilho pra redesenhar a linha do zero com `rl.line.length`
- * asteriscos, a única fonte de verdade sobre quanto já foi digitado.
- * Sequência pura de escape ANSI passa direto (nunca carrega texto); `\r`/
- * `\n`/`\r\n` isolados (Enter) também — qualquer outra coisa é tratada
- * como "pode ter texto real dentro" e nunca é repassada como está.
- */
-async function questionMasked(rl: Interface, query: string): Promise<string> {
-    const originalWrite = process.stdout.write.bind(process.stdout);
-    process.stdout.write = ((chunk: unknown, ...args: unknown[]) => {
-        const str = chunk instanceof Buffer ? chunk.toString() : String(chunk);
-        if (ANSI_ESCAPE_ONLY.test(str) || str === "\r" || str === "\n" || str === "\r\n") {
-            return (originalWrite as (...a: unknown[]) => boolean)(chunk, ...args);
-        }
-        return originalWrite(`\r\x1b[K${query}${"*".repeat((rl as unknown as { line: string }).line.length)}`);
-    }) as typeof process.stdout.write;
-
-    try {
-        return await rl.question(query);
-    } finally {
-        process.stdout.write = originalWrite;
-        process.stdout.write("\n");
-    }
-}
-
-/**
- * Bug real encontrado ao vivo (pty de verdade via `python3 -c "import
- * pty..."`, testando o handoff readline → Ink): depois de `rl.close()`,
- * `process.stdin` fica com `_readableState.reading === true` — o
- * `readline` deixou uma leitura "pendente" registrada internamente, que
- * nunca é resolvida (ninguém mais está servindo ela). O Ink lê stdin via
- * `stdin.addListener('readable', ...) + stdin.read()` (modo pausado) —
- * com `reading` travado em `true`, o Node nunca dispara `'readable'` de
- * novo pra ele, então TODA tecla digitada no composer (TextInput) some
- * no vazio (só o eco puro do kernel aparece na tela, nunca processado
- * pelo Ink). `removeAllListeners('data'/'keypress')` sozinho NÃO resolve
- * — confirmado isolando cada hipótese nesse mesmo pty antes de achar esta.
- * Resetar a flag interna (privada, mas estável nesta versão do Node —
- * `node --version` no ambiente de dev) destrava: o próximo `.read()` do
- * Ink volta a funcionar normalmente. Guardado atrás de checagem de
- * existência — se o formato interno mudar numa versão futura do Node,
- * isto vira no-op silencioso em vez de lançar.
- */
-function unstickStdinAfterReadline(): void {
-    const state = (process.stdin as unknown as { _readableState?: { reading?: boolean } })._readableState;
-    if (state && typeof state.reading === "boolean") state.reading = false;
-}
-
 /**
  * Best-effort: avisa o processo `client/` (daemon nesta MESMA máquina, se
  * estiver rodando) que um login acabou de acontecer — reusa o endpoint
@@ -169,21 +97,39 @@ async function notifyLocalDaemon(token: string): Promise<void> {
     }
 }
 
-/** Cria e SEMPRE fecha o próprio `readline.Interface` — precisa liberar o stdin antes do Ink assumir raw mode (ver runInkSession e unstickStdinAfterReadline acima). */
+/**
+ * Monta `AuthScreen` (login/cadastro) igual a `runInkSession` monta `App` — MESMO padrão (`alternateScreen: true`,
+ * `exitOnCtrlC: false`, `instance.unmount()` dentro do `onDone`), ver comentário lá embaixo pra entender por que
+ * `exitOnCtrlC: false` é obrigatório. Antes disto era um prompt de `readline` puro ANTES de montar o Ink — achado
+ * real ao vivo na época (ver git blame/histórico deste arquivo): a transição readline→Ink deixava o stdin
+ * "travado" (`_readableState.reading` preso em `true`), exigindo um workaround (`unstickStdinAfterReadline`).
+ * Login virar Ink desde o início elimina essa categoria de bug inteira — nunca mais existe handoff readline→Ink,
+ * só Ink→Ink (que `main()` já faz sozinho a cada relogin, comprovadamente funciona).
+ */
+function runAuthScreen(): Promise<AuthScreenOutcome> {
+    return new Promise((resolve) => {
+        const instance = render(
+            h(AuthScreen, {
+                backendUrl,
+                onDone: (outcome) => {
+                    instance.unmount();
+                    resolve(outcome);
+                },
+            }),
+            { alternateScreen: true, exitOnCtrlC: false },
+        );
+    });
+}
+
 async function interactiveLogin(): Promise<string> {
-    const rl = createInterface({ input: process.stdin, output: process.stdout });
-    try {
-        console.log(`Login na Helena (${backendUrl})`);
-        const email = await rl.question("Email: ");
-        const password = await questionMasked(rl, "Senha: ");
-        const token = await login(backendUrl, email.trim(), password);
-        saveSession(token);
-        void notifyLocalDaemon(token);
-        return token;
-    } finally {
-        rl.close();
-        unstickStdinAfterReadline();
+    const outcome = await runAuthScreen();
+    if (outcome.type === "exit") {
+        console.log("\nAté mais!");
+        process.exit(0);
     }
+    saveSession(outcome.accessToken, outcome.refreshToken);
+    void notifyLocalDaemon(outcome.accessToken);
+    return outcome.accessToken;
 }
 
 async function ensureSession(): Promise<string> {
