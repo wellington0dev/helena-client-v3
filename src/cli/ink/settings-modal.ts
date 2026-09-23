@@ -9,7 +9,7 @@ import { theme } from "./theme.ts";
 const h = React.createElement;
 
 /** Para onde um item do tipo "link" leva (tela do chat que já existe). */
-export type SettingsTarget = "tokens" | "permissions" | "usage" | "billing" | "contacts" | "mcp" | "channels" | "projects" | "sessions";
+export type SettingsTarget = "tokens" | "permissions" | "usage" | "billing" | "contacts" | "mcp" | "channels" | "projects" | "sessions" | "telemetry-logs";
 
 export interface SettingsModalProps {
     backendUrl: string;
@@ -34,6 +34,7 @@ export function buildSettingItems(me: CurrentUser | undefined, sidebarOn: boolea
         { id: "tokens", section: "Conta", label: "Tokens de API", kind: "link", description: "Tokens usados pelo helena agent (execução remota). Criar e revogar." },
         { id: "usage", section: "Conta", label: "Uso", kind: "link", description: "Chamadas de chat por canal e nos últimos 7 dias." },
         { id: "billing", section: "Conta", label: "Cobrança", kind: "link", description: "Saldo de tokens da plataforma e compra de mais." },
+        { id: "telemetry-logs", section: "Conta", label: "Telemetria", kind: "link", description: "CPU/RAM da Helena em cada máquina + erros/avisos reportados (logs exigem conta admin)." },
         { id: "contacts", section: "Integrações", label: "Contatos", kind: "link", description: "Editar ou apagar contatos (WhatsApp/Telegram) e permissões extras." },
         { id: "mcp", section: "Integrações", label: "Conexões MCP", kind: "link", description: "Integrações de terceiros e o guia de como montar um servidor compatível." },
         { id: "channels", section: "Integrações", label: "Canais", kind: "link", description: "Status do WhatsApp, Telegram e da execução remota." },

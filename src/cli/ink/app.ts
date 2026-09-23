@@ -27,6 +27,7 @@ import { McpScreen } from "./mcp-screen.ts";
 import { BillingScreen } from "./billing-screen.ts";
 import { ProjectsScreen } from "./projects-screen.ts";
 import { UsageScreen } from "./usage-screen.ts";
+import { TelemetryScreen } from "./telemetry-screen.ts";
 import { config } from "../../config.ts";
 import { formatToolCall, formatToolResult } from "./format-tool-call.ts";
 import { formatUsageLine } from "./format-usage.ts";
@@ -400,7 +401,7 @@ export function App(props: AppProps): React.ReactElement {
     }
     function openFromSettings(target: SettingsTarget): void {
         setReturnTo("settings");
-        setScreen(({ tokens: "config", permissions: "permissions", usage: "usage", billing: "billing", contacts: "contacts", mcp: "mcp", channels: "channels", projects: "projects", sessions: "sessions" } as const)[target]);
+        setScreen(({ tokens: "config", permissions: "permissions", usage: "usage", billing: "billing", contacts: "contacts", mcp: "mcp", channels: "channels", projects: "projects", sessions: "sessions", "telemetry-logs": "telemetry" } as const)[target]);
     }
     const [commandMenuIndex, setCommandMenuIndex] = React.useState(0);
     // Paleta de comandos (Ctrl+P) — modal sobre o chat, mesmo padrão do menu de configurações (`screen === "settings"`
@@ -947,6 +948,9 @@ export function App(props: AppProps): React.ReactElement {
     }
     if (screen === "usage") {
         return fullScreen(h(UsageScreen, { backendUrl, token, onExit: leaveScreen, onUnauthorized }));
+    }
+    if (screen === "telemetry") {
+        return fullScreen(h(TelemetryScreen, { backendUrl, token, onExit: leaveScreen, onUnauthorized }));
     }
     if (screen === "billing") {
         return fullScreen(h(BillingScreen, { backendUrl, token, onExit: leaveScreen, onUnauthorized }));
