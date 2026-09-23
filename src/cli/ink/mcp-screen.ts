@@ -1,3 +1,4 @@
+import os from "node:os";
 import React from "react";
 import { useInput } from "ink";
 import { createMcpConnection, deleteMcpConnection, listMcpConnections, updateMcpConnection, type McpConnectionSummary } from "../api/mcp.ts";
@@ -42,6 +43,34 @@ export function resolveEnabledField(raw: string | undefined, currentValue: boole
     if (normalized === "s") return true;
     if (normalized === "n") return false;
     return currentValue ?? true;
+}
+
+/** `localhost`, loopback, `.local` e faixas privadas (IPv4 RFC 1918/link-local, IPv6 ULA/link-local) — destinos que o backend-v2 SEMPRE recusa conectar direto (ssrf-guard.ts). URL inválida = false (o backend valida e devolve o erro certo). */
+export function isLocalServerUrl(serverUrl: string): boolean {
+    let host: string;
+    try {
+        host = new URL(serverUrl).hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    } catch {
+        return false;
+    }
+    if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host === "::1" || host === "0.0.0.0") return true;
+    if (/^(fc|fd)[0-9a-f]{2}:/.test(host) || host.startsWith("fe80:")) return true;
+    const v4 = host.match(/^(\d+)\.(\d+)\.\d+\.\d+$/);
+    if (!v4) return false;
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    return a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254);
+}
+
+/**
+ * Campo "Máquina" em branco + URL local → ESTA máquina (`os.hostname()`, mesmo nome que o machine-agent anuncia).
+ * Bug real (2026-09-23): o dono cadastrou `http://localhost:3002` sem preencher a máquina e levou "serverUrl
+ * recusada: Endereço interno não é permitido" — em branco = backend conecta direto, e localhost nunca passa no
+ * guard de SSRF, então deixar em branco pra URL local nunca tem como dar certo.
+ */
+export function resolveMachineField(raw: string | undefined, serverUrl: string, thisMachine: string): string | undefined {
+    const typed = raw?.trim();
+    if (typed) return typed;
+    return isLocalServerUrl(serverUrl) ? thisMachine : undefined;
 }
 
 /** Sub-estado plano owned pelo componente de topo, mesmo padrão de `contacts-screen.ts`/`config-screen.ts` — nunca dentro de um componente filho (ver comentário em `contacts-screen.ts#ScreenState`). */
@@ -111,11 +140,12 @@ export function McpScreen(props: { backendUrl: string; token: string; onExit: ()
         setBusy(true);
         try {
             const enabled = resolveEnabledField(values.enabled, editing?.enabled);
-            const machineInput = values.machine?.trim();
+            const serverUrl = values.serverUrl?.trim() || editing?.serverUrl || "";
+            const machineInput = resolveMachineField(values.machine, serverUrl, os.hostname());
             if (editing) {
                 await updateMcpConnection(backendUrl, token, editing.id, {
                     name: values.name?.trim() || editing.name,
-                    serverUrl: values.serverUrl?.trim() || editing.serverUrl,
+                    serverUrl,
                     authToken: values.authToken?.trim() || undefined,
                     enabled,
                     // Campo em branco: se já tinha máquina, LIMPA (null, volta a conectar direto); se nunca teve, não mexe (undefined).
@@ -124,7 +154,7 @@ export function McpScreen(props: { backendUrl: string; token: string; onExit: ()
             } else {
                 await createMcpConnection(backendUrl, token, {
                     name: values.name?.trim() ?? "",
-                    serverUrl: values.serverUrl?.trim() ?? "",
+                    serverUrl,
                     authToken: values.authToken?.trim() || undefined,
                     enabled,
                     machine: machineInput || undefined,
@@ -167,7 +197,7 @@ export function McpScreen(props: { backendUrl: string; token: string; onExit: ()
             { key: "enabled", label: "Ligado? (s/n)", initialValue: editing ? (editing.enabled ? "s" : "n") : "s" },
             {
                 key: "machine",
-                label: "Máquina que conecta de verdade (nome do dispositivo, o mesmo do helena agent — único jeito de um servidor local/rede privada funcionar; em branco = backend conecta direto, exige servidor PÚBLICO)",
+                label: "Máquina que conecta de verdade (nome do dispositivo, o mesmo do helena agent — único jeito de um servidor local/rede privada funcionar; em branco = esta máquina se a URL for local, senão o backend conecta direto e exige servidor PÚBLICO)",
                 initialValue: editing?.machine ?? "",
                 optional: true,
             },
