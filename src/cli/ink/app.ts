@@ -17,7 +17,8 @@ import { getSessionHistory, listSessionSummaries, type SessionSummary } from "..
 import { formatWhen, historyEntriesToItems, sessionLabel, SessionsScreen } from "./sessions-screen.ts";
 import { measurePermissionDialog, PermissionDialog, type PermissionDecision } from "./permission-dialog.ts";
 import { truncateToWidth } from "./worktree.ts";
-import { resolveInterrupt, sendMessage, UnauthorizedError, type PendingConfirmation, type SendMessageResult } from "../backend.ts";
+import { logout as logoutApi, resolveInterrupt, sendMessage, UnauthorizedError, type PendingConfirmation, type SendMessageResult } from "../backend.ts";
+import { loadSession } from "../session-store.ts";
 import { findCommand, matchCommands, type Command, type CommandContext, type Screen } from "./commands.ts";
 import { ConfigScreen } from "./config-screen.ts";
 import { ChannelsScreen } from "./channels-screen.ts";
@@ -804,6 +805,20 @@ export function App(props: AppProps): React.ReactElement {
         setHistory([noticeItem("Nova conversa. A anterior continua em /sessoes.", "success")]);
     }
 
+    /**
+     * `/logout`: revoga a sessão (best-effort — falha de rede não deve travar quem só quer sair) e devolve pro
+     * mesmo caminho de "token expirado" (`onDone({type:"relogin"})`, ver `onUnauthorized` acima e `chat.ts#main`,
+     * que já limpa o arquivo de sessão e chama `interactiveLogin()` sozinho). Histórico/sessionId NÃO viajam pro
+     * próximo login — ao contrário de `onUnauthorized` (mesmo token, sessão só expirou), aqui é o DONO pedindo pra
+     * trocar de conta; resumir a conversa de um usuário na sessão de outro não faz sentido, e o servidor recusaria
+     * (`ChatSession` é escopada por `userId`) — bug real evitado antes de existir.
+     */
+    function logout(): void {
+        const stored = loadSession();
+        if (stored?.refreshToken) void logoutApi(backendUrl, stored.refreshToken).catch(() => undefined);
+        onDone({ type: "relogin", history: [], sessionId: undefined });
+    }
+
     /** Retoma uma sessão: volta pro chat na hora e carrega as últimas mensagens (a Helena já tem o contexto completo no servidor). */
     async function resumeSession(session: SessionSummary): Promise<void> {
         setScreen("chat");
@@ -825,7 +840,7 @@ export function App(props: AppProps): React.ReactElement {
         }
     }
 
-    const commandContext: CommandContext = { setScreen, pushNotice: (text, tone) => setHistory((prev) => [...prev, noticeItem(text, tone)]), toggleSidebar: () => changeSidebar(!sidebarOpen), newSession };
+    const commandContext: CommandContext = { setScreen, pushNotice: (text, tone) => setHistory((prev) => [...prev, noticeItem(text, tone)]), toggleSidebar: () => changeSidebar(!sidebarOpen), newSession, logout };
 
     function handleCommand(raw: string): void {
         const name = raw.slice(1).trim().toLowerCase();

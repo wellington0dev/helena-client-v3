@@ -1,6 +1,6 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
-import { login, register, resolveInterrupt, sendMessage, UnauthorizedError } from "./backend.ts";
+import { login, logout, register, resolveInterrupt, sendMessage, UnauthorizedError } from "./backend.ts";
 
 const originalFetch = globalThis.fetch;
 after(() => {
@@ -71,6 +71,23 @@ test("register: email já cadastrado (409, por ex.) propaga a mensagem real do b
     globalThis.fetch = (async () => new Response(JSON.stringify({ message: "Este email já está cadastrado." }), { status: 409 })) as typeof fetch;
 
     await assert.rejects(() => register("http://127.0.0.1:4001", "ja-existe@example.com", "senha12345"), /já está cadastrado/);
+});
+
+test("logout: manda refreshToken pro /auth/logout, sem Authorization (rota pública)", async () => {
+    let capturedUrl: string | undefined;
+    let capturedInit: RequestInit | undefined;
+
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+        capturedUrl = url;
+        capturedInit = init;
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }) as typeof fetch;
+
+    await logout("http://127.0.0.1:4001", "refresh-fake");
+
+    assert.equal(capturedUrl, "http://127.0.0.1:4001/auth/logout");
+    assert.deepEqual(JSON.parse(capturedInit?.body as string), { refreshToken: "refresh-fake" });
+    assert.ok(!("Authorization" in (capturedInit?.headers as Record<string, string>)));
 });
 
 test("sendMessage: manda Authorization Bearer + cwd/machineName no body", async () => {

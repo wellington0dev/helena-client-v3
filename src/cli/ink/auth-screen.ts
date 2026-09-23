@@ -1,8 +1,8 @@
 import React from "react";
-import { Box, Text, useInput } from "ink";
+import { Box, Text, useInput, useWindowSize } from "ink";
 import { login, register, type AuthOutcome } from "../backend.ts";
 import { Form } from "./form.ts";
-import { theme } from "./theme.ts";
+import { bg, theme } from "./theme.ts";
 
 const h = React.createElement;
 
@@ -27,6 +27,10 @@ type Mode = "login" | "signup";
  */
 export function AuthScreen(props: { backendUrl: string; onDone: (outcome: AuthScreenOutcome) => void }): React.ReactElement {
     const { backendUrl, onDone } = props;
+    // Mesma conta de `usableRows` do App (ver app.ts) — escrever na última célula da última linha faz vários
+    // terminais rolarem uma linha sozinhos (auto-margin), brigando com o apaga-e-redesenha do Ink.
+    const { columns, rows } = useWindowSize();
+    const usableRows = Math.max(1, rows - 1);
     const [mode, setMode] = React.useState<Mode>("login");
     // `ink-text-input` só ignora Ctrl+C explicitamente (conferido no código-fonte da lib) — Ctrl+R/Ctrl+L (e
     // Ctrl+D) NÃO estão na lista de exceção dela, então digitam a letra literal no campo com foco, além de
@@ -90,25 +94,34 @@ export function AuthScreen(props: { backendUrl: string; onDone: (outcome: AuthSc
               ];
 
     return h(
+        // Preenche o terminal INTEIRO (mesmo padrão de `fullScreen` em app.ts — `height`/`width`/`backgroundColor`
+        // explícitos: sem isso o Ink só pinta o que o conteúdo ocupa, deixando o resto da tela alternativa com o
+        // que quer que o terminal mostre por baixo, ex: wallpaper — achado ao vivo, ver captura do dono) e centraliza
+        // o Form nela (`justifyContent`/`alignItems`: Form não tem largura própria, então "centralizar" aqui é só
+        // deixar o Yoga posicionar a caixa do meio do conteúdo, não algo calculado à mão).
         Box,
-        { flexDirection: "column" },
-        h(Form, {
-            key: `${mode}-${resetGen}`,
-            title: mode === "login" ? `Entrar na Helena — ${backendUrl}` : `Criar conta na Helena — ${backendUrl}`,
-            fields,
-            onSubmit: (values) => void handleSubmit(values),
-            // Esc no cadastro volta pro login (cancela só o cadastro); no login, Esc sai do programa — mesmo
-            // resultado de Ctrl+C/Ctrl+D (ver useInput acima), pra "Esc cancela" (hint fixo do Form) nunca mentir
-            // sobre o que vai acontecer: sempre cancela ALGUMA coisa de verdade, nos dois modos.
-            onCancel: () => {
-                if (mode === "signup") setMode("login");
-                else onDone({ type: "exit" });
-            },
-            submitLabel: mode === "login" ? "Enter entra" : "Enter cadastra",
-            busy,
-            error,
-        }),
-        h(Box, { marginTop: 1 }),
-        h(Text, { color: theme.textMuted }, mode === "login" ? "Não tem conta? Ctrl+R cria uma" : "Já tem conta? Ctrl+L (ou Esc) volta pro login"),
+        { flexDirection: "column", width: columns, height: usableRows, backgroundColor: bg.base, justifyContent: "center", alignItems: "center" },
+        h(
+            Box,
+            { flexDirection: "column", alignItems: "center" },
+            h(Form, {
+                key: `${mode}-${resetGen}`,
+                title: mode === "login" ? `Entrar na Helena — ${backendUrl}` : `Criar conta na Helena — ${backendUrl}`,
+                fields,
+                onSubmit: (values) => void handleSubmit(values),
+                // Esc no cadastro volta pro login (cancela só o cadastro); no login, Esc sai do programa — mesmo
+                // resultado de Ctrl+C/Ctrl+D (ver useInput acima), pra "Esc cancela" (hint fixo do Form) nunca mentir
+                // sobre o que vai acontecer: sempre cancela ALGUMA coisa de verdade, nos dois modos.
+                onCancel: () => {
+                    if (mode === "signup") setMode("login");
+                    else onDone({ type: "exit" });
+                },
+                submitLabel: mode === "login" ? "Enter entra" : "Enter cadastra",
+                busy,
+                error,
+            }),
+            h(Box, { marginTop: 1 }),
+            h(Text, { color: theme.textMuted }, mode === "login" ? "Não tem conta? Ctrl+R cria uma" : "Já tem conta? Ctrl+L (ou Esc) volta pro login"),
+        ),
     );
 }

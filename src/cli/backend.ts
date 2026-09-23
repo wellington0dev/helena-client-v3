@@ -74,6 +74,22 @@ export function register(baseUrl: string, email: string, password: string, displ
     return authenticate(baseUrl, "register", { email, password, ...(displayName ? { displayName } : {}) });
 }
 
+/**
+ * `POST /auth/logout` — revoga a FAMÍLIA do refresh token apresentado (sessão inteira, não só o access token atual,
+ * que continua válido até expirar naturalmente). Rota `@Public()` no backend: só o refresh token autoriza, sem
+ * `Authorization`. Sessão legada (sem refresh token, ver `AuthOutcome`) não tem o que revogar — quem chama (ver
+ * `ink/app.ts#logout`) já pula esta chamada nesse caso. Sempre 200 no backend mesmo se o token já não existir mais
+ * (não revela sessão inválida) — não há corpo de erro relevante a interpretar, por isso não usa `parseOrThrow`.
+ */
+export async function logout(baseUrl: string, refreshToken: string): Promise<void> {
+    await fetch(`${baseUrl}/auth/logout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+        signal: AbortSignal.timeout(5000),
+    });
+}
+
 export interface SendMessageInput {
     text: string;
     sessionId?: string;

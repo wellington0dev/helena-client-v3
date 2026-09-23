@@ -21,6 +21,8 @@ export interface CommandContext {
     toggleSidebar: () => void;
     /** Começa uma conversa nova (limpa a tela e solta a sessão atual). */
     newSession: () => void;
+    /** Sai da conta atual (revoga a sessão no backend, best-effort) e volta pra tela de login. */
+    logout: () => void;
 }
 
 export interface Command {
@@ -100,6 +102,12 @@ export const COMMANDS: Command[] = [
         section: "Conversa",
         description: "Mostra/esconde a sidebar de sessões (clique pra retomar ou criar nova — some sozinha em terminal estreito)",
         run: (ctx) => ctx.toggleSidebar(),
+    },
+    {
+        name: "logout",
+        section: "Conta",
+        description: "Sai da conta atual (revoga a sessão) e volta pra tela de login",
+        run: (ctx) => ctx.logout(),
     },
     {
         name: "help",
