@@ -36,3 +36,8 @@ export function getSessionHistory(baseUrl: string, token: string, sessionId: str
 export function deleteSession(baseUrl: string, token: string, sessionId: string): Promise<{ deleted: true }> {
     return authed(baseUrl, token, "DELETE", `/chat/sessions/${encodeURIComponent(sessionId)}`);
 }
+
+/** Apaga TODAS as conversas do dono de uma vez — sem volta. Devolve quantas apagou. */
+export function clearSessions(baseUrl: string, token: string): Promise<{ deleted: number }> {
+    return authed(baseUrl, token, "DELETE", "/chat/sessions");
+}

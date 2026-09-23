@@ -1,9 +1,10 @@
 import React from "react";
-import { useWindowSize } from "ink";
-import { deleteSession, listSessionSummaries, type HistoryEntry, type SessionSummary } from "../api/sessions.ts";
+import { Box, Text, useInput, useWindowSize } from "ink";
+import { clearSessions, deleteSession, listSessionSummaries, type HistoryEntry, type SessionSummary } from "../api/sessions.ts";
 import { UnauthorizedError } from "../backend.ts";
 import { CrudScreen } from "./crud-screen.ts";
 import { historyItem, type HistoryItem } from "./history-item.ts";
+import { panel, theme } from "./theme.ts";
 
 const h = React.createElement;
 
@@ -54,15 +55,18 @@ export function historyEntriesToItems(entries: HistoryEntry[]): HistoryItem[] {
 
 /**
  * `/sessoes` — conversas recentes do dono; Enter retoma a escolhida (o `onPick` carrega o histórico no chat), `x`
- * apaga PERMANENTEMENTE (com confirmação — `CrudScreen` já garante isso). `activeSessionId`/`onDeleteActive`
- * (pedido do dono, 2026-09-22): se a conversa apagada for a que está aberta no chat AGORA, o `App` precisa saber pra
- * soltar essa sessão (senão a próxima mensagem bateria numa sessão que não existe mais no backend).
+ * apaga PERMANENTEMENTE (com confirmação — `CrudScreen` já garante isso), `L` maiúsculo limpa TODAS de uma vez
+ * (pedido do dono, 2026-09-22 — confirmação própria aqui, mesmo padrão visual do `CrudScreen`: letra maiúscula de
+ * propósito, pra nunca disparar sem querer junto de outra tecla de uma letra só). `activeSessionId`/`onDeleteActive`
+ * (mesmo pedido): se a conversa apagada (uma ou todas) for a que está aberta no chat AGORA, o `App` precisa saber
+ * pra soltar essa sessão (senão a próxima mensagem bateria numa sessão que não existe mais no backend).
  */
 export function SessionsScreen(props: { backendUrl: string; token: string; activeSessionId?: string; onPick: (session: SessionSummary) => void; onDeleteActive: () => void; onExit: () => void; onUnauthorized: () => void }): React.ReactElement {
     const { backendUrl, token, activeSessionId, onPick, onDeleteActive, onExit, onUnauthorized } = props;
     const [sessions, setSessions] = React.useState<SessionSummary[] | undefined>(undefined);
     const [busy, setBusy] = React.useState(false);
     const [error, setError] = React.useState<string | undefined>(undefined);
+    const [confirmingClearAll, setConfirmingClearAll] = React.useState(false);
     // Linhas do terminal - moldura/título/rodapé/marcadores da lista (~11); no mínimo 3 itens visíveis.
     const { rows } = useWindowSize();
     const maxVisible = Math.max(3, rows - 11);
@@ -91,8 +95,45 @@ export function SessionsScreen(props: { backendUrl: string; token: string; activ
         }
     }
 
+    async function handleClearAll(): Promise<void> {
+        setConfirmingClearAll(false);
+        setBusy(true);
+        try {
+            await clearSessions(backendUrl, token);
+            setSessions([]);
+            onDeleteActive(); // qualquer sessão ativa também acabou de ser apagada — solta a conversa no chat.
+        } catch (err) {
+            if (err instanceof UnauthorizedError) onUnauthorized();
+            else setError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    useInput(
+        (input, key) => {
+            if (confirmingClearAll) {
+                if (input.toLowerCase() === "s") void handleClearAll();
+                else if (input.toLowerCase() === "n" || key.escape) setConfirmingClearAll(false);
+                return;
+            }
+            if (input === "L" && sessions && sessions.length > 0) setConfirmingClearAll(true);
+        },
+        { isActive: !busy },
+    );
+
+    if (confirmingClearAll) {
+        return h(
+            Box,
+            { flexDirection: "column", ...panel("warning") },
+            h(Text, { bold: true, color: theme.warning }, `Apagar TODAS as ${sessions?.length ?? 0} conversas permanentemente? Sem volta.`),
+            h(Box, { marginTop: 1 }),
+            h(Text, null, "Confirmar? (s/n)"),
+        );
+    }
+
     return h(SessionsCrudScreen, {
-        title: "Conversas recentes — Enter retoma, x apaga",
+        title: "Conversas recentes — Enter retoma, x apaga, L (maiúsculo) limpa tudo",
         items: sessions,
         itemLabel: (session) => ({ label: sessionLabel(session), hint: formatWhen(session.updatedAt) }),
         onSelect: onPick,
