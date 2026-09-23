@@ -1,8 +1,7 @@
 import React from "react";
 import { Box, Text, useInput } from "ink";
-import TextInput from "ink-text-input";
-import { stripMouse } from "./mouse.ts";
-import { c, theme, panel } from "./theme.ts";
+import { TextField } from "./text-field.ts";
+import { theme, panel } from "./theme.ts";
 
 const h = React.createElement;
 
@@ -76,18 +75,16 @@ export function Form(props: FormProps): React.ReactElement {
         ...(description ?? []).map((line, i) => h(Text, { key: `desc-${i}`, color: theme.textMuted }, line)),
         title ? h(Box, { marginTop: 1 }) : null,
         ...fields.map((field, i) =>
-            h(
-                Box,
-                { key: field.key, gap: 1 },
-                h(Text, null, `${field.label}${field.optional ? c.muted(" (opcional)") : ""}:`),
-                h(TextInput, {
-                    value: values[field.key] ?? "",
-                    onChange: (v: string) => setValues((prev) => ({ ...prev, [field.key]: stripMouse(v) })),
-                    onSubmit: handleFieldSubmit,
-                    focus: !busy && i === current,
-                    mask: field.mask,
-                }),
-            ),
+            h(TextField, {
+                key: field.key,
+                label: field.label,
+                optional: field.optional,
+                value: values[field.key] ?? "",
+                onChange: (v) => setValues((prev) => ({ ...prev, [field.key]: v })),
+                onSubmit: handleFieldSubmit,
+                focus: !busy && i === current,
+                mask: field.mask,
+            }),
         ),
         h(Box, { marginTop: 1 }),
         error ? h(Text, { color: theme.danger }, `Erro: ${error}`) : null,

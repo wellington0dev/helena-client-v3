@@ -1,5 +1,7 @@
 import React from "react";
 import { Box, Text, useInput } from "ink";
+import { Confirm } from "./confirm.ts";
+import { EmptyState } from "./empty-state.ts";
 import { c, theme, panel } from "./theme.ts";
 
 const h = React.createElement;
@@ -63,18 +65,9 @@ export function CrudScreen<Item extends { id: string }>(props: CrudScreenProps<I
 
     useInput((input, key) => {
         if (busy || !items) return;
-
-        if (confirming) {
-            const normalized = input.trim().toLowerCase();
-            if (normalized === "s") {
-                const item = confirming;
-                setConfirming(undefined);
-                void onDelete?.(item);
-            } else if (normalized === "n" || key.escape) {
-                setConfirming(undefined);
-            }
-            return;
-        }
+        // Enquanto confirma, quem trata s/n/Esc é o <Confirm> montado abaixo (useInput PRÓPRIO) — nunca os dois ao
+        // mesmo tempo, senão a mesma tecla dispara achando de duas fontes (ver comentário em confirm.ts).
+        if (confirming) return;
 
         if (key.escape) {
             onExit();
@@ -121,13 +114,15 @@ export function CrudScreen<Item extends { id: string }>(props: CrudScreenProps<I
 
     if (confirming) {
         const message = deleteConfirmLabel ? deleteConfirmLabel(confirming) : `Apagar "${itemLabel(confirming).label}"? Essa ação não pode ser desfeita.`;
-        return h(
-            Box,
-            { flexDirection: "column", ...panel("warning") },
-            h(Text, { bold: true, color: theme.warning }, message),
-            h(Box, { marginTop: 1 }),
-            h(Text, null, "Confirmar? (s/n)"),
-        );
+        const item = confirming;
+        return h(Confirm, {
+            message,
+            onConfirm: () => {
+                setConfirming(undefined);
+                void onDelete?.(item);
+            },
+            onCancel: () => setConfirming(undefined),
+        });
     }
 
     return h(
@@ -140,7 +135,7 @@ export function CrudScreen<Item extends { id: string }>(props: CrudScreenProps<I
             : h(
                   Box,
                   { flexDirection: "column" },
-                  rows.length === 0 ? h(Text, { color: theme.textMuted }, "Nenhum item ainda.") : null,
+                  rows.length === 0 ? h(EmptyState, { message: "Nenhum item ainda." }) : null,
                   windowed ? h(Text, { key: "__above__", color: theme.textMuted }, win.start > 0 ? `  ↑ ${win.start} acima` : " ") : null,
                   ...rows.slice(win.start, win.end).map((row, offset) => {
                       const i = win.start + offset;

@@ -1,7 +1,7 @@
 import React from "react";
 import { Box, Text, useInput, useWindowSize } from "ink";
-import Spinner from "ink-spinner";
 import TextInput from "ink-text-input";
+import { Loader } from "./loader.ts";
 import { applyMention, findMentionToken, listProjectFiles, matchFiles } from "./file-mentions.ts";
 import { readGitBranch } from "./git-branch.ts";
 import { appendInputHistory, loadInputHistory, newerEntry, NOT_NAVIGATING, olderEntry, type HistoryNav } from "./input-history.ts";
@@ -34,7 +34,8 @@ import { connectProgress, type ChatProgressEvent, type AgentPlan, type PlanStep 
 import { formatProjectChecklist, formatProjectSummary, type ProjectStepsByRole } from "./project-progress.ts";
 import { renderMarkdownAnsi } from "./render-markdown.ts";
 import { countWrappedLines, fitToViewport, measureHistoryItem } from "./viewport.ts";
-import { bg, c, theme, panel, MESSAGE_PADDING_X, MESSAGE_PADDING_Y, NOTICE_PADDING_Y } from "./theme.ts";
+import { Banner } from "./banner.ts";
+import { bg, c, theme, panel, MESSAGE_PADDING_X, MESSAGE_PADDING_Y } from "./theme.ts";
 
 /**
  * Comandos por barra — padrão opencode/Hermes Agent CLI: tudo dentro do
@@ -90,8 +91,7 @@ function HistoryLine({ item }: { item: HistoryItem }): React.ReactElement {
         paddingY,
     });
     if (item.role === "notice") {
-        const [background, color] = item.tone === "success" ? [bg.success, theme.success] : item.tone === "danger" ? [bg.danger, theme.danger] : item.tone === "info" ? [bg.surface, undefined] : [bg.warning, theme.warning];
-        return h(Box, box(background, NOTICE_PADDING_Y), h(Text, { color }, item.text));
+        return h(Box, { marginBottom: 1 }, h(Banner, { tone: item.tone, text: item.text }));
     }
     if (item.role === "usage") {
         return h(Box, { marginBottom: 1 }, h(Text, { color: theme.textMuted }, formatUsageLine(item.usage)));
@@ -192,7 +192,7 @@ function measurePlanPanel(plan: AgentPlan | null, columns: number): number {
 }
 
 function StatusLine({ text }: { text: string }): React.ReactElement {
-    return h(Box, { gap: 1 }, h(Text, { color: theme.primary }, h(Spinner, { type: "dots" })), h(Text, { color: theme.textMuted }, text));
+    return h(Loader, { text });
 }
 
 /** "❯"/spinner + `gap:1` comem ~3 colunas antes do texto de verdade — subtrai como margem de segurança (superestimar é seguro, ver viewport.ts). */

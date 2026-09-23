@@ -71,8 +71,27 @@ const PANEL_BG: Record<PanelKind, string> = {
     success: bg.success,
 };
 
-export const PANEL_PADDING_X = 2;
-export const PANEL_PADDING_Y = 1;
+/**
+ * Escala de espaçamento — nomeia o que já era seguido à mão em toda tela (~40 ocorrências de `marginTop:1`/`gap:1`
+ * antes desta constante existir, ver auditoria de 2026-09-23 que motivou esta lista). Unidade é LINHA/COLUNA de
+ * terminal, não pixel — por isso a escala é curta (0/1/2), não geométrica: qualquer coisa maior que `loose` já
+ * come tela demais num terminal de 24 linhas. Novo código usa `SPACE.*`, nunca mais um número cru.
+ */
+export const SPACE = {
+    /** Colado — mesmo bloco visual (ex: rótulo e campo lado a lado). */
+    none: 0,
+    /** Padrão — separa duas seções/linhas relacionadas (o `marginTop`/`gap` mais comum de longe). */
+    tight: 1,
+    /** Respiro de painel/modal (padding lateral de um bloco em destaque). */
+    loose: 2,
+} as const;
+
+// `: number` explícito nos quatro abaixo: sem isso o TS lê o tipo LITERAL de `SPACE.*` (`as const`) em vez de
+// alargar pra `number` (o alargamento automático só acontece pra um literal escrito na hora, ex: `= 1`, não pra um
+// valor lido de outro `const` — achado real: `box()` em app.ts tem um parâmetro com default `= MESSAGE_PADDING_Y`,
+// e sem isto o parâmetro virava literalmente o tipo `1`, rejeitando a chamada com `NOTICE_PADDING_Y` (`0`).
+export const PANEL_PADDING_X: number = SPACE.loose;
+export const PANEL_PADDING_Y: number = SPACE.tight;
 
 /**
  * Props de `<Box>` de um bloco em destaque — SUBSTITUI o antigo `borderStyle:"round" + paddingX:1`.
@@ -87,7 +106,7 @@ export function panel(kind: PanelKind = "surface"): { backgroundColor: string; p
  * Padding das caixas de MENSAGEM/AVISO no histórico. Única fonte: HistoryLine (app.ts) desenha com estes valores e
  * measureHistoryItem (viewport.ts) mede com os mesmos — mudar aqui muda os dois juntos.
  */
-export const MESSAGE_PADDING_X = 2;
-export const MESSAGE_PADDING_Y = 1;
+export const MESSAGE_PADDING_X: number = SPACE.loose;
+export const MESSAGE_PADDING_Y: number = SPACE.tight;
 /** Avisos de uma linha ("Conversa retomada.") ficam como faixa, sem respiro vertical. */
-export const NOTICE_PADDING_Y = 0;
+export const NOTICE_PADDING_Y: number = SPACE.none;

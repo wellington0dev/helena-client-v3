@@ -1,10 +1,10 @@
 import React from "react";
-import { Box, Text, useInput, useWindowSize } from "ink";
+import { useInput, useWindowSize } from "ink";
 import { clearSessions, deleteSession, listSessionSummaries, type HistoryEntry, type SessionSummary } from "../api/sessions.ts";
 import { UnauthorizedError } from "../backend.ts";
+import { Confirm } from "./confirm.ts";
 import { CrudScreen } from "./crud-screen.ts";
 import { historyItem, type HistoryItem } from "./history-item.ts";
-import { panel, theme } from "./theme.ts";
 
 const h = React.createElement;
 
@@ -111,25 +111,21 @@ export function SessionsScreen(props: { backendUrl: string; token: string; activ
     }
 
     useInput(
-        (input, key) => {
-            if (confirmingClearAll) {
-                if (input.toLowerCase() === "s") void handleClearAll();
-                else if (input.toLowerCase() === "n" || key.escape) setConfirmingClearAll(false);
-                return;
-            }
+        (input) => {
+            // Enquanto confirma, quem trata s/n/Esc é o <Confirm> montado abaixo — nunca os dois ao mesmo tempo
+            // (ver comentário em confirm.ts).
+            if (confirmingClearAll) return;
             if (input === "L" && sessions && sessions.length > 0) setConfirmingClearAll(true);
         },
         { isActive: !busy },
     );
 
     if (confirmingClearAll) {
-        return h(
-            Box,
-            { flexDirection: "column", ...panel("warning") },
-            h(Text, { bold: true, color: theme.warning }, `Apagar TODAS as ${sessions?.length ?? 0} conversas permanentemente? Sem volta.`),
-            h(Box, { marginTop: 1 }),
-            h(Text, null, "Confirmar? (s/n)"),
-        );
+        return h(Confirm, {
+            message: `Apagar TODAS as ${sessions?.length ?? 0} conversas permanentemente? Sem volta.`,
+            onConfirm: handleClearAll,
+            onCancel: () => setConfirmingClearAll(false),
+        });
     }
 
     return h(SessionsCrudScreen, {
