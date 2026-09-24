@@ -114,6 +114,15 @@ export function fitLines(
     return { items, bottom: end, top, total, canScrollUp: top > 0, canScrollDown: end < total };
 }
 
+/**
+ * Roda do mouse (e qualquer rolagem fina): anda `delta` linhas a partir da âncora atual (`null` = fim). Negativo sobe.
+ * Nunca passa do topo (tela cheia) e, ao chegar no fim, devolve `null` (volta a grudar no mais novo).
+ */
+export function scrollByLines(anchor: number | null, delta: number, total: number, maxRows: number): number | null {
+    const next = Math.max(Math.min(maxRows, total), (anchor ?? total) + delta);
+    return next >= total ? null : next;
+}
+
 /** PageUp: sobe uma tela menos 1 linha (a última linha vista continua na tela, pra não perder o fio). */
 export function pageUp(view: { bottom: number; total: number }, maxRows: number): number | null {
     const step = Math.max(1, maxRows - 1);

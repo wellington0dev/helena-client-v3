@@ -38,7 +38,7 @@ import { spendingLines, type SpendingInfo } from "./sidebar-spending.ts";
 import { historyItem, noticeItem, toolCallItem, toolResultItem, type HistoryItem } from "./history-item.ts";
 import { connectProgress, type ChatProgressEvent, type AgentPlan, type PlanStep } from "./progress-client.ts";
 import { renderMarkdownAnsi } from "./render-markdown.ts";
-import { countWrappedLines, fitLines, measureDraftBubble, measureHistoryItem, pageDown, pageUp } from "./viewport.ts";
+import { countWrappedLines, fitLines, measureDraftBubble, measureHistoryItem, pageDown, pageUp, scrollByLines } from "./viewport.ts";
 import { Banner } from "./banner.ts";
 import { bg, c, theme, panel, MESSAGE_PADDING_X, MESSAGE_PADDING_Y, SPACE } from "./theme.ts";
 
@@ -288,6 +288,9 @@ function sidebarSessionLine(session: SessionSummary, width: number): string {
  * vez de teclado pra não disputar ↑↓ com a navegação de histórico do composer). Altura fixa e cada linha truncada
  * (nunca quebra) — mesma restrição de layout que a árvore antiga já tinha.
  */
+/** Linhas por "clique" da roda do mouse (padrão da maioria dos terminais/editores). */
+const WHEEL_LINES = 3;
+
 function Sidebar({
     cwd,
     sessions,
@@ -297,6 +300,7 @@ function Sidebar({
     onSelectSession,
     onNewSession,
     onOpenAllSessions,
+    onWheel,
     spending,
 }: {
     cwd: string;
@@ -308,6 +312,12 @@ function Sidebar({
     onSelectSession: (session: SessionSummary) => void;
     onNewSession: () => void;
     onOpenAllSessions: () => void;
+    /**
+     * Roda do mouse em cima do CHAT (à direita da sidebar). O rastreamento de mouse que a sidebar liga pros cliques
+     * também captura a roda — sem repassar, o terminal não rola nada (tela alternativa não tem scrollback) e as
+     * mensagens antigas ficavam inalcançáveis pelo mouse. Negativo = subir.
+     */
+    onWheel: (delta: number) => void;
     /** Bloco "Gastos" embaixo das sessões (créditos, custo por mensagem, histórico) — ver sidebar-spending.ts. */
     spending: SpendingInfo;
 }): React.ReactElement {
@@ -324,6 +334,10 @@ function Sidebar({
     const shownPath = home && cwd.startsWith(home) ? `~${cwd.slice(home.length)}` : cwd;
 
     useMouse((event: MouseEvent) => {
+        if (event.type === "wheelUp" || event.type === "wheelDown") {
+            if (event.x >= SIDEBAR_WIDTH) onWheel(event.type === "wheelUp" ? -WHEEL_LINES : WHEEL_LINES);
+            return;
+        }
         if (event.type !== "press" || event.button !== "left" || event.x >= SIDEBAR_WIDTH) return;
         if (event.y === SIDEBAR_NEW_SESSION_ROW) onNewSession();
         else if (overflow && event.y === SIDEBAR_SESSIONS_START_ROW + visibleCount) onOpenAllSessions();
@@ -363,10 +377,12 @@ function Sidebar({
 }
 
 /** Dica de rolagem — SEMPRE 1 linha reservada (vazia quando não há o que rolar), pra não criar um ciclo (altura do chrome dependendo de canScrollUp/Down, que só existem DEPOIS de já ter orçado a altura do chrome). */
-function scrollHintText(canScrollUp: boolean, canScrollDown: boolean): string {
-    if (canScrollUp && canScrollDown) return "↑ PageUp (mais antigas) · PageDown ↓ (mais novas)";
-    if (canScrollUp) return "↑ PageUp pra ver mensagens mais antigas";
-    if (canScrollDown) return "PageDown ↓ pra voltar pras mensagens mais novas";
+function scrollHintText(canScrollUp: boolean, canScrollDown: boolean, wheel: boolean): string {
+    // A roda só funciona com a sidebar visível (é ela que liga o rastreamento de mouse) — só promete o que existe.
+    const how = wheel ? "roda do mouse ou " : "";
+    if (canScrollUp && canScrollDown) return `↑↓ ${how}PageUp/PageDown · mais antigas / mais novas`;
+    if (canScrollUp) return `↑ ${how}PageUp pra ver mensagens mais antigas`;
+    if (canScrollDown) return `↓ ${how}PageDown pra voltar pras mensagens mais novas`;
     return "";
 }
 
@@ -1004,7 +1020,7 @@ export function App(props: AppProps): React.ReactElement {
                 );
             }),
         ),
-        h(Text, { color: theme.textMuted }, exitHint ? "Pressione Ctrl+C de novo para sair" : scrollHintText(canScrollUp, canScrollDown)),
+        h(Text, { color: theme.textMuted }, exitHint ? "Pressione Ctrl+C de novo para sair" : scrollHintText(canScrollUp, canScrollDown, sidebarVisible)),
         h(PlanPanel, { plan: activePlan }),
         error ? h(Text, { color: theme.danger }, `[erro] ${error}`) : null,
         liveRegion,
@@ -1026,6 +1042,7 @@ export function App(props: AppProps): React.ReactElement {
                   onSelectSession: (session) => void resumeSession(session),
                   onNewSession: newSession,
                   onOpenAllSessions: () => setScreen("sessions"),
+                  onWheel: (delta) => setScrollAnchor((prev) => scrollByLines(prev, delta, view.total, availableHistoryRows)),
                   spending,
               }),
               chat,

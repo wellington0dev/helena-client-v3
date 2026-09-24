@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { countWrappedLines, fitLines, measureDraftBubble, pageDown, pageUp } from "./viewport.ts";
+import { countWrappedLines, fitLines, measureDraftBubble, pageDown, pageUp, scrollByLines } from "./viewport.ts";
 
 const shown = (r: ReturnType<typeof fitLines>) => r.items.map((i) => [i.index, i.clipTop, i.rows]);
 
@@ -107,4 +107,14 @@ test("measureDraftBubble: sem texto ainda = só a linha do spinner dentro da bol
     assert.equal(measureDraftBubble("oi", "Helena está escrevendo...", 80), 2 + 3);
     // markdown pela metade (stream) nunca lança
     assert.ok(measureDraftBubble("```js\nconst a = 1\n**negrito", "x", 40) >= 4);
+});
+
+test("scrollByLines (roda do mouse): sobe/desce por linha, para no topo, volta a grudar no fim", () => {
+    // total 50, tela 20
+    assert.equal(scrollByLines(null, -3, 50, 20), 47);
+    assert.equal(scrollByLines(47, -3, 50, 20), 44);
+    assert.equal(scrollByLines(22, -3, 50, 20), 20); // topo: não passa de uma tela cheia
+    assert.equal(scrollByLines(47, 3, 50, 20), null); // chegou no fim → gruda de novo
+    assert.equal(scrollByLines(null, 3, 50, 20), null); // já no fim, descer não faz nada
+    assert.equal(scrollByLines(null, -3, 10, 20), null); // tudo cabe: nada pra rolar
 });
