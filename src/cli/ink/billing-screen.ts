@@ -1,8 +1,8 @@
 import React from "react";
 import { Box, Text, useInput } from "ink";
 import qrcodeTerminal from "qrcode-terminal";
-import { cancelPendingPurchase, getBillingBalance, MAX_PURCHASE_BRL, MIN_PURCHASE_BRL, purchaseCredits, type BillingBalance, type PurchaseResult } from "../api/billing.ts";
-import { formatMoney } from "./format-money.ts";
+import { cancelPendingPurchase, getBillingBalance, MAX_PURCHASE_BRL, MIN_PURCHASE_BRL, purchaseCredits, setDefaultContactLimit, type BillingBalance, type PurchaseResult } from "../api/billing.ts";
+import { formatMoney, parseBrlInput } from "./format-money.ts";
 import { UnauthorizedError } from "../backend.ts";
 import { Form } from "./form.ts";
 import { Loader } from "./loader.ts";
@@ -19,7 +19,7 @@ function renderQrAscii(text: string): string {
 }
 
 
-type ScreenState = { kind: "balance" } | { kind: "form" };
+type ScreenState = { kind: "balance" } | { kind: "form" } | { kind: "limit" };
 
 /** `/cobranca` — créditos em R$ da plataforma + comprar/cancelar. Só sobre `billing.controller.ts` (saldo que o dono consome) — nada a ver com `payments.controller.ts` (gateway do dono pra cobrar os PRÓPRIOS contatos), sem equivalente na CLI hoje. */
 export function BillingScreen(props: { backendUrl: string; token: string; onExit: () => void; onUnauthorized: () => void }): React.ReactElement {
@@ -61,6 +61,10 @@ export function BillingScreen(props: { backendUrl: string; token: string; onExit
             setScreen({ kind: "form" });
             return;
         }
+        if (input === "l") {
+            setScreen({ kind: "limit" });
+            return;
+        }
         if (balance?.hasPendingPayment && input === "c") {
             void handleCancel();
         }
@@ -73,6 +77,25 @@ export function BillingScreen(props: { backendUrl: string; token: string; onExit
             await cancelPendingPurchase(backendUrl, token);
             setPurchaseResult(undefined);
             await reload();
+        } catch (err) {
+            handleAsyncError(err);
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    async function handleLimitSubmit(values: Record<string, string>): Promise<void> {
+        const limit = parseBrlInput(values.limit);
+        if (limit === undefined || limit === null) {
+            setError("Valor inválido — use algo como 1 ou 2,50.");
+            return;
+        }
+        setBusy(true);
+        setError(undefined);
+        try {
+            await setDefaultContactLimit(backendUrl, token, limit);
+            await reload();
+            setScreen({ kind: "balance" });
         } catch (err) {
             handleAsyncError(err);
         } finally {
@@ -108,6 +131,17 @@ export function BillingScreen(props: { backendUrl: string; token: string; onExit
 
     if (!balance) return h(Loader, { text: "Carregando saldo..." });
 
+    if (screen.kind === "limit") {
+        return h(Form, {
+            title: "Limite mensal padrão por contato/grupo",
+            fields: [{ key: "limit", label: "Em R$ — quanto cada contato/grupo de terceiros pode gastar por mês (0 = nada até ganhar limite próprio)", initialValue: balance.defaultContactMonthlyLimitBrl.toFixed(2).replace(".", ",") }],
+            onSubmit: (values) => void handleLimitSubmit(values),
+            onCancel: () => setScreen({ kind: "balance" }),
+            busy,
+            error,
+        });
+    }
+
     if (screen.kind === "form") {
         return h(Form, {
             title: "Comprar créditos",
@@ -130,6 +164,7 @@ export function BillingScreen(props: { backendUrl: string; token: string; onExit
         h(Text, { color: balance.creditBrl <= 0 ? theme.warning : undefined }, `Saldo atual: ${formatMoney(balance.creditBrl)}`),
         h(Text, { color: theme.textMuted }, `Cortesia recebida: ${formatMoney(balance.totalGrantedBrl)} · Total comprado: ${formatMoney(balance.totalPurchasedBrl)}`),
         h(Text, { color: theme.textMuted }, "Cada mensagem desconta o custo real da IA + 10%. O gasto por mensagem aparece na barra lateral."),
+        h(Text, { color: theme.textMuted }, `Limite padrão por contato/grupo de terceiros: ${formatMoney(balance.defaultContactMonthlyLimitBrl)}/mês (l muda; por contato, em /contatos)`),
         h(Box, { marginTop: SPACE.tight }),
         error ? h(Text, { color: theme.danger }, `Erro: ${error}`) : null,
         balance.hasPendingPayment ? h(PendingPurchaseView, { balance, purchaseResult }) : null,
@@ -137,7 +172,7 @@ export function BillingScreen(props: { backendUrl: string; token: string; onExit
         h(
             Text,
             { color: theme.textMuted },
-            busy ? "aplicando..." : balance.hasPendingPayment ? "c cancela a cobrança pendente · Esc volta" : "Enter compra créditos · Esc volta",
+            busy ? "aplicando..." : balance.hasPendingPayment ? "c cancela a cobrança pendente · l limite por contato · Esc volta" : "Enter compra créditos · l limite por contato · Esc volta",
         ),
     );
 }

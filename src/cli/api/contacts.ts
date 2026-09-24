@@ -18,6 +18,12 @@ export interface Contact {
     organization?: string;
     notes?: string;
     grantedTools?: GrantableTool[];
+    /** Limite mensal de gasto PRÓPRIO em R$ — `null` = usa o padrão do dono (ver /cobranca). */
+    monthlyLimitBrl?: number | null;
+    /** Limite que vale de fato (próprio ou padrão), em R$. */
+    effectiveLimitBrl?: number;
+    /** Gasto DESTE mês (já com a virada aplicada pelo backend), em R$. */
+    spentThisMonthBrl?: number;
 }
 
 export interface ContactHistoryEntry {
@@ -47,7 +53,7 @@ export function getContactHistory(baseUrl: string, token: string, id: string, li
     return authed(baseUrl, token, "GET", `/contacts/${id}/history${query ? `?${query}` : ""}`);
 }
 
-export function updateContact(baseUrl: string, token: string, id: string, patch: Partial<Pick<Contact, "name" | "relationship" | "organization" | "notes" | "grantedTools">>): Promise<Contact> {
+export function updateContact(baseUrl: string, token: string, id: string, patch: Partial<Pick<Contact, "name" | "relationship" | "organization" | "notes" | "grantedTools" | "monthlyLimitBrl">>): Promise<Contact> {
     return authed(baseUrl, token, "PATCH", `/contacts/${id}`, patch);
 }
 

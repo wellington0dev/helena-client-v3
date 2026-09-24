@@ -22,3 +22,16 @@ export function compactTokens(n: number): string {
     if (n >= 1_000) return `${Math.round(n / 1_000)}k`;
     return String(n);
 }
+
+/**
+ * Valor em R$ digitado num campo de formulário: "2", "2,50", "R$ 1.234,50" ou "2.5". Vazio → `null` (quem chama
+ * decide o que vazio significa — ex: "usar o padrão"). Texto que não é número → `undefined` (inválido).
+ */
+export function parseBrlInput(raw: string | undefined): number | null | undefined {
+    const text = (raw ?? "").replace(/R\$/gi, "").replace(/\s/g, "");
+    if (text === "") return null;
+    // "1.234,50" (BR) → tira o ponto de milhar; "2.5" (sem vírgula) → ponto decimal mesmo.
+    const normalized = text.includes(",") ? text.replace(/\./g, "").replace(",", ".") : text;
+    if (!/^\d+(\.\d{1,2})?$/.test(normalized)) return undefined;
+    return Number(normalized);
+}

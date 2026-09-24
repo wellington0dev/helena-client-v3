@@ -12,6 +12,8 @@ export interface BillingBalance {
     totalPurchasedBrl: number;
     pendingPurchaseBrl: number | null;
     hasPendingPayment: boolean;
+    /** Limite mensal PADRÃO de gasto por contato/grupo de terceiros nos canais, em R$ (protege os créditos do dono). */
+    defaultContactMonthlyLimitBrl: number;
 }
 
 export interface PurchaseResult {
@@ -32,6 +34,10 @@ export function getBillingBalance(baseUrl: string, token: string): Promise<Billi
 
 export function purchaseCredits(baseUrl: string, token: string, valueBrl: number, cpfCnpj: string): Promise<PurchaseResult> {
     return authed(baseUrl, token, "POST", "/billing/purchase", { valueBrl, cpfCnpj });
+}
+
+export function setDefaultContactLimit(baseUrl: string, token: string, defaultMonthlyLimitBrl: number): Promise<{ defaultMonthlyLimitBrl: number }> {
+    return authed(baseUrl, token, "PATCH", "/billing/contact-limit", { defaultMonthlyLimitBrl });
 }
 
 export function cancelPendingPurchase(baseUrl: string, token: string): Promise<{ cancelled: boolean }> {

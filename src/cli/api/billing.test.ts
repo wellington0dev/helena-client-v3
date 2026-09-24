@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cancelPendingPurchase, getBillingBalance, purchaseCredits } from "./billing.ts";
+import { cancelPendingPurchase, getBillingBalance, purchaseCredits, setDefaultContactLimit } from "./billing.ts";
 
 const originalFetch = globalThis.fetch;
 function restoreFetch(): void {
@@ -11,7 +11,7 @@ test("getBillingBalance: GET /billing/balance", async () => {
     let capturedUrl: string | undefined;
     globalThis.fetch = (async (url: string) => {
         capturedUrl = url;
-        return new Response(JSON.stringify({ creditBrl: 12.5, totalGrantedBrl: 1, totalPurchasedBrl: 20, pendingPurchaseBrl: null, hasPendingPayment: false }), { status: 200 });
+        return new Response(JSON.stringify({ creditBrl: 12.5, totalGrantedBrl: 1, totalPurchasedBrl: 20, pendingPurchaseBrl: null, hasPendingPayment: false, defaultContactMonthlyLimitBrl: 1 }), { status: 200 });
     }) as typeof fetch;
 
     try {
@@ -76,6 +76,22 @@ test("cancelPendingPurchase: POST /billing/purchase/cancel", async () => {
         const result = await cancelPendingPurchase("http://127.0.0.1:4001", "jwt-fake");
         assert.equal(capturedUrl, "http://127.0.0.1:4001/billing/purchase/cancel");
         assert.deepEqual(result, { cancelled: true });
+    } finally {
+        restoreFetch();
+    }
+});
+
+test("setDefaultContactLimit: PATCH /billing/contact-limit com o valor em R$", async () => {
+    let captured: { url?: string; init?: RequestInit } = {};
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+        captured = { url, init };
+        return new Response(JSON.stringify({ defaultMonthlyLimitBrl: 2.5 }), { status: 200 });
+    }) as typeof fetch;
+    try {
+        await setDefaultContactLimit("http://127.0.0.1:4001", "jwt-fake", 2.5);
+        assert.equal(captured.url, "http://127.0.0.1:4001/billing/contact-limit");
+        assert.equal(captured.init?.method, "PATCH");
+        assert.deepEqual(JSON.parse(captured.init?.body as string), { defaultMonthlyLimitBrl: 2.5 });
     } finally {
         restoreFetch();
     }

@@ -5,6 +5,7 @@ import { UnauthorizedError } from "../backend.ts";
 import { Badge } from "./badge.ts";
 import { CrudScreen } from "./crud-screen.ts";
 import { ErrorPanel } from "./error-panel.ts";
+import { formatMoney, parseBrlInput } from "./format-money.ts";
 import { Form } from "./form.ts";
 import { theme, panel, SPACE } from "./theme.ts";
 
@@ -29,7 +30,9 @@ const GRANTABLE_TOOLS: { key: GrantableTool; label: string }[] = [
 
 function contactLabel(contact: Contact): { label: string; hint: string } {
     const channelLabel = contact.channel === "whatsapp" ? "WhatsApp" : "Telegram";
-    return { label: contact.name?.trim() || `(sem nome) ${contact.contactId}`, hint: channelLabel };
+    // Gasto do mês sobre o limite — protege os créditos do dono (2026-09-24). "padrão" quando não tem limite próprio.
+    const spending = contact.effectiveLimitBrl !== undefined ? ` · ${formatMoney(contact.spentThisMonthBrl ?? 0)} de ${formatMoney(contact.effectiveLimitBrl)} no mês${contact.monthlyLimitBrl == null ? " (padrão)" : ""}` : "";
+    return { label: contact.name?.trim() || `(sem nome) ${contact.contactId}`, hint: channelLabel + spending };
 }
 
 /**
@@ -57,6 +60,8 @@ export function ContactsScreen(props: { backendUrl: string; token: string; onExi
     const [contacts, setContacts] = React.useState<Contact[] | undefined>(undefined);
     const [busy, setBusy] = React.useState(false);
     const [error, setError] = React.useState<string | undefined>(undefined);
+    /** Erro de VALIDAÇÃO do formulário — aparece dentro do próprio form (não na tela de erro geral, que descartaria o que foi digitado). */
+    const [formError, setFormError] = React.useState<string | undefined>(undefined);
     const [screen, setScreen] = React.useState<ScreenState>({ kind: "list" });
 
     function handleAsyncError(err: unknown): void {
@@ -118,6 +123,8 @@ export function ContactsScreen(props: { backendUrl: string; token: string; onExi
                 organization: values.organization || undefined,
                 notes: values.notes || undefined,
                 grantedTools,
+                // Vazio = volta ao padrão do dono (null); valor inválido já foi barrado no submit do form.
+                monthlyLimitBrl: parseBrlInput(values.monthlyLimitBrl) ?? null,
             });
             await reload();
             setScreen({ kind: "list" });
@@ -149,11 +156,25 @@ export function ContactsScreen(props: { backendUrl: string; token: string; onExi
                 { key: "relationship", label: "Relação", initialValue: contact.relationship ?? "", optional: true },
                 { key: "organization", label: "Organização", initialValue: contact.organization ?? "", optional: true },
                 { key: "notes", label: "Notas (até 500 caracteres)", initialValue: contact.notes ?? "", optional: true },
+                {
+                    key: "monthlyLimitBrl",
+                    label: `Limite mensal de gasto em R$ (vazio = padrão; gasto este mês: ${formatMoney(contact.spentThisMonthBrl ?? 0)})`,
+                    initialValue: contact.monthlyLimitBrl != null ? contact.monthlyLimitBrl.toFixed(2).replace(".", ",") : "",
+                    optional: true,
+                },
             ],
-            onSubmit: (values) => setScreen({ kind: "grant-tools", contact, values, grantedTools: contact.grantedTools ?? [] }),
+            onSubmit: (values) => {
+                if (parseBrlInput(values.monthlyLimitBrl) === undefined) {
+                    setFormError("Limite mensal inválido — use um valor como 2 ou 2,50 (ou deixe vazio pra usar o padrão).");
+                    return;
+                }
+                setFormError(undefined);
+                setScreen({ kind: "grant-tools", contact, values, grantedTools: contact.grantedTools ?? [] });
+            },
             onCancel: () => setScreen({ kind: "list" }),
             submitLabel: "Enter avança pras permissões extras",
             busy,
+            error: formError,
         });
     }
 

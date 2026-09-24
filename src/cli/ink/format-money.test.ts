@@ -21,3 +21,16 @@ test("compactTokens", () => {
     assert.equal(compactTokens(31_234), "31k");
     assert.equal(compactTokens(1_250_000), "1.3M");
 });
+
+test("parseBrlInput: formatos BR, vazio vira null, lixo vira undefined", async () => {
+    const { parseBrlInput } = await import("./format-money.ts");
+    assert.equal(parseBrlInput("2"), 2);
+    assert.equal(parseBrlInput("2,50"), 2.5);
+    assert.equal(parseBrlInput("R$ 1.234,50"), 1234.5);
+    assert.equal(parseBrlInput("2.5"), 2.5);
+    assert.equal(parseBrlInput("  "), null);
+    assert.equal(parseBrlInput(undefined), null);
+    assert.equal(parseBrlInput("dois"), undefined);
+    assert.equal(parseBrlInput("-1"), undefined);
+    assert.equal(parseBrlInput("1,234"), undefined);
+});
