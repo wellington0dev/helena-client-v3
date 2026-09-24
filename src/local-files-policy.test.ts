@@ -63,3 +63,36 @@ test("shell: diretório comum continua funcionando", async () => {
     assert.equal(result.code, 0);
     assert.match(result.stdout, /app\.ts/);
 });
+
+// --- Política EXTRA de contato (só restringe) ---
+const { listFiles, readFile, writeFile } = await import("./local-files.ts");
+fs.mkdirSync(path.join(home, "projeto", "interno"));
+fs.writeFileSync(path.join(home, "projeto", "pedido.pdf"), "PDF");
+fs.writeFileSync(path.join(home, "projeto", "interno", "salario.pdf"), "SAL");
+const narrow = { allowedDirs: [path.join(home, "projeto")], deniedPaths: [path.join(home, "projeto", "interno")], allowedExtensions: ["pdf"] };
+
+test("contato: lê arquivo liberado; tipo não liberado e pasta negada são recusados", () => {
+    assert.equal(readFile(path.join(home, "projeto", "pedido.pdf"), narrow).content, "PDF");
+    assert.match(readFile(path.join(home, "projeto", "app.ts"), narrow).error ?? "", /tipo de arquivo não liberado/);
+    assert.match(readFile(path.join(home, "projeto", "interno", "salario.pdf"), narrow).error ?? "", /Acesso negado/);
+});
+
+test("contato: listFiles esconde tipo não liberado e pasta negada", () => {
+    const names = listFiles(path.join(home, "projeto"), undefined, narrow).files.map((f) => f.name).sort();
+    assert.deepEqual(names, ["pedido.pdf"]); // app.ts (tipo), interno/ (negada) e atalho-ssh (política base) somem
+});
+
+test("contato: allowedDirs VAZIO nega tudo (na política base vazio = liberado — esse sentido não pode vazar)", () => {
+    assert.match(readFile(path.join(home, "projeto", "pedido.pdf"), { allowedDirs: [], deniedPaths: [] }).error ?? "", /nenhuma pasta liberada/);
+});
+
+test("contato: restringir NUNCA amplia — pasta que a política base protege continua protegida", () => {
+    const wide = { allowedDirs: [home], deniedPaths: [], allowedExtensions: ["pdf", "txt"] };
+    assert.match(readFile(path.join(home, ".ssh", "id_rsa"), wide).error ?? "", /Acesso negado/);
+});
+
+test("contato: escrita respeita pasta e tipo", () => {
+    const w = { allowedDirs: [path.join(home, "projeto")], deniedPaths: [], allowedExtensions: ["txt"] };
+    assert.equal(writeFile(path.join(home, "projeto", "novo.txt"), [{ type: "replace_all", content: "oi" }] as never, w).error, undefined);
+    assert.match(writeFile(path.join(home, "projeto", "novo.sh"), [{ type: "replace_all", content: "rm -rf" }] as never, w).error ?? "", /tipo de arquivo não liberado/);
+});

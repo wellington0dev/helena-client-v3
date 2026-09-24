@@ -33,9 +33,33 @@ function policy(): PathPolicy {
     return { allowedDirs: config.allowedDirs, deniedPaths: config.deniedPaths, extraDeniedDirs: [path.resolve(config.whatsappAuthDir)] };
 }
 
-function guard(target: string): string | undefined {
+/**
+ * Política EXTRA mandada pelo backend quando quem pede é um CONTATO (regra de atendimento, 2026-09-24). Só RESTRINGE
+ * — a política base do dono (config.json) continua valendo por cima. Atenção: aqui `allowedDirs` vazio NEGA tudo
+ * (na política base, vazio = sem restrição; herdar esse sentido faria "restringir" virar "liberar").
+ */
+export interface NarrowPolicy {
+    allowedDirs: string[];
+    deniedPaths: string[];
+    /** Tipos de arquivo liberados (sem ponto, minúsculo). Vale pra arquivo, não pra pasta. */
+    allowedExtensions?: string[];
+}
+
+function extensionOk(target: string, narrow: NarrowPolicy): boolean {
+    if (!narrow.allowedExtensions) return true;
+    const ext = path.extname(target).slice(1).toLowerCase();
+    return !!ext && narrow.allowedExtensions.map((e) => e.toLowerCase().replace(/^\./, "")).includes(ext);
+}
+
+function guard(target: string, narrow?: NarrowPolicy, kind: "file" | "dir" = "dir"): string | undefined {
     const check = checkPathAccess(target, policy());
-    return check.ok ? undefined : `Acesso negado: ${check.reason}.`;
+    if (!check.ok) return `Acesso negado: ${check.reason}.`;
+    if (!narrow) return undefined;
+    if (narrow.allowedDirs.length === 0) return "Acesso negado: nenhuma pasta liberada pra esta conversa.";
+    const extra = checkPathAccess(target, { allowedDirs: narrow.allowedDirs, deniedPaths: narrow.deniedPaths });
+    if (!extra.ok) return `Acesso negado: ${extra.reason}.`;
+    if (kind === "file" && !extensionOk(target, narrow)) return "Acesso negado: tipo de arquivo não liberado.";
+    return undefined;
 }
 
 function describe(err: unknown): string {
@@ -67,9 +91,9 @@ export interface ListFilesResult {
 }
 
 /** `pattern` é regex sobre o NOME (não glob) — mesma convenção de `namePattern` em `searchFiles`, só uma forma de casar em todo o módulo. */
-export function listFiles(dirPath: string, pattern?: string): ListFilesResult {
+export function listFiles(dirPath: string, pattern?: string, narrow?: NarrowPolicy): ListFilesResult {
     const resolved = resolvePath(dirPath);
-    const denied = guard(resolved);
+    const denied = guard(resolved, narrow);
     if (denied) return { files: [], error: denied };
 
     let entries: fs.Dirent[];
@@ -84,7 +108,7 @@ export function listFiles(dirPath: string, pattern?: string): ListFilesResult {
 
     const files = entries
         .filter((entry) => !regex || regex.test(entry.name))
-        .filter((entry) => !guard(path.join(resolved, entry.name))) // não revela nem lista o que a política protege
+        .filter((entry) => !guard(path.join(resolved, entry.name), narrow, entry.isDirectory() ? "dir" : "file")) // não revela nem lista o que a política protege
         .map((entry) => {
             const fullPath = path.join(resolved, entry.name);
             let size = 0;
@@ -104,9 +128,9 @@ export interface ReadFileResult {
     error?: string;
 }
 
-export function readFile(filePath: string): ReadFileResult {
+export function readFile(filePath: string, narrow?: NarrowPolicy): ReadFileResult {
     const resolved = resolvePath(filePath);
-    const denied = guard(resolved);
+    const denied = guard(resolved, narrow, "file");
     if (denied) return { content: "", error: denied };
 
     let stat: fs.Stats;
@@ -360,9 +384,9 @@ function writeWhole(resolvedPath: string, originalPath: string, content: string)
     }
 }
 
-export function writeFile(filePath: string, edits: FileEdit[]): WriteFileResult {
+export function writeFile(filePath: string, edits: FileEdit[], narrow?: NarrowPolicy): WriteFileResult {
     if (edits.length === 0) return { ok: false, error: "Nenhuma edição informada." };
-    const denied = guard(resolvePath(filePath));
+    const denied = guard(resolvePath(filePath), narrow, "file");
     if (denied) return { ok: false, error: denied };
 
     const replaceAll = edits.find((edit) => edit.type === "replace_all");
