@@ -62,37 +62,55 @@ export function measureHistoryItem(item: HistoryItem, columns: number): number {
     return countWrappedLines(`Helena: ${renderMarkdownAnsi(item.text)}`, boxWidth) + boxPadding + 1;
 }
 
+export interface VisibleSlice {
+    index: number;
+    /** Linhas do item escondidas ACIMA da janela (0 = começa inteiro). */
+    clipTop: number;
+    /** Linhas do item que aparecem — menor que a altura dele = cortado em cima e/ou embaixo. */
+    rows: number;
+}
+
 /**
- * Puro e testável de propósito (ver viewport.test.ts) — recebe as alturas
- * JÁ calculadas (não os itens em si, pra não acoplar em HistoryItem) e
- * devolve o intervalo `[start, end)` que cabe em `maxRows`, andando de
- * TRÁS pra frente a partir de `end` (limite ABSOLUTO, não uma distância
- * do fim da lista atual). Nunca inclui um item pela metade — estoura o
- * orçamento, para ANTES dele.
+ * Janela por LINHA (2026-09-24) — puro e testável (ver viewport.test.ts). Recebe as alturas JÁ calculadas e `bottom`,
+ * a linha ABSOLUTA (contada do topo do histórico, exclusiva) onde a janela termina; `null` = grudado no fim.
  *
- * `end` é âncora por ÍNDICE de propósito, não "distância do fim": se
- * fosse distância, a janela ANDARIA sozinha toda vez que uma mensagem
- * nova chegasse em segundo plano (history.length mudando por baixo dos
- * pés de quem tá lendo um trecho antigo). Com âncora fixa, `end =
- * history.length` sempre acompanha o mais novo (recalculado a cada
- * render, já que a própria referência cresce), e qualquer outro número
- * fica PARADO — a leitura não se move até o usuário pedir (PageUp/
- * PageDown, ver app.ts).
+ * Antes a janela andava por item inteiro e "nunca incluía um item pela metade": uma resposta mais alta que a tela
+ * (pesquisa longa) não cabia nunca e o chat ficava VAZIO. Agora o item que não cabe aparece cortado, e PageUp/PageDown
+ * andam por linhas dentro dele.
+ *
+ * `bottom` é absoluto de propósito (mesmo motivo da âncora por índice de antes): mensagem nova chegando por baixo não
+ * mexe no trecho que o dono está lendo — só `null` acompanha o fim.
  */
-export function fitToViewport(
+export function fitLines(
     heights: number[],
     maxRows: number,
-    end: number,
-): { start: number; end: number; canScrollUp: boolean; canScrollDown: boolean } {
-    const n = heights.length;
-    const clampedEnd = Math.max(0, Math.min(end, n));
-    let start = clampedEnd;
-    let used = 0;
-    while (start > 0) {
-        const h = heights[start - 1] ?? 0;
-        if (used + h > maxRows) break;
-        used += h;
-        start--;
-    }
-    return { start, end: clampedEnd, canScrollUp: start > 0, canScrollDown: clampedEnd < n };
+    bottom: number | null,
+): { items: VisibleSlice[]; bottom: number; top: number; total: number; canScrollUp: boolean; canScrollDown: boolean } {
+    const total = heights.reduce((sum, h) => sum + Math.max(0, h), 0);
+    const rows = Math.max(0, Math.floor(maxRows));
+    const end = bottom === null ? total : Math.max(Math.min(rows, total), Math.min(Math.floor(bottom), total));
+    const top = Math.max(0, end - rows);
+    const items: VisibleSlice[] = [];
+    let start = 0;
+    heights.forEach((raw, index) => {
+        const h = Math.max(0, raw);
+        const itemEnd = start + h;
+        const from = Math.max(start, top);
+        const to = Math.min(itemEnd, end);
+        if (to > from) items.push({ index, clipTop: from - start, rows: to - from });
+        start = itemEnd;
+    });
+    return { items, bottom: end, top, total, canScrollUp: top > 0, canScrollDown: end < total };
+}
+
+/** PageUp: sobe uma tela menos 1 linha (a última linha vista continua na tela, pra não perder o fio). */
+export function pageUp(view: { bottom: number; total: number }, maxRows: number): number | null {
+    const step = Math.max(1, maxRows - 1);
+    return Math.max(Math.min(maxRows, view.total), view.bottom - step);
+}
+
+/** PageDown: desce uma tela menos 1 linha; chegou no fim → `null` (volta a grudar no mais novo). */
+export function pageDown(view: { bottom: number; total: number }, maxRows: number): number | null {
+    const next = view.bottom + Math.max(1, maxRows - 1);
+    return next >= view.total ? null : next;
 }

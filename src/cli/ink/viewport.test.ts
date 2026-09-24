@@ -1,61 +1,60 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { countWrappedLines, fitToViewport } from "./viewport.ts";
+import { countWrappedLines, fitLines, pageDown, pageUp } from "./viewport.ts";
 
-test("fitToViewport: tudo cabe -> mostra do início ao fim, sem scroll em nenhuma direção", () => {
-    const r = fitToViewport([1, 1, 1], 10, 3);
-    assert.deepEqual(r, { start: 0, end: 3, canScrollUp: false, canScrollDown: false });
+const shown = (r: ReturnType<typeof fitLines>) => r.items.map((i) => [i.index, i.clipTop, i.rows]);
+
+test("fitLines: tudo cabe -> mostra tudo inteiro, sem scroll", () => {
+    const r = fitLines([1, 1, 1], 10, null);
+    assert.deepEqual(shown(r), [[0, 0, 1], [1, 0, 1], [2, 0, 1]]);
+    assert.equal(r.canScrollUp, false);
+    assert.equal(r.canScrollDown, false);
 });
 
-test("fitToViewport: orçamento menor que o total -> corta os itens mais ANTIGOS (do início)", () => {
-    // alturas [3,2,4,1], maxRows=6, end=4 (grudado no fim) -> anda de trás pra
-    // frente: 1 (soma 1) + 4 (soma 5) + 2 estouraria (soma 7 > 6) -> para
-    const r = fitToViewport([3, 2, 4, 1], 6, 4);
-    assert.deepEqual(r, { start: 2, end: 4, canScrollUp: true, canScrollDown: false });
+test("fitLines: BUG da tela vazia — resposta mais alta que a tela aparece (cortada em cima), nunca some", () => {
+    // Antes: [3, 40] com 20 linhas -> janela vazia (o item de 40 nunca cabia inteiro) + só "PageUp".
+    const r = fitLines([3, 40], 20, null);
+    assert.deepEqual(shown(r), [[1, 20, 20]]);
+    assert.equal(r.canScrollUp, true);
 });
 
-test("fitToViewport: nunca inclui um item PELA METADE — estourou o orçamento, o item de fora fica de fora inteiro", () => {
-    const r = fitToViewport([5, 3], 4, 2);
-    // o item de altura 3 (o mais novo) cabe sozinho; o de altura 5 estoura o
-    // orçamento restante (3+5=8 > 4) e fica de FORA por inteiro, nunca cortado.
-    assert.deepEqual(r, { start: 1, end: 2, canScrollUp: true, canScrollDown: false });
+test("fitLines: PageUp anda por LINHAS dentro da resposta longa até o começo dela e depois pros itens de cima", () => {
+    const heights = [3, 40];
+    let r = fitLines(heights, 20, null);
+    r = fitLines(heights, 20, pageUp(r, 20)); // bottom 43 -> 24: janela [4,24) = só a resposta longa, 1 linha escondida em cima
+    assert.deepEqual(shown(r), [[1, 1, 20]]);
+    r = fitLines(heights, 20, pageUp(r, 20)); // no topo: não passa de 20 (tela cheia)
+    assert.deepEqual(shown(r), [[0, 0, 3], [1, 0, 17]]);
+    assert.equal(r.canScrollUp, false);
+    assert.equal(r.canScrollDown, true);
 });
 
-test("fitToViewport: end < tamanho da lista revela itens mais antigos, escondendo os mais novos (canScrollDown=true)", () => {
-    const r = fitToViewport([1, 1, 1, 1], 10, 2);
-    assert.deepEqual(r, { start: 0, end: 2, canScrollUp: false, canScrollDown: true });
+test("fitLines: PageDown volta a grudar no fim (null) quando chega lá", () => {
+    const heights = [3, 40];
+    const r = fitLines(heights, 20, 20);
+    const next = pageDown(r, 20);
+    assert.equal(next, 39);
+    assert.equal(pageDown(fitLines(heights, 20, next), 20), null);
 });
 
-test("fitToViewport: `end` é ÍNDICE ABSOLUTO, não distância do fim — a janela NÃO anda sozinha quando a lista cresce por trás", () => {
-    // Simula: usuário parou de ler no índice 2 (end=2) enquanto só existiam 2
-    // itens. Chega mensagem nova em segundo plano (lista cresce pra 5) — a
-    // janela visível tem que continuar EXATAMENTE a mesma, sem se mexer.
-    const before = fitToViewport([1, 1], 10, 2);
-    const after = fitToViewport([1, 1, 1, 1, 1], 10, 2);
-    assert.deepEqual(before, { start: 0, end: 2, canScrollUp: false, canScrollDown: false });
-    assert.deepEqual(after, { start: 0, end: 2, canScrollUp: false, canScrollDown: true });
-    assert.equal(before.start, after.start);
-    assert.equal(before.end, after.end);
+test("fitLines: corta o item de cima pela metade quando a janela começa no meio dele", () => {
+    const r = fitLines([3, 2, 4, 1], 6, null);
+    // total 10, janela [4,10): item0 fora, item1 (linhas 3-4) perde 1 em cima, item2 inteiro, item3 inteiro
+    assert.deepEqual(shown(r), [[1, 1, 1], [2, 0, 4], [3, 0, 1]]);
 });
 
-test("fitToViewport: `end` negativo é clampado pra 0, nunca vira índice inválido", () => {
-    const r = fitToViewport([1, 1], 10, -5);
-    assert.deepEqual(r, { start: 0, end: 0, canScrollUp: false, canScrollDown: true });
+test("fitLines: `bottom` é linha ABSOLUTA — mensagem nova chegando por baixo não mexe no que está sendo lido", () => {
+    const before = fitLines([5, 5], 4, 6);
+    const after = fitLines([5, 5, 5, 5], 4, 6);
+    assert.deepEqual(shown(before), shown(after));
+    assert.equal(after.canScrollDown, true);
 });
 
-test("fitToViewport: `end` maior que o tamanho da lista é clampado pro próprio tamanho", () => {
-    const r = fitToViewport([1, 1], 10, 999);
-    assert.deepEqual(r, { start: 0, end: 2, canScrollUp: false, canScrollDown: false });
-});
-
-test("fitToViewport: lista vazia nunca lança, devolve janela vazia sem scroll", () => {
-    const r = fitToViewport([], 10, 0);
-    assert.deepEqual(r, { start: 0, end: 0, canScrollUp: false, canScrollDown: false });
-});
-
-test("fitToViewport: maxRows <= 0 nunca inclui nada (terminal minúsculo demais)", () => {
-    const r = fitToViewport([1, 1, 1], 0, 3);
-    assert.deepEqual(r, { start: 3, end: 3, canScrollUp: true, canScrollDown: false });
+test("fitLines: `bottom` fora da faixa é clampado; lista vazia e tela zerada nunca lançam", () => {
+    assert.equal(fitLines([1, 1], 10, 999).bottom, 2);
+    assert.equal(fitLines([5, 5], 4, -3).bottom, 4);
+    assert.deepEqual(shown(fitLines([], 10, null)), []);
+    assert.deepEqual(shown(fitLines([1, 1, 1], 0, null)), []);
 });
 
 test("countWrappedLines: texto vazio conta como 1 linha (nunca 0 — Ink sempre desenha ao menos uma linha)", () => {

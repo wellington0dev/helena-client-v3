@@ -37,7 +37,7 @@ import { spendingLines, type SpendingInfo } from "./sidebar-spending.ts";
 import { historyItem, noticeItem, toolCallItem, toolResultItem, type HistoryItem } from "./history-item.ts";
 import { connectProgress, type ChatProgressEvent, type AgentPlan, type PlanStep } from "./progress-client.ts";
 import { renderMarkdownAnsi } from "./render-markdown.ts";
-import { countWrappedLines, fitToViewport, measureHistoryItem } from "./viewport.ts";
+import { countWrappedLines, fitLines, measureHistoryItem, pageDown, pageUp } from "./viewport.ts";
 import { Banner } from "./banner.ts";
 import { bg, c, theme, panel, MESSAGE_PADDING_X, MESSAGE_PADDING_Y, SPACE } from "./theme.ts";
 
@@ -395,8 +395,8 @@ export function App(props: AppProps): React.ReactElement {
     // Incrementado só quando o Tab preenche o composer programaticamente —
     // vira `key` do TextInput (ver Composer) pra forçar o cursor pro fim.
     const [composerResetKey, setComposerResetKey] = React.useState(0);
-    // `null` = grudado na mensagem mais nova (padrão). Um NÚMERO é um
-    // índice ABSOLUTO (ver viewport.ts#fitToViewport) — fica PARADO
+    // `null` = grudado na mensagem mais nova (padrão). Um NÚMERO é a
+    // LINHA ABSOLUTA onde a janela termina (ver viewport.ts#fitLines) — fica PARADO
     // mesmo que `history` cresça por trás (mensagem chegando em segundo
     // plano enquanto o usuário lê algo antigo não pode empurrar a tela).
     const [scrollAnchor, setScrollAnchor] = React.useState<number | null>(null);
@@ -553,9 +553,8 @@ export function App(props: AppProps): React.ReactElement {
     const availableHistoryRows = Math.max(1, usableRows - chromeRows);
 
     const historyHeights = React.useMemo(() => history.map((item) => measureHistoryItem(item, mainColumns)), [history, mainColumns]);
-    const requestedEnd = scrollAnchor === null ? history.length : scrollAnchor;
-    const { start: historyStart, end: historyEnd, canScrollUp, canScrollDown } = fitToViewport(historyHeights, availableHistoryRows, requestedEnd);
-    const visibleHistory = history.slice(historyStart, historyEnd);
+    const view = fitLines(historyHeights, availableHistoryRows, scrollAnchor);
+    const { canScrollUp, canScrollDown } = view;
 
     // Refs pra ler o valor ATUAL de dentro do callback do WS (que só é
     // registrado uma vez no efeito abaixo) sem precisar reconectar o
@@ -714,21 +713,16 @@ export function App(props: AppProps): React.ReactElement {
     // PageUp/PageDown navegam o histórico — `TextInput` já ignora
     // essas teclas (não fazem parte do texto digitado, ver
     // nonAlphanumericKeys no ink), então não competem com o composer.
-    // PageUp ancora exatamente no início da janela atual (`historyStart`),
-    // revelando a "página" anterior — PageDown avança por essa mesma
-    // contagem de itens; ao alcançar o fim, solta a âncora (`null`) e
-    // volta a grudar no mais novo sozinho.
+    // Andam uma tela menos 1 linha por vez (por LINHA, então atravessam uma
+    // resposta longa por dentro); ao alcançar o fim, PageDown solta a
+    // âncora (`null`) e a tela volta a grudar no mais novo sozinha.
     useInput(
         (_input, key) => {
             if (key.pageUp) {
-                if (canScrollUp) setScrollAnchor(historyStart);
+                if (canScrollUp) setScrollAnchor(pageUp(view, availableHistoryRows));
                 return;
             }
-            if (key.pageDown && scrollAnchor !== null) {
-                const pageSize = Math.max(1, historyEnd - historyStart);
-                const nextEnd = historyEnd + pageSize;
-                setScrollAnchor(nextEnd >= history.length ? null : nextEnd);
-            }
+            if (key.pageDown && scrollAnchor !== null) setScrollAnchor(pageDown(view, availableHistoryRows));
         },
         { isActive: screen === "chat" && !paletteOpen },
     );
@@ -970,7 +964,15 @@ export function App(props: AppProps): React.ReactElement {
         // conteúdo. Como as mensagens já vêm fatiadas pra caber (nunca
         // mais que `availableHistoryRows`), esticar aqui nunca estoura
         // `usableRows` no total.
-        h(Box, { flexDirection: "column", flexGrow: 1 }, ...visibleHistory.map((item) => h(HistoryLine, { key: item.id, item }))),
+        // Cada item vai numa caixa da altura VISÍVEL dele com overflow escondido; `marginTop` negativo esconde as linhas
+        // de cima — é assim que uma resposta mais alta que a tela aparece cortada em vez de sumir (ver fitLines).
+        h(
+            Box,
+            { flexDirection: "column", flexGrow: 1 },
+            ...view.items.map(({ index, clipTop, rows }) =>
+                h(Box, { key: history[index]!.id, height: rows, overflow: "hidden", flexDirection: "column", flexShrink: 0 }, h(Box, { marginTop: -clipTop, flexDirection: "column", flexShrink: 0 }, h(HistoryLine, { item: history[index]! }))),
+            ),
+        ),
         h(Text, { color: theme.textMuted }, exitHint ? "Pressione Ctrl+C de novo para sair" : scrollHintText(canScrollUp, canScrollDown)),
         h(PlanPanel, { plan: activePlan }),
         error ? h(Text, { color: theme.danger }, `[erro] ${error}`) : null,
