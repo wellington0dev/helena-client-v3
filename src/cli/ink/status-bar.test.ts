@@ -3,17 +3,12 @@ import test from "node:test";
 import stringWidth from "string-width";
 import { statusBarParts, type StatusBarInfo } from "./status-bar.ts";
 
-const base: StatusBarInfo = { machine: "veronica", branch: "main", dir: "~/Projects/helena", sessionId: "abcdef1234567890", tokensIn: 18400, tokensOut: 1200, turns: 3, alerts: [] };
+const base: StatusBarInfo = { machine: "veronica", branch: "main", dir: "~/Projects/helena", sessionId: "abcdef1234567890", alerts: [] };
 
-test("statusBarParts: mostra máquina, branch, pasta, tokens acumulados e sessão quando cabe", () => {
+test("statusBarParts: mostra máquina, branch, pasta e sessão quando cabe — tokens/custo ficam na sidebar (2026-09-24)", () => {
     const { main, alert } = statusBarParts(base, 200);
-    assert.equal(main, "veronica · ⎇ main · ~/Projects/helena · ↑18.4k ↓1.2k · 3 turnos · sessão abcdef12");
+    assert.equal(main, "veronica · ⎇ main · ~/Projects/helena · sessão abcdef12");
     assert.equal(alert, "");
-});
-
-test("statusBarParts: sem turnos não mostra tokens; singular em 1 turno", () => {
-    assert.ok(!statusBarParts({ ...base, turns: 0 }, 200).main.includes("↑"));
-    assert.ok(statusBarParts({ ...base, turns: 1 }, 200).main.includes("1 turno ·"));
 });
 
 test("statusBarParts: nunca passa da largura; perde segmentos do fim primeiro", () => {

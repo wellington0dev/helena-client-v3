@@ -11,18 +11,10 @@ export interface StatusBarInfo {
     branch?: string;
     dir: string;
     sessionId?: string;
-    tokensIn: number;
-    tokensOut: number;
-    turns: number;
     /** Problemas ativos (ex: "WhatsApp desconectado", "máquina offline"). */
     alerts: string[];
 }
 
-function compact(n: number): string {
-    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-    if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-    return String(n);
-}
 
 export function statusBarParts(info: StatusBarInfo, width: number): { main: string; alert: string } {
     const alert = info.alerts.length > 0 ? `⚠ ${info.alerts.join(" · ")}` : "";
@@ -34,7 +26,6 @@ export function statusBarParts(info: StatusBarInfo, width: number): { main: stri
     if (info.machine) segments.push(info.machine);
     if (info.branch) segments.push(`⎇ ${info.branch}`);
     segments.push(info.dir);
-    if (info.turns > 0) segments.push(`↑${compact(info.tokensIn)} ↓${compact(info.tokensOut)} · ${info.turns} ${info.turns === 1 ? "turno" : "turnos"}`);
     if (info.sessionId) segments.push(`sessão ${info.sessionId.slice(0, 8)}`);
 
     let kept = segments.length;

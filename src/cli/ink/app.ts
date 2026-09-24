@@ -13,7 +13,9 @@ import { SettingsModal, type SettingsTarget } from "./settings-modal.ts";
 import { CommandPaletteModal } from "./command-palette.ts";
 import { PermissionsScreen } from "./permissions-screen.ts";
 import { stripMouse, useMouse, type MouseEvent } from "./mouse.ts";
+import { getBillingBalance } from "../api/billing.ts";
 import { getSessionHistory, listSessionSummaries, type SessionSummary } from "../api/sessions.ts";
+import { getUsageMessages } from "../api/usage.ts";
 import { formatWhen, historyEntriesToItems, sessionLabel, SessionsScreen } from "./sessions-screen.ts";
 import { measurePermissionDialog, PermissionDialog, type PermissionDecision } from "./permission-dialog.ts";
 import { truncateToWidth } from "./worktree.ts";
@@ -29,8 +31,8 @@ import { UsageScreen } from "./usage-screen.ts";
 import { TelemetryScreen } from "./telemetry-screen.ts";
 import { config } from "../../config.ts";
 import { formatToolCall, formatToolResult } from "./format-tool-call.ts";
-import { formatUsageLine } from "./format-usage.ts";
-import { historyItem, noticeItem, toolCallItem, toolResultItem, usageItem, type HistoryItem } from "./history-item.ts";
+import { spendingLines, type SpendingInfo } from "./sidebar-spending.ts";
+import { historyItem, noticeItem, toolCallItem, toolResultItem, type HistoryItem } from "./history-item.ts";
 import { connectProgress, type ChatProgressEvent, type AgentPlan, type PlanStep } from "./progress-client.ts";
 import { renderMarkdownAnsi } from "./render-markdown.ts";
 import { countWrappedLines, fitToViewport, measureHistoryItem } from "./viewport.ts";
@@ -92,9 +94,6 @@ function HistoryLine({ item }: { item: HistoryItem }): React.ReactElement {
     });
     if (item.role === "notice") {
         return h(Box, { marginBottom: SPACE.tight }, h(Banner, { tone: item.tone, text: item.text }));
-    }
-    if (item.role === "usage") {
-        return h(Box, { marginBottom: SPACE.tight }, h(Text, { color: theme.textMuted }, formatUsageLine(item.usage)));
     }
     if (item.role === "user") {
         // Inline de propósito (rótulo + texto na MESMA linha, quebrando como um parágrafo só se precisar).
@@ -290,6 +289,7 @@ function Sidebar({
     onSelectSession,
     onNewSession,
     onOpenAllSessions,
+    spending,
 }: {
     cwd: string;
     sessions: SessionSummary[];
@@ -300,9 +300,15 @@ function Sidebar({
     onSelectSession: (session: SessionSummary) => void;
     onNewSession: () => void;
     onOpenAllSessions: () => void;
+    /** Bloco "Gastos" embaixo das sessões (créditos, custo por mensagem, histórico) — ver sidebar-spending.ts. */
+    spending: SpendingInfo;
 }): React.ReactElement {
     const contentWidth = SIDEBAR_WIDTH - 3; // paddingX 1 (esq/dir) + 1 de folga
-    const sessionRows = Math.max(0, height - SIDEBAR_SESSIONS_START_ROW);
+    // Altura fixa dividida: sessões em cima, "Gastos" embaixo (~45%, sem roubar as 2 primeiras linhas de sessão).
+    // 1 linha em branco separa os dois — contada aqui pra nunca estourar `height`.
+    const spendingRows = Math.max(0, Math.min(Math.floor(height * 0.45), height - SIDEBAR_SESSIONS_START_ROW - 3));
+    const sessionRows = Math.max(0, height - SIDEBAR_SESSIONS_START_ROW - (spendingRows > 0 ? spendingRows + 1 : 0));
+    const spendingBlock = spendingLines(spending, contentWidth, spendingRows);
     const overflow = sessions.length > sessionRows;
     const visibleCount = overflow ? Math.max(0, sessionRows - 1) : sessions.length;
     const visible = sessions.slice(0, visibleCount);
@@ -336,6 +342,15 @@ function Sidebar({
               )
             : [h(Text, { key: "empty", color: theme.textMuted }, "(nenhuma conversa)")]),
         overflow ? h(Text, { key: "overflow", color: theme.textMuted, wrap: "truncate" }, truncateToWidth(`… +${sessions.length - visibleCount} conversas`, contentWidth)) : null,
+        // Empurra "Gastos" pro rodapé da sidebar, qualquer que seja a quantidade de sessões.
+        spendingBlock.length > 0 ? h(Box, { key: "spacer", flexGrow: 1 }) : null,
+        ...spendingBlock.map((line, i) =>
+            h(
+                Text,
+                { key: `spend-${i}`, wrap: "truncate", bold: line.tone === "title", color: line.tone === "title" ? theme.primary : line.tone === "warning" ? theme.warning : line.tone === "muted" ? theme.textMuted : undefined },
+                line.text,
+            ),
+        ),
     );
 }
 
@@ -427,8 +442,32 @@ export function App(props: AppProps): React.ReactElement {
         };
     }, [sending, sidebarVisible, backendUrl, token]);
 
-    // Barra de status: tokens acumulados da conversa, branch e estado dos canais (WS do daemon local).
-    const [totals, setTotals] = React.useState({ tokensIn: 0, tokensOut: 0, turns: 0 });
+    // Gastos (sidebar, bloco "Gastos"): créditos em R$ + histórico por mensagem desta sessão. Relido ao começar/
+    // terminar cada turno e ao trocar de sessão; falha de rede só mantém o último valor bom (nunca derruba o chat).
+    const [spending, setSpending] = React.useState<SpendingInfo>({ messages: [] });
+    React.useEffect(() => {
+        if (!sidebarVisible) return;
+        let cancelled = false;
+        Promise.all([getBillingBalance(backendUrl, token), getUsageMessages(backendUrl, token, { sessionId, limit: 40 })])
+            .then(([balance, usage]) => {
+                if (cancelled) return;
+                setSpending((prev) => ({
+                    balanceBrl: balance.creditBrl,
+                    lastCostBrl: usage.messages[0]?.costBrl ?? prev.lastCostBrl,
+                    sessionCostBrl: sessionId ? usage.sessionCostBrl : null,
+                    todayCostBrl: usage.todayCostBrl,
+                    messages: sessionId ? usage.messages : [],
+                }));
+            })
+            .catch((err: unknown) => {
+                if (err instanceof UnauthorizedError) onUnauthorized();
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [sending, sessionId, sidebarVisible, backendUrl, token]);
+
+    // Barra de status: branch e estado dos canais (WS do daemon local). Tokens/custo ficam na sidebar.
     const [branch, setBranch] = React.useState(() => readGitBranch(props.invocationCwd));
     const [clientState, setClientState] = React.useState<ClientState | undefined>(undefined);
     React.useEffect(() => {
@@ -708,11 +747,13 @@ export function App(props: AppProps): React.ReactElement {
             const stoppedForPermission = (result.pending?.length ?? 0) > 0;
             const toolResults = (result.toolActivity ?? []).filter((entry) => !(stoppedForPermission && entry.output === undefined)).map((entry) => toolResultItem(entry.name, entry.output));
             const showText = !(stoppedForPermission && result.text.startsWith("(sem texto"));
-            setHistory((prev) => [...prev, ...toolResults, ...(showText ? [historyItem("assistant", result.text)] : []), ...(result.usage ? [usageItem(result.usage)] : [])]);
+            setHistory((prev) => [...prev, ...toolResults, ...(showText ? [historyItem("assistant", result.text)] : [])]);
             setPending(result.pending?.[0]);
-            if (result.usage) {
-                const usage = result.usage;
-                setTotals((prev) => ({ tokensIn: prev.tokensIn + (usage.inputTokens ?? 0), tokensOut: prev.tokensOut + (usage.outputTokens ?? 0), turns: prev.turns + 1 }));
+            // Custo desta mensagem aparece na sidebar na hora (vem na própria resposta); o histórico e os totais
+            // são relidos do backend logo depois (efeito de gastos, disparado pelo fim do turno).
+            if (result.usage?.costBrl !== undefined) {
+                const lastCostBrl = result.usage.costBrl;
+                setSpending((prev) => ({ ...prev, lastCostBrl }));
             }
         } catch (err) {
             if (controller.signal.aborted) {
@@ -734,7 +775,7 @@ export function App(props: AppProps): React.ReactElement {
     function resetConversation(): void {
         setHistory([]);
         setSessionId(undefined);
-        setTotals({ tokensIn: 0, tokensOut: 0, turns: 0 });
+        setSpending((prev) => ({ ...prev, lastCostBrl: undefined, sessionCostBrl: undefined, messages: [] }));
         setActivePlan(null);
         setScrollAnchor(null);
         setError(undefined);
@@ -904,7 +945,7 @@ export function App(props: AppProps): React.ReactElement {
         if (clientState.whatsapp.status === "error") alerts.push("WhatsApp desconectado");
         if (clientState.telegram.status === "error") alerts.push("Telegram com erro");
     }
-    const statusInfo = { machine: machineName, branch, dir: shortPath(invocationCwd), sessionId, ...totals, alerts };
+    const statusInfo = { machine: machineName, branch, dir: shortPath(invocationCwd), sessionId, alerts };
 
     let liveRegion: React.ReactElement;
     if (pending) liveRegion = h(PermissionDialog, { pending, onAnswer: handleConfirmation });
@@ -944,6 +985,7 @@ export function App(props: AppProps): React.ReactElement {
                   onSelectSession: (session) => void resumeSession(session),
                   onNewSession: newSession,
                   onOpenAllSessions: () => setScreen("sessions"),
+                  spending,
               }),
               chat,
           )

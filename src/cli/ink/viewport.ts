@@ -1,6 +1,5 @@
 import wrapAnsi from "wrap-ansi";
 import { formatToolCall, formatToolResult } from "./format-tool-call.ts";
-import { formatUsageLine } from "./format-usage.ts";
 import { renderMarkdownAnsi } from "./render-markdown.ts";
 import type { HistoryItem } from "./history-item.ts";
 import { MESSAGE_PADDING_X, MESSAGE_PADDING_Y, NOTICE_PADDING_Y } from "./theme.ts";
@@ -52,9 +51,6 @@ export function measureHistoryItem(item: HistoryItem, columns: number): number {
     const boxPadding = 2 * MESSAGE_PADDING_Y;
     if (item.role === "notice") {
         return countWrappedLines(item.text, boxWidth) + 2 * NOTICE_PADDING_Y + 1;
-    }
-    if (item.role === "usage") {
-        return countWrappedLines(formatUsageLine(item.usage), columns) + 1;
     }
     if (item.role === "user") {
         // Inline ("Você: <texto>", uma unidade só que quebra como

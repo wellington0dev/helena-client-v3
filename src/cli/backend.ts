@@ -37,6 +37,8 @@ export interface TurnUsage {
     cachedTokens?: number;
     /** Tokens de "pensamento" do Gemini — cobrados pela Google à taxa de OUTPUT, mas fora de `outputTokens` (ver captureUsageMiddleware no backend-v2). Ausente em turnos gravados antes de 2026-09-19. */
     thoughtsTokens?: number;
+    /** Quanto esta mensagem custou ao cliente em R$ (custo real do modelo × 1,1) — backend-v2 CustomerCostService, desde 2026-09-24. */
+    costBrl?: number;
     durationMs: number;
 }
 

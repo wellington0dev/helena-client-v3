@@ -1,7 +1,8 @@
 import React from "react";
 import { Box, Text, useInput } from "ink";
 import qrcodeTerminal from "qrcode-terminal";
-import { cancelPendingPurchase, getBillingBalance, purchaseTokens, type BillingBalance, type PurchaseResult } from "../api/billing.ts";
+import { cancelPendingPurchase, getBillingBalance, MAX_PURCHASE_BRL, MIN_PURCHASE_BRL, purchaseCredits, type BillingBalance, type PurchaseResult } from "../api/billing.ts";
+import { formatMoney } from "./format-money.ts";
 import { UnauthorizedError } from "../backend.ts";
 import { Form } from "./form.ts";
 import { Loader } from "./loader.ts";
@@ -17,13 +18,10 @@ function renderQrAscii(text: string): string {
     return ascii;
 }
 
-function fmtNum(n: number): string {
-    return n.toLocaleString("pt-BR");
-}
 
 type ScreenState = { kind: "balance" } | { kind: "form" };
 
-/** `/cobranca` — saldo de tokens da plataforma + comprar/cancelar. Só sobre `billing.controller.ts` (saldo que o dono consome) — nada a ver com `payments.controller.ts` (gateway do dono pra cobrar os PRÓPRIOS contatos), sem equivalente na CLI hoje. */
+/** `/cobranca` — créditos em R$ da plataforma + comprar/cancelar. Só sobre `billing.controller.ts` (saldo que o dono consome) — nada a ver com `payments.controller.ts` (gateway do dono pra cobrar os PRÓPRIOS contatos), sem equivalente na CLI hoje. */
 export function BillingScreen(props: { backendUrl: string; token: string; onExit: () => void; onUnauthorized: () => void }): React.ReactElement {
     const { backendUrl, token, onExit, onUnauthorized } = props;
     const [balance, setBalance] = React.useState<BillingBalance | undefined>(undefined);
@@ -83,10 +81,11 @@ export function BillingScreen(props: { backendUrl: string; token: string; onExit
     }
 
     async function handleSubmit(values: Record<string, string>): Promise<void> {
-        const tokens = Number.parseInt(values.tokens ?? "", 10);
+        // Aceita "20", "20,50" ou "R$ 20,50" — vírgula decimal (padrão BR) vira ponto.
+        const valueBrl = Number((values.valueBrl ?? "").replace(/[R$\s.]/g, "").replace(",", "."));
         const cpfCnpj = (values.cpfCnpj ?? "").replace(/\D/g, "");
-        if (!Number.isFinite(tokens) || tokens < 1) {
-            setError("Quantidade de tokens inválida.");
+        if (!Number.isFinite(valueBrl) || valueBrl < MIN_PURCHASE_BRL || valueBrl > MAX_PURCHASE_BRL) {
+            setError(`Valor precisa estar entre ${formatMoney(MIN_PURCHASE_BRL)} e ${formatMoney(MAX_PURCHASE_BRL)}.`);
             return;
         }
         if (cpfCnpj.length < 11) {
@@ -96,7 +95,7 @@ export function BillingScreen(props: { backendUrl: string; token: string; onExit
         setBusy(true);
         setError(undefined);
         try {
-            const result = await purchaseTokens(backendUrl, token, tokens, cpfCnpj);
+            const result = await purchaseCredits(backendUrl, token, Math.round(valueBrl * 100) / 100, cpfCnpj);
             setPurchaseResult(result);
             setScreen({ kind: "balance" });
             await reload();
@@ -111,9 +110,9 @@ export function BillingScreen(props: { backendUrl: string; token: string; onExit
 
     if (screen.kind === "form") {
         return h(Form, {
-            title: "Comprar tokens",
+            title: "Comprar créditos",
             fields: [
-                { key: "tokens", label: "Quantidade de tokens", initialValue: "3000000" },
+                { key: "valueBrl", label: `Valor em R$ (${formatMoney(MIN_PURCHASE_BRL)} a ${formatMoney(MAX_PURCHASE_BRL)})`, initialValue: "20" },
                 { key: "cpfCnpj", label: "CPF/CNPJ (só dígitos)" },
             ],
             onSubmit: (values) => void handleSubmit(values),
@@ -126,10 +125,11 @@ export function BillingScreen(props: { backendUrl: string; token: string; onExit
     return h(
         Box,
         { flexDirection: "column", ...panel("border") },
-        h(Text, { bold: true, color: theme.primary }, "Cobrança — saldo de tokens"),
+        h(Text, { bold: true, color: theme.primary }, "Cobrança — créditos"),
         h(Box, { marginTop: SPACE.tight }),
-        h(Text, null, `Saldo atual: ${fmtNum(balance.balance)} tokens`),
-        h(Text, { color: theme.textMuted }, `Total recebido: ${fmtNum(balance.totalGranted)} · Total comprado: ${fmtNum(balance.totalPurchased)}`),
+        h(Text, { color: balance.creditBrl <= 0 ? theme.warning : undefined }, `Saldo atual: ${formatMoney(balance.creditBrl)}`),
+        h(Text, { color: theme.textMuted }, `Cortesia recebida: ${formatMoney(balance.totalGrantedBrl)} · Total comprado: ${formatMoney(balance.totalPurchasedBrl)}`),
+        h(Text, { color: theme.textMuted }, "Cada mensagem desconta o custo real da IA + 10%. O gasto por mensagem aparece na barra lateral."),
         h(Box, { marginTop: SPACE.tight }),
         error ? h(Text, { color: theme.danger }, `Erro: ${error}`) : null,
         balance.hasPendingPayment ? h(PendingPurchaseView, { balance, purchaseResult }) : null,
@@ -137,7 +137,7 @@ export function BillingScreen(props: { backendUrl: string; token: string; onExit
         h(
             Text,
             { color: theme.textMuted },
-            busy ? "aplicando..." : balance.hasPendingPayment ? "c cancela a cobrança pendente · Esc volta" : "Enter compra tokens · Esc volta",
+            busy ? "aplicando..." : balance.hasPendingPayment ? "c cancela a cobrança pendente · Esc volta" : "Enter compra créditos · Esc volta",
         ),
     );
 }
@@ -147,7 +147,7 @@ function PendingPurchaseView(props: { balance: BillingBalance; purchaseResult: P
     return h(
         Box,
         { flexDirection: "column", marginTop: SPACE.tight, ...panel("warning") },
-        h(Text, { bold: true, color: theme.warning }, `Cobrança pendente — ${balance.pendingPurchaseTokens ? `${balance.pendingPurchaseTokens.toLocaleString("pt-BR")} tokens` : "aguardando pagamento"}`),
+        h(Text, { bold: true, color: theme.warning }, `Cobrança pendente — ${balance.pendingPurchaseBrl ? formatMoney(balance.pendingPurchaseBrl) : "aguardando pagamento"}`),
         purchaseResult?.pixPayload
             ? h(Box, { flexDirection: "column", marginTop: SPACE.tight }, h(Text, { color: theme.textMuted }, "PIX (escaneie ou copie o código abaixo):"), h(Text, null, renderQrAscii(purchaseResult.pixPayload)))
             : null,
