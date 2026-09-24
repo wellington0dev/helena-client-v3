@@ -62,6 +62,17 @@ export function measureHistoryItem(item: HistoryItem, columns: number): number {
     return countWrappedLines(`Helena: ${renderMarkdownAnsi(item.text)}`, boxWidth) + boxPadding + 1;
 }
 
+/**
+ * Bolha da resposta "ainda carregando" (DraftBubble em app.ts): texto que já chegou em stream (se houver) + linha do
+ * spinner com o que a Helena está fazendo. Mesmas caixas/paddings da mensagem da Helena.
+ */
+export function measureDraftBubble(draft: string, status: string, columns: number): number {
+    const boxWidth = columns - 2 * MESSAGE_PADDING_X;
+    const textRows = draft ? countWrappedLines(`Helena: ${renderMarkdownAnsi(draft)}`, boxWidth) : 0;
+    // Spinner (1 col) + gap (1) antes do texto do Loader.
+    return textRows + countWrappedLines(status, boxWidth - 2) + 2 * MESSAGE_PADDING_Y + 1;
+}
+
 export interface VisibleSlice {
     index: number;
     /** Linhas do item escondidas ACIMA da janela (0 = começa inteiro). */

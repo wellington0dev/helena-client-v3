@@ -29,11 +29,13 @@ export interface AgentPlan {
 }
 
 export type ChatProgressEvent =
-    | { type: "turn_start"; sessionId?: string; at: string }
-    | { type: "tool_call"; sessionId?: string; tool: string; input?: unknown; at: string }
+    | { type: "turn_start"; sessionId?: string; turnId?: string; at: string }
+    | { type: "tool_call"; sessionId?: string; turnId?: string; tool: string; input?: unknown; at: string }
+    /** Pedaço da resposta em tempo real — só chega pro turno que ESTE cliente mandou com `turnId` (ver backend ChatService#streamOptions). */
+    | { type: "text_delta"; sessionId?: string; turnId: string; text: string; at: string }
     | { type: "tool_stream"; sessionId?: string; tool: string; stdoutChunk?: string; stderrChunk?: string; at: string }
-    | { type: "turn_end"; sessionId?: string; at: string }
-    | { type: "turn_error"; sessionId?: string; message: string; at: string }
+    | { type: "turn_end"; sessionId?: string; turnId?: string; at: string }
+    | { type: "turn_error"; sessionId?: string; turnId?: string; message: string; at: string }
     /** Conclusão de um comando `shell` rodado com `background:true` — ver ShellJobNotifierService no backend-v2. */
     | { type: "job_done"; jobId: string; ok: boolean; summary: string; at: string }
     /** Plano do agent criado/atualizado — permite painel visual no TUI. */

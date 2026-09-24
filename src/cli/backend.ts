@@ -97,26 +97,31 @@ export interface SendMessageInput {
     sessionId?: string;
     cwd?: string;
     machineName?: string;
+    /** Id do turno (gerado aqui) — volta nos eventos de progresso e liga o streaming do texto. */
+    turnId?: string;
+}
+
+/**
+ * POST que tolera backend ANTIGO sem `turnId` (2026-09-24): o ValidationPipe tem `forbidNonWhitelisted`, então um
+ * backend de antes do streaming responde 400 "property turnId should not exist" — reenvia sem o campo (só perde o
+ * streaming do texto). Nada foi executado no primeiro envio: a validação roda antes do controller.
+ */
+async function postWithTurnId(url: string, token: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<Response> {
+    const post = (payload: Record<string, unknown>) =>
+        fetch(url, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(payload), signal });
+    const response = await post(body);
+    if (response.status !== 400 || body.turnId === undefined) return response;
+    if (!(await response.clone().text()).includes("turnId")) return response;
+    const { turnId: _dropped, ...withoutTurnId } = body;
+    return post(withoutTurnId);
 }
 
 export async function sendMessage(baseUrl: string, token: string, input: SendMessageInput, signal?: AbortSignal): Promise<SendMessageResult> {
-    const response = await fetch(`${baseUrl}/chat/messages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify(input),
-        signal,
-    });
-    return parseOrThrow<SendMessageResult>(response);
+    return parseOrThrow<SendMessageResult>(await postWithTurnId(`${baseUrl}/chat/messages`, token, { ...input }, signal));
 }
 
-export async function resolveInterrupt(baseUrl: string, token: string, sessionId: string, tool: string, ref: string | undefined, approved: boolean, reason?: string, remember?: boolean, signal?: AbortSignal): Promise<SendMessageResult> {
-    const response = await fetch(`${baseUrl}/chat/sessions/${sessionId}/resolve`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ tool, ref, approved, reason, remember }),
-        signal,
-    });
-    return parseOrThrow<SendMessageResult>(response);
+export async function resolveInterrupt(baseUrl: string, token: string, sessionId: string, tool: string, ref: string | undefined, approved: boolean, reason?: string, remember?: boolean, signal?: AbortSignal, turnId?: string): Promise<SendMessageResult> {
+    return parseOrThrow<SendMessageResult>(await postWithTurnId(`${baseUrl}/chat/sessions/${sessionId}/resolve`, token, { tool, ref, approved, reason, remember, turnId }, signal));
 }
 
 /**

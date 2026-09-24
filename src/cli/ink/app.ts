@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import React from "react";
 import { Box, Text, useInput, useWindowSize } from "ink";
 import TextInput from "./text-input.ts";
@@ -37,7 +38,7 @@ import { spendingLines, type SpendingInfo } from "./sidebar-spending.ts";
 import { historyItem, noticeItem, toolCallItem, toolResultItem, type HistoryItem } from "./history-item.ts";
 import { connectProgress, type ChatProgressEvent, type AgentPlan, type PlanStep } from "./progress-client.ts";
 import { renderMarkdownAnsi } from "./render-markdown.ts";
-import { countWrappedLines, fitLines, measureHistoryItem, pageDown, pageUp } from "./viewport.ts";
+import { countWrappedLines, fitLines, measureDraftBubble, measureHistoryItem, pageDown, pageUp } from "./viewport.ts";
 import { Banner } from "./banner.ts";
 import { bg, c, theme, panel, MESSAGE_PADDING_X, MESSAGE_PADDING_Y, SPACE } from "./theme.ts";
 
@@ -105,6 +106,20 @@ function HistoryLine({ item }: { item: HistoryItem }): React.ReactElement {
     return h(Box, box(bg.helena), h(Text, null, c.accent.bold("Helena:"), " ", renderMarkdownAnsi(item.text)));
 }
 
+/**
+ * Resposta "ainda carregando" (2026-09-24) — no lugar da antiga linha de status embaixo do input: uma bolha da Helena
+ * no fim do histórico, com o texto que já chegou em stream (`text_delta`) e o spinner dizendo o que ela está fazendo.
+ * `measureDraftBubble` (viewport.ts) mede com os mesmos paddings; mudou aqui, muda lá.
+ */
+function DraftBubble({ draft, status }: { draft: string; status: string }): React.ReactElement {
+    return h(
+        Box,
+        { flexDirection: "column", marginBottom: SPACE.tight, backgroundColor: bg.helena, paddingX: MESSAGE_PADDING_X, paddingY: MESSAGE_PADDING_Y },
+        draft ? h(Text, null, c.accent.bold("Helena:"), " ", renderMarkdownAnsi(draft)) : null,
+        h(Loader, { text: status }),
+    );
+}
+
 /** Painel visual do plano do agent (create_plan / update_plan_step) — mostra título, descrição e steps com status. */
 function PlanPanel({ plan }: { plan: AgentPlan | null }): React.ReactElement | null {
     if (!plan) return null;
@@ -159,15 +174,6 @@ function measurePlanPanel(plan: AgentPlan | null, columns: number): number {
         if (step.error) total += countWrappedLines(`Erro: ${step.error}`, inner);
     }
     return total;
-}
-
-function StatusLine({ text }: { text: string }): React.ReactElement {
-    return h(Loader, { text });
-}
-
-/** "❯"/spinner + `gap:1` comem ~3 colunas antes do texto de verdade — subtrai como margem de segurança (superestimar é seguro, ver viewport.ts). */
-function measureStatusLine(text: string, columns: number): number {
-    return countWrappedLines(text, columns - 3);
 }
 
 function Composer(props: { value: string; onChange: (v: string) => void; onSubmit: (v: string) => void; disabled: boolean; resetKey: number }): React.ReactElement {
@@ -372,6 +378,9 @@ export function App(props: AppProps): React.ReactElement {
     const [inputValue, setInputValue] = React.useState("");
     const [sending, setSending] = React.useState(false);
     const [statusLine, setStatusLine] = React.useState("Helena está pensando...");
+    // Texto da resposta chegando em stream (só do turno `turnIdRef` — ver evento text_delta); some quando a resposta final chega.
+    const [draft, setDraft] = React.useState("");
+    const turnIdRef = React.useRef<string | undefined>(undefined);
     const [pending, setPending] = React.useState<PendingConfirmation | undefined>(undefined);
     const [error, setError] = React.useState<string | undefined>(undefined);
     const [activePlan, setActivePlan] = React.useState<AgentPlan | null>(null);
@@ -541,7 +550,8 @@ export function App(props: AppProps): React.ReactElement {
     // seguro (sobra uma linha em branco); subestimar faz o conteúdo
     // estourar `rows` e o buffer alternativo ROLAR — sem scrollback, isso
     // é conteúdo perdido de vez (ver viewport.ts).
-    const liveRegionRows = pending ? measurePermissionDialog(pending, mainColumns) : sending ? measureStatusLine(statusLine, mainColumns) : measureComposer(inputValue, mainColumns);
+    // Enquanto a Helena responde, o input continua no lugar (desativado) — o "carregando" virou a bolha DraftBubble.
+    const liveRegionRows = pending ? measurePermissionDialog(pending, mainColumns) : measureComposer(inputValue, mainColumns);
     const chromeRows =
         measurePlanPanel(activePlan, mainColumns) +
         (error ? countWrappedLines(`[erro] ${error}`, mainColumns) : 0) +
@@ -553,7 +563,9 @@ export function App(props: AppProps): React.ReactElement {
     const availableHistoryRows = Math.max(1, usableRows - chromeRows);
 
     const historyHeights = React.useMemo(() => history.map((item) => measureHistoryItem(item, mainColumns)), [history, mainColumns]);
-    const view = fitLines(historyHeights, availableHistoryRows, scrollAnchor);
+    const showDraft = sending && !pending;
+    const draftHeight = React.useMemo(() => measureDraftBubble(draft, statusLine, mainColumns), [draft, statusLine, mainColumns]);
+    const view = fitLines(showDraft ? [...historyHeights, draftHeight] : historyHeights, availableHistoryRows, scrollAnchor);
     const { canScrollUp, canScrollDown } = view;
 
     // Refs pra ler o valor ATUAL de dentro do callback do WS (que só é
@@ -576,8 +588,16 @@ export function App(props: AppProps): React.ReactElement {
             // (shell background),
             // nunca ligado a "sending" daqui: têm que aparecer mesmo sem o
             // dono ter acabado de mandar mensagem nenhuma.
-            if (event.type === "tool_call") {
+            // Evento com turnId de OUTRO turno (painel web ao mesmo tempo, turno abandonado com Ctrl+C) nunca mexe nesta tela.
+            if ("turnId" in event && event.turnId && event.turnId !== turnIdRef.current) return;
+            if (event.type === "text_delta") {
                 if (!sendingRef.current) return;
+                setDraft((prev) => prev + event.text);
+                setStatusLine("Helena está escrevendo...");
+            } else if (event.type === "tool_call") {
+                if (!sendingRef.current) return;
+                // Texto antes de uma ferramenta é "vou fazer X" — a resposta de verdade vem depois; recomeça o rascunho.
+                setDraft("");
                 // Vira uma entrada PERMANENTE do histórico na hora (padrão Claude Code) — antes só
                 // sobrescrevia a linha de status, que sumia sem deixar rastro assim que o turno acabava.
                 setHistory((prev) => [...prev, toolCallItem(event.tool, event.input)]);
@@ -727,14 +747,18 @@ export function App(props: AppProps): React.ReactElement {
         { isActive: screen === "chat" && !paletteOpen },
     );
 
-    async function runTurn(action: (signal: AbortSignal) => Promise<SendMessageResult>): Promise<void> {
+    async function runTurn(action: (signal: AbortSignal, turnId: string) => Promise<SendMessageResult>): Promise<void> {
         const controller = new AbortController();
         abortRef.current = controller;
+        const turnId = randomUUID();
+        turnIdRef.current = turnId;
+        setDraft("");
+        setScrollAnchor(null); // mandou mensagem → volta pro fim, onde a resposta vai aparecer
         setSending(true);
         setStatusLine("Helena está pensando...");
         setError(undefined);
         try {
-            const result = await action(controller.signal);
+            const result = await action(controller.signal, turnId);
             setSessionId(result.sessionId);
             // Resultado de tool só existe DEPOIS que o turno inteiro termina (ver toolActivity em backend.ts)
             // — entra em lote aqui, depois de todas as chamadas ao vivo já mostradas, antes da resposta final.
@@ -762,6 +786,9 @@ export function App(props: AppProps): React.ReactElement {
             }
             setError(err instanceof Error ? err.message : String(err));
         } finally {
+            // Rascunho sai junto com a entrada da resposta final no histórico (mesmo lote de render) — a final é a fonte de verdade.
+            setDraft("");
+            if (turnIdRef.current === turnId) turnIdRef.current = undefined;
             setSending(false);
             if (abortRef.current === controller) abortRef.current = undefined;
         }
@@ -882,7 +909,7 @@ export function App(props: AppProps): React.ReactElement {
             return;
         }
         setHistory((prev) => [...prev, historyItem("user", trimmed)]);
-        void runTurn((signal) => sendMessage(backendUrl, token, { text: trimmed, sessionId, cwd: invocationCwd, machineName }, signal));
+        void runTurn((signal, turnId) => sendMessage(backendUrl, token, { text: trimmed, sessionId, cwd: invocationCwd, machineName, turnId }, signal));
     }
 
     function handleConfirmation(decision: PermissionDecision): void {
@@ -892,7 +919,7 @@ export function App(props: AppProps): React.ReactElement {
         const approved = decision !== "reject";
         setPending(undefined);
         // "só desta vez" manda remember:false (o backend NÃO grava o comando); "sempre permitir" manda true.
-        void runTurn((signal) => resolveInterrupt(backendUrl, token, activeSessionId, current.tool, current.ref, approved, approved ? undefined : "Recusado pelo usuário no CLI.", approved ? decision === "always" : undefined, signal));
+        void runTurn((signal, turnId) => resolveInterrupt(backendUrl, token, activeSessionId, current.tool, current.ref, approved, approved ? undefined : "Recusado pelo usuário no CLI.", approved ? decision === "always" : undefined, signal, turnId));
     }
 
     const onUnauthorized = () => onDone({ type: "relogin", history: historyRef.current, sessionId: sessionIdRef.current });
@@ -951,8 +978,7 @@ export function App(props: AppProps): React.ReactElement {
 
     let liveRegion: React.ReactElement;
     if (pending) liveRegion = h(PermissionDialog, { pending, onAnswer: handleConfirmation });
-    else if (sending) liveRegion = h(StatusLine, { text: statusLine });
-    else liveRegion = h(Composer, { value: inputValue, onChange: handleInputChange, onSubmit: handleSubmit, disabled: screen === "settings" || paletteOpen, resetKey: composerResetKey });
+    else liveRegion = h(Composer, { value: inputValue, onChange: handleInputChange, onSubmit: handleSubmit, disabled: sending || screen === "settings" || paletteOpen, resetKey: composerResetKey });
 
     const chat = h(
         Box,
@@ -969,9 +995,14 @@ export function App(props: AppProps): React.ReactElement {
         h(
             Box,
             { flexDirection: "column", flexGrow: 1 },
-            ...view.items.map(({ index, clipTop, rows }) =>
-                h(Box, { key: history[index]!.id, height: rows, overflow: "hidden", flexDirection: "column", flexShrink: 0 }, h(Box, { marginTop: -clipTop, flexDirection: "column", flexShrink: 0 }, h(HistoryLine, { item: history[index]! }))),
-            ),
+            ...view.items.map(({ index, clipTop, rows }) => {
+                const isDraft = index === history.length; // item extra no fim quando showDraft
+                return h(
+                    Box,
+                    { key: isDraft ? "draft" : history[index]!.id, height: rows, overflow: "hidden", flexDirection: "column", flexShrink: 0 },
+                    h(Box, { marginTop: -clipTop, flexDirection: "column", flexShrink: 0 }, isDraft ? h(DraftBubble, { draft, status: statusLine }) : h(HistoryLine, { item: history[index]! })),
+                );
+            }),
         ),
         h(Text, { color: theme.textMuted }, exitHint ? "Pressione Ctrl+C de novo para sair" : scrollHintText(canScrollUp, canScrollDown)),
         h(PlanPanel, { plan: activePlan }),

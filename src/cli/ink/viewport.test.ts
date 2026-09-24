@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { countWrappedLines, fitLines, pageDown, pageUp } from "./viewport.ts";
+import { countWrappedLines, fitLines, measureDraftBubble, pageDown, pageUp } from "./viewport.ts";
 
 const shown = (r: ReturnType<typeof fitLines>) => r.items.map((i) => [i.index, i.clipTop, i.rows]);
 
@@ -99,4 +99,12 @@ test("measureHistoryItem: caixas descontam o padding lateral da largura (texto q
     const overflows = { id: "2", role: "user", text: "x".repeat(usable - 5) } as never;
     assert.equal(measureHistoryItem(fits, 40), 1 + 2 * MESSAGE_PADDING_Y + 1);
     assert.equal(measureHistoryItem(overflows, 40), 2 + 2 * MESSAGE_PADDING_Y + 1);
+});
+
+test("measureDraftBubble: sem texto ainda = só a linha do spinner dentro da bolha; com texto soma as linhas dele", () => {
+    // paddingY 1 em cima + 1 embaixo + 1 de margem = 3 linhas fixas
+    assert.equal(measureDraftBubble("", "Helena está pensando...", 80), 1 + 3);
+    assert.equal(measureDraftBubble("oi", "Helena está escrevendo...", 80), 2 + 3);
+    // markdown pela metade (stream) nunca lança
+    assert.ok(measureDraftBubble("```js\nconst a = 1\n**negrito", "x", 40) >= 4);
 });

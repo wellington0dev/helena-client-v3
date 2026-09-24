@@ -128,3 +128,30 @@ test("resolveInterrupt: manda tool/ref/approved/reason pro endpoint certo", asyn
     // OMITE essas chaves (não vira `null`), então nem aparecem no body real.
     assert.deepEqual(capturedBody, { tool: "shell", approved: true });
 });
+
+test("sendMessage: backend ANTIGO recusa turnId (400 forbidNonWhitelisted) → reenvia sem o campo, uma vez só", async () => {
+    const bodies: any[] = [];
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+        const body = JSON.parse(init?.body as string);
+        bodies.push(body);
+        if ("turnId" in body) return new Response(JSON.stringify({ statusCode: 400, message: ["property turnId should not exist"] }), { status: 400 });
+        return new Response(JSON.stringify({ sessionId: "s1", text: "ok" }), { status: 201 });
+    }) as typeof fetch;
+
+    const out = await sendMessage("http://127.0.0.1:4001", "jwt", { text: "oi", turnId: "t1" });
+
+    assert.equal(out.text, "ok");
+    assert.equal(bodies.length, 2);
+    assert.equal(bodies[1].turnId, undefined);
+});
+
+test("sendMessage: outro 400 (não é o turnId) NÃO reenvia — propaga o erro real", async () => {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+        calls++;
+        return new Response(JSON.stringify({ statusCode: 400, message: ["text must be longer than or equal to 1 characters"] }), { status: 400 });
+    }) as typeof fetch;
+
+    await assert.rejects(() => sendMessage("http://127.0.0.1:4001", "jwt", { text: "", turnId: "t1" }));
+    assert.equal(calls, 1);
+});
