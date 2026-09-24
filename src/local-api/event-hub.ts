@@ -25,7 +25,7 @@ export interface EventHub {
 
 export function createEventHub(options: { bufferSize?: number; keepTypes?: string[] } = {}): EventHub {
     const bufferSize = options.bufferSize ?? 100;
-    const keepTypes = new Set(options.keepTypes ?? ["job_done", "project_event", "session.expired"]);
+    const keepTypes = new Set(options.keepTypes ?? ["job_done", "session.expired"]);
     const states: Record<string, unknown> = {};
     const listeners = new Set<Listener>();
     const buffer: HubEvent[] = [];

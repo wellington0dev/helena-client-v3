@@ -12,8 +12,6 @@ export const BACKEND_ALLOWLIST = [
     "billing",
     "payments",
     "dashboard",
-    "projects",
-    "agent-personas",
     "telemetry",
     "feedback",
     "auth/me", // cobre auth/me e auth/me/* (preferências, owner-identity)

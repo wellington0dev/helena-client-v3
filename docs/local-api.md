@@ -24,7 +24,7 @@ daemon guarda o JWT do usuário e o token de dispositivo e fala com o backend. S
 | `GET /v1/session/me` | `GET /auth/me` do backend |
 | `POST /v1/chat/messages` | `POST /chat/messages`; injeta `machineName` (hostname) se a TUI não mandar |
 | `POST /v1/chat/sessions/:id/resolve`, `GET /v1/chat/sessions`, `GET /v1/chat/sessions/:id/history?limit&offset` | passagem 1:1 a `/chat/*` (query preservada) |
-| `ANY /v1/backend/<prefixo>/*` | passagem autenticada; **allowlist**: `contacts`, `mcp-connections`, `billing`, `payments`, `dashboard`, `projects`, `agent-personas`, `telemetry`, `feedback`, `auth/me`, `auth/api-tokens`. Nunca repassa `Authorization`/`Cookie` do chamador; corpo ≤ 1 MB (413); rejeita `..`, `//`, `\` |
+| `ANY /v1/backend/<prefixo>/*` | passagem autenticada; **allowlist**: `contacts`, `mcp-connections`, `billing`, `payments`, `dashboard`, `telemetry`, `feedback`, `auth/me`, `auth/api-tokens`, `auth/sessions`. Nunca repassa `Authorization`/`Cookie` do chamador; corpo ≤ 1 MB (413); rejeita `..`, `//`, `\` |
 | `GET /v1/events` (WS) | ao conectar: `{type:"hello"}` e `{type:"state", data:{channels, session, backend…}}`; depois cada evento `{id, ts, type, data}`. `?since=<id>` reenvia o que foi perdido (`job_done`, `project_event`, `session.expired`) com `replayed:true` |
 | `GET /v1/channels` | estado dos canais (`whatsapp` com `qrText`, `telegram` com `tokenSet`, `machineAgent`) |
 | `POST /v1/channels/whatsapp/{start,stop,logout}` · `POST /v1/channels/telegram/{start,stop}` | ações. `logout` do WhatsApp desvincula o aparelho e apaga o auth local (próximo `start` pede QR novo); `stop`/`start` preservam a sessão |
@@ -38,7 +38,7 @@ daemon guarda o JWT do usuário e o token de dispositivo e fala com o backend. S
 
 ### Eventos do hub
 `state.channels` (WhatsApp/Telegram/máquina, inclui QR), `state.session`, `state.backend` (`ok|down|unauth`),
-`chat.progress` (`turn_start`, `tool_call`, `turn_end`, `turn_error`, `job_done`, `project_event`, `project_step` —
+`chat.progress` (`turn_start`, `tool_call`, `turn_end`, `turn_error`, `job_done` —
 vindos de **uma única** conexão `/ws/chat-progress`, com reconexão por backoff), `session.expired` (o backend
 devolveu 401: a TUI pede login de novo sem perder a tela).
 

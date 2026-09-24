@@ -42,7 +42,7 @@ export function startProgressUpstream(options: ProgressUpstreamOptions): { stop(
                 const event = JSON.parse(String(raw)) as { type?: string };
                 hub.publish("chat.progress", event);
                 // eventos de fim de tarefa também viram tipos próprios (entram no buffer de "perdidos")
-                if (event.type === "job_done" || event.type === "project_event") hub.publish(event.type, event);
+                if (event.type === "job_done") hub.publish(event.type, event);
             } catch {
                 // frame inválido: ignora.
             }

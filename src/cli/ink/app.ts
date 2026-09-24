@@ -25,7 +25,6 @@ import { ChannelsScreen } from "./channels-screen.ts";
 import { ContactsScreen } from "./contacts-screen.ts";
 import { McpScreen } from "./mcp-screen.ts";
 import { BillingScreen } from "./billing-screen.ts";
-import { ProjectsScreen } from "./projects-screen.ts";
 import { UsageScreen } from "./usage-screen.ts";
 import { TelemetryScreen } from "./telemetry-screen.ts";
 import { config } from "../../config.ts";
@@ -33,7 +32,6 @@ import { formatToolCall, formatToolResult } from "./format-tool-call.ts";
 import { formatUsageLine } from "./format-usage.ts";
 import { historyItem, noticeItem, toolCallItem, toolResultItem, usageItem, type HistoryItem } from "./history-item.ts";
 import { connectProgress, type ChatProgressEvent, type AgentPlan, type PlanStep } from "./progress-client.ts";
-import { formatProjectChecklist, formatProjectSummary, type ProjectStepsByRole } from "./project-progress.ts";
 import { renderMarkdownAnsi } from "./render-markdown.ts";
 import { countWrappedLines, fitToViewport, measureHistoryItem } from "./viewport.ts";
 import { Banner } from "./banner.ts";
@@ -104,37 +102,6 @@ function HistoryLine({ item }: { item: HistoryItem }): React.ReactElement {
     }
     // Helena: também inline (rótulo + resposta na mesma linha; o markdown segue quebrando em várias linhas normalmente).
     return h(Box, box(bg.helena), h(Text, null, c.accent.bold("Helena:"), " ", renderMarkdownAnsi(item.text)));
-}
-
-/** Checklist ao vivo de Project(s) da equipe de dev em andamento — some sozinho quando o Project termina (o resultado final vira um item "notice" permanente no histórico, ver ChatProgressEvent#project_event). Raramente mais de um Project por vez, mas o Map suporta. */
-function ProjectProgressPanel({ projectSteps }: { projectSteps: Map<string, ProjectStepsByRole> }): React.ReactElement | null {
-    if (projectSteps.size === 0) return null;
-
-    return h(
-        Box,
-        { flexDirection: "column", marginBottom: SPACE.tight },
-        ...[...projectSteps.entries()].map(([projectId, steps]) =>
-            h(
-                Box,
-                { key: projectId, flexDirection: "column", ...panel("border") },
-                h(Text, { color: theme.primary, bold: true }, `Equipe de dev — ${formatProjectSummary(steps)}`),
-                ...formatProjectChecklist(steps).map((line, i) => h(Text, { key: i, color: line.startsWith("○") ? theme.textMuted : undefined }, line)),
-            ),
-        ),
-    );
-}
-
-/** Espelha em LINHAS o que `ProjectProgressPanel` desenha — mesmo texto, mesma largura efetiva (`paddingX:1` tira 2 colunas), pra reservar orçamento certo pro histórico (ver `fitToViewport` em app()). */
-function measureProjectPanel(projectSteps: Map<string, ProjectStepsByRole>, columns: number): number {
-    if (projectSteps.size === 0) return 0;
-    const inner = columns - 2;
-    let total = 1; // marginBottom do container externo
-    for (const steps of projectSteps.values()) {
-        total += 2; // borda round (topo + base)
-        total += countWrappedLines(`Equipe de dev — ${formatProjectSummary(steps)}`, inner);
-        for (const line of formatProjectChecklist(steps)) total += countWrappedLines(line, inner);
-    }
-    return total;
 }
 
 /** Painel visual do plano do agent (create_plan / update_plan_step) — mostra título, descrição e steps com status. */
@@ -390,7 +357,6 @@ export function App(props: AppProps): React.ReactElement {
     const [statusLine, setStatusLine] = React.useState("Helena está pensando...");
     const [pending, setPending] = React.useState<PendingConfirmation | undefined>(undefined);
     const [error, setError] = React.useState<string | undefined>(undefined);
-    const [projectSteps, setProjectSteps] = React.useState<Map<string, ProjectStepsByRole>>(new Map());
     const [activePlan, setActivePlan] = React.useState<AgentPlan | null>(null);
     const [screen, setScreen] = React.useState<Screen>("chat");
     // Tela aberta a partir do menu de configurações volta pra ele ao apertar Esc (e não pro chat).
@@ -401,7 +367,7 @@ export function App(props: AppProps): React.ReactElement {
     }
     function openFromSettings(target: SettingsTarget): void {
         setReturnTo("settings");
-        setScreen(({ tokens: "config", permissions: "permissions", usage: "usage", billing: "billing", contacts: "contacts", mcp: "mcp", channels: "channels", projects: "projects", sessions: "sessions", "telemetry-logs": "telemetry" } as const)[target]);
+        setScreen(({ tokens: "config", permissions: "permissions", usage: "usage", billing: "billing", contacts: "contacts", mcp: "mcp", channels: "channels", sessions: "sessions", "telemetry-logs": "telemetry" } as const)[target]);
     }
     const [commandMenuIndex, setCommandMenuIndex] = React.useState(0);
     // Paleta de comandos (Ctrl+P) — modal sobre o chat, mesmo padrão do menu de configurações (`screen === "settings"`
@@ -529,14 +495,13 @@ export function App(props: AppProps): React.ReactElement {
     }, [commandQuery]);
 
     // Orçamento de linhas pro histórico = tela útil MENOS tudo o mais que
-    // aparece embaixo dele (painel de projects, erro, composer/status/
+    // aparece embaixo dele (painel do plano, erro, composer/status/
     // confirmação, menu de comando, dica de rolagem). Superestimar aqui é
     // seguro (sobra uma linha em branco); subestimar faz o conteúdo
     // estourar `rows` e o buffer alternativo ROLAR — sem scrollback, isso
     // é conteúdo perdido de vez (ver viewport.ts).
     const liveRegionRows = pending ? measurePermissionDialog(pending, mainColumns) : sending ? measureStatusLine(statusLine, mainColumns) : measureComposer(inputValue, mainColumns);
     const chromeRows =
-        measureProjectPanel(projectSteps, mainColumns) +
         measurePlanPanel(activePlan, mainColumns) +
         (error ? countWrappedLines(`[erro] ${error}`, mainColumns) : 0) +
         liveRegionRows +
@@ -561,20 +526,14 @@ export function App(props: AppProps): React.ReactElement {
     const sendingRef = React.useRef(sending);
     sendingRef.current = sending;
 
-    // Guarda o HUB (não só a inscrição) — telas específicas (detalhe de um
-    // Project) leem `subscribeProgress` (estável, ver useCallback abaixo)
-    // pra assinar os MESMOS eventos sem abrir outro WebSocket.
-    const progressHubRef = React.useRef<ReturnType<typeof connectProgress> | undefined>(undefined);
-    const subscribeProgress = React.useCallback((fn: (event: ChatProgressEvent) => void) => progressHubRef.current?.subscribe(fn) ?? (() => {}), []);
 
     React.useEffect(() => {
         const hub = connectProgress(backendUrl, token);
-        progressHubRef.current = hub;
         const unsubscribe = hub.subscribe((event: ChatProgressEvent) => {
             // tool_call/turn_start/tool_stream só fazem sentido DENTRO de um turno que ESTE
             // cliente disparou (senão vira ruído de um turno de outra sessão/
-            // dispositivo) — mas project_step/project_event/job_done são
-            // trabalho em SEGUNDO PLANO (equipe de dev, shell background),
+            // dispositivo) — mas job_done é trabalho em SEGUNDO PLANO
+            // (shell background),
             // nunca ligado a "sending" daqui: têm que aparecer mesmo sem o
             // dono ter acabado de mandar mensagem nenhuma.
             if (event.type === "tool_call") {
@@ -600,22 +559,6 @@ export function App(props: AppProps): React.ReactElement {
             } else if (event.type === "turn_start") {
                 if (!sendingRef.current) return;
                 setStatusLine("Helena está pensando...");
-            } else if (event.type === "project_step") {
-                setProjectSteps((prev) => {
-                    const next = new Map(prev);
-                    next.set(event.projectId, { ...next.get(event.projectId), [event.role]: event.status });
-                    return next;
-                });
-            } else if (event.type === "project_event") {
-                setHistory((prev) => [...prev, noticeItem(event.summary, event.kind === "completed" ? "success" : "warn")]);
-                if (event.kind === "completed" || event.kind === "cancelled") {
-                    setProjectSteps((prev) => {
-                        if (!prev.has(event.projectId)) return prev;
-                        const next = new Map(prev);
-                        next.delete(event.projectId);
-                        return next;
-                    });
-                }
             } else if (event.type === "job_done") {
                 setHistory((prev) => [...prev, noticeItem(event.summary, event.ok ? "success" : "danger")]);
             } else if (event.type === "plan_created") {
@@ -643,7 +586,6 @@ export function App(props: AppProps): React.ReactElement {
         });
         return () => {
             unsubscribe();
-            progressHubRef.current = undefined;
             hub.close();
         };
     }, [backendUrl, token]);
@@ -955,9 +897,6 @@ export function App(props: AppProps): React.ReactElement {
     if (screen === "billing") {
         return fullScreen(h(BillingScreen, { backendUrl, token, onExit: leaveScreen, onUnauthorized }));
     }
-    if (screen === "projects") {
-        return fullScreen(h(ProjectsScreen, { backendUrl, token, onExit: leaveScreen, onUnauthorized, subscribeProgress }));
-    }
 
     const alerts: string[] = [];
     if (clientState) {
@@ -984,7 +923,6 @@ export function App(props: AppProps): React.ReactElement {
         // `usableRows` no total.
         h(Box, { flexDirection: "column", flexGrow: 1 }, ...visibleHistory.map((item) => h(HistoryLine, { key: item.id, item }))),
         h(Text, { color: theme.textMuted }, exitHint ? "Pressione Ctrl+C de novo para sair" : scrollHintText(canScrollUp, canScrollDown)),
-        h(ProjectProgressPanel, { projectSteps }),
         h(PlanPanel, { plan: activePlan }),
         error ? h(Text, { color: theme.danger }, `[erro] ${error}`) : null,
         liveRegion,

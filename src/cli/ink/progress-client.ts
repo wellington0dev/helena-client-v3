@@ -5,10 +5,6 @@
  * o Node 22, sem depender do pacote `ws`).
  */
 
-/** Livre desde a dinamização de papéis no backend-v2 (§14 do doc de arquitetura) — só "architect"/"designer"/"qa" têm significado especial; qualquer outro rótulo pode ter sido inventado na hora pela Helena/Arquiteta. */
-export type ProjectStepRole = string;
-export type ProjectStepStatus = "ready" | "running" | "done" | "failed";
-
 export type PlanStepStatus = "pending" | "in_progress" | "completed" | "failed" | "cancelled";
 
 export interface PlanStep {
@@ -40,10 +36,6 @@ export type ChatProgressEvent =
     | { type: "turn_error"; sessionId?: string; message: string; at: string }
     /** Conclusão de um comando `shell` rodado com `background:true` — ver ShellJobNotifierService no backend-v2. */
     | { type: "job_done"; jobId: string; ok: boolean; summary: string; at: string }
-    /** Marco de um Project da equipe de dev (pausou, concluiu) — ver ProjectEventNotifierService no backend-v2. */
-    | { type: "project_event"; projectId: string; kind: string; summary: string; at: string }
-    /** Progresso de UM step (mudou de status) — ver ProjectStepProgressNotifierService no backend-v2. */
-    | { type: "project_step"; projectId: string; role: ProjectStepRole; status: ProjectStepStatus; at: string }
     /** Plano do agent criado/atualizado — permite painel visual no TUI. */
     | { type: "plan_created"; plan: AgentPlan; at: string }
     | { type: "plan_updated"; planId: string; stepId: string; step: PlanStep | undefined; at: string }

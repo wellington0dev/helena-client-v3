@@ -9,7 +9,7 @@ import { theme } from "./theme.ts";
 const h = React.createElement;
 
 /** Para onde um item do tipo "link" leva (tela do chat que já existe). */
-export type SettingsTarget = "tokens" | "permissions" | "usage" | "billing" | "contacts" | "mcp" | "channels" | "projects" | "sessions" | "telemetry-logs";
+export type SettingsTarget = "tokens" | "permissions" | "usage" | "billing" | "contacts" | "mcp" | "channels" | "sessions" | "telemetry-logs";
 
 export interface SettingsModalProps {
     backendUrl: string;
@@ -38,7 +38,6 @@ export function buildSettingItems(me: CurrentUser | undefined, sidebarOn: boolea
         { id: "contacts", section: "Integrações", label: "Contatos", kind: "link", description: "Editar ou apagar contatos (WhatsApp/Telegram) e permissões extras." },
         { id: "mcp", section: "Integrações", label: "Conexões MCP", kind: "link", description: "Integrações de terceiros e o guia de como montar um servidor compatível." },
         { id: "channels", section: "Integrações", label: "Canais", kind: "link", description: "Status do WhatsApp, Telegram e da execução remota." },
-        { id: "projects", section: "Integrações", label: "Projetos", kind: "link", description: "Equipe de dev: criar, acompanhar, revisar e conversar com cada agente." },
         { id: "sessions", section: "Integrações", label: "Conversas recentes", kind: "link", description: "Retomar uma conversa anterior." },
     ];
 }
