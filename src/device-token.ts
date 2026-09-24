@@ -22,16 +22,21 @@ const DEVICE_TOKEN_PATH = path.join(os.homedir(), ".config", "helena", "device-t
 
 interface StoredDeviceToken {
     token: string;
+    /** Dono do token (`sub` do JWT que o provisionou) — ausente em arquivos gravados antes de 2026-09-24. Sem isso não dá pra saber se a máquina está vinculada à conta que acabou de logar (o backend só aceita JWT em /auth/me). */
+    userId?: string;
 }
 
-function readStoredToken(): string | undefined {
+export function readStoredDeviceToken(): StoredDeviceToken | undefined {
     try {
-        const raw = fs.readFileSync(DEVICE_TOKEN_PATH, "utf8");
-        const parsed = JSON.parse(raw) as StoredDeviceToken;
-        return parsed.token || undefined;
+        const parsed = JSON.parse(fs.readFileSync(DEVICE_TOKEN_PATH, "utf8")) as StoredDeviceToken;
+        return parsed.token ? parsed : undefined;
     } catch {
         return undefined;
     }
+}
+
+function readStoredToken(): string | undefined {
+    return readStoredDeviceToken()?.token;
 }
 
 /**
@@ -44,7 +49,7 @@ export function loadDeviceToken(): string | undefined {
     return readStoredToken() || process.env.BACKEND_V2_API_TOKEN || undefined;
 }
 
-export function saveDeviceToken(token: string): void {
+export function saveDeviceToken(token: string, userId?: string): void {
     fs.mkdirSync(path.dirname(DEVICE_TOKEN_PATH), { recursive: true });
-    fs.writeFileSync(DEVICE_TOKEN_PATH, JSON.stringify({ token } satisfies StoredDeviceToken), { mode: 0o600 });
+    fs.writeFileSync(DEVICE_TOKEN_PATH, JSON.stringify({ token, ...(userId && { userId }) } satisfies StoredDeviceToken), { mode: 0o600 });
 }

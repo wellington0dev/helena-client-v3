@@ -69,7 +69,12 @@ interface AgentExecBackgroundRequest {
     payload: unknown;
 }
 
-type AgentServerEvent = AgentExecRequest | AgentExecBackgroundRequest;
+/** Keepalive do gateway (machines.gateway.ts) — respondido com `{type: "pong"}`. */
+interface AgentPingMessage {
+    type: "ping";
+}
+
+type AgentServerEvent = AgentExecRequest | AgentExecBackgroundRequest | AgentPingMessage;
 
 const RECONNECT_DELAY_MS = 5_000;
 const TIMEOUT_MS = 30_000;
@@ -200,7 +205,12 @@ async function handleExecBackground(message: AgentExecBackgroundRequest): Promis
  * valor que o `helena` CLI calcula pra mandar como `machineName` no
  * contexto de chat, ver chat.controller.ts#cwd/machineName).
  */
+/** Para a instância anterior — chamar `startMachineAgent` de novo (token trocado no login, ver device-auth.ts) REINICIA em vez de abrir uma 2ª conexão; sem isso a antiga seguiria reconectando pra sempre com o token velho (na conta errada). */
+let stopCurrent: (() => void) | undefined;
+
 export function startMachineAgent(backendUrl: string, apiToken: string): void {
+    stopCurrent?.();
+    stopCurrent = undefined;
     if (!backendUrl || !apiToken) {
         updateMachineAgent({ status: "error", error: "BACKEND_V2_URL/BACKEND_V2_API_TOKEN não configurados no .env." });
         return;
@@ -208,28 +218,37 @@ export function startMachineAgent(backendUrl: string, apiToken: string): void {
 
     const machineName = os.hostname();
     const backendWsUrl = backendUrl.replace(/^http/, "ws");
+    let stopped = false;
+    let socket: WebSocket | undefined;
+    let reconnectTimer: NodeJS.Timeout | undefined;
+    stopCurrent = () => {
+        stopped = true;
+        clearTimeout(reconnectTimer);
+        socket?.close();
+    };
 
     function connect(): void {
+        if (stopped) return;
         updateMachineAgent({ status: "connecting", machineName, error: undefined });
         // Token por query string (não `Sec-WebSocket-Protocol`) — ver
         // machines.gateway.ts no backend-v2.
-        const socket = new WebSocket(`${backendWsUrl}/ws/agent?token=${encodeURIComponent(apiToken)}`);
+        const ws = new WebSocket(`${backendWsUrl}/ws/agent?token=${encodeURIComponent(apiToken)}`);
+        socket = ws;
 
-        socket.addEventListener("open", () => {
+        ws.addEventListener("open", () => {
             console.log(`[machine-agent] conectado a ${backendWsUrl} como "${machineName}" (capacidades: ${CAPABILITIES.join(", ")}).`);
             updateMachineAgent({ status: "connected", machineName, error: undefined });
-            socket.send(
-                JSON.stringify({
-                    type: "register",
-                    protocolVersion: PROTOCOL_VERSION,
-                    machineName,
-                    capabilities: CAPABILITIES,
-                    platform: process.platform,
-                } satisfies AgentRegisterMessage),
-            );
+            const registerMsg = {
+                type: "register",
+                protocolVersion: PROTOCOL_VERSION,
+                machineName,
+                capabilities: CAPABILITIES,
+                platform: process.platform,
+            } satisfies AgentRegisterMessage;
+            ws.send(JSON.stringify(registerMsg));
         });
 
-        socket.addEventListener("message", (event) => {
+        ws.addEventListener("message", (event) => {
             let message: AgentServerEvent;
             try {
                 message = JSON.parse(String(event.data));
@@ -238,8 +257,13 @@ export function startMachineAgent(backendUrl: string, apiToken: string): void {
                 void reportTelemetry("warn", `machine-agent: mensagem WS não é JSON válido (${err instanceof Error ? err.name : "erro"})`, { source: "machine-agent" });
                 return;
             }
+            // Keepalive: servidor manda ping, respondemos pong
+            if (message.type === "ping") {
+                ws.send(JSON.stringify({ type: "pong" }));
+                return;
+            }
             if (message.type === "exec") {
-                handleExec(message, socket).then((response) => socket.send(JSON.stringify(response)));
+                handleExec(message, ws).then((response) => ws.send(JSON.stringify(response)));
                 return;
             }
             if (message.type === "exec-background") {
@@ -247,16 +271,17 @@ export function startMachineAgent(backendUrl: string, apiToken: string): void {
                 // levar minutos; esperar aqui travaria este loop pra
                 // qualquer outra mensagem (inclusive um "exec" síncrono
                 // normal) enquanto ele roda.
-                handleExecBackground(message).then((response) => socket.send(JSON.stringify(response)));
+                handleExecBackground(message).then((response) => ws.send(JSON.stringify(response)));
             }
         });
 
-        socket.addEventListener("close", () => {
+        ws.addEventListener("close", () => {
+            if (stopped) return; // parado de propósito (reinício com token novo) — a instância nova já cuida do status
             updateMachineAgent({ status: "connecting", machineName });
-            setTimeout(connect, RECONNECT_DELAY_MS);
+            reconnectTimer = setTimeout(connect, RECONNECT_DELAY_MS);
         });
 
-        socket.addEventListener("error", (event) => {
+        ws.addEventListener("error", (event) => {
             const message = (event as ErrorEvent).message ?? String(event);
             console.error("[machine-agent] erro de conexão:", message);
             void reportTelemetry("warn", `machine-agent: erro de conexão WS — ${message}`, { source: "machine-agent" });

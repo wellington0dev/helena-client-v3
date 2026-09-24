@@ -109,6 +109,10 @@ startProgressUpstream({ backendUrl: config.backendUrl, hub, getToken: () => conf
 startWhatsapp();
 startTelegram();
 startMachineAgent(config.backendUrl, config.backendApiToken);
+// Já logado de antes (session.json)? Confere se o token da máquina é dessa conta e, se não for, provisiona e
+// reinicia o agente — quem já estava logado nunca precisa relogar pra máquina aparecer (ver device-auth.ts).
+const savedJwt = loadSession()?.accessToken;
+if (savedJwt) void ensureDeviceToken(savedJwt);
 startOutboundPoller();
 startMachineMetrics();
 
