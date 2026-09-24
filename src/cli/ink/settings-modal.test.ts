@@ -4,7 +4,7 @@ import type { CurrentUser } from "../backend.ts";
 import { buildSettingItems, type SettingsTarget } from "./settings-modal.ts";
 
 const me: CurrentUser = { id: "1", email: "a@b.c", role: "user", telemetryConsent: true, autoApproveShell: false, allowProactiveMessages: true, createdAt: "2026-01-01" };
-const TARGETS: SettingsTarget[] = ["tokens", "permissions", "usage", "billing", "limits", "contacts", "mcp", "channels", "sessions", "telemetry-logs"];
+const TARGETS: SettingsTarget[] = ["tokens", "permissions", "usage", "billing", "limits", "rules", "contacts", "mcp", "channels", "sessions", "telemetry-logs"];
 
 test("buildSettingItems: ids únicos e seções agrupadas (cada seção contígua, na ordem)", () => {
     const items = buildSettingItems(me, true);

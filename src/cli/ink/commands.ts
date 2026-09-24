@@ -12,7 +12,7 @@
  * Cobrança/Uso) só entram aqui quando a tela correspondente for entregue
  * — nunca um `/comando` morto aparecendo no `/help` antes de existir.
  */
-export type Screen = "chat" | "config" | "contacts" | "mcp" | "channels" | "usage" | "billing" | "limits" | "permissions" | "sessions" | "settings" | "telemetry";
+export type Screen = "chat" | "config" | "contacts" | "mcp" | "channels" | "usage" | "billing" | "limits" | "rules" | "permissions" | "sessions" | "settings" | "telemetry";
 
 export interface CommandContext {
     setScreen: (screen: Screen) => void;
@@ -84,6 +84,12 @@ export const COMMANDS: Command[] = [
         section: "Conta",
         description: "Limites de custo e de passos (tuas mensagens, contatos, grupos, tarefas) + como a cotação funciona",
         run: (ctx) => ctx.setScreen("limits"),
+    },
+    {
+        name: "regras",
+        section: "Conta",
+        description: "Regras de atendimento: o que contatos/grupos podem fazer pela Helena (agenda, recados, arquivos, integrações) e dados que ela nunca fornece",
+        run: (ctx) => ctx.setScreen("rules"),
     },
     {
         name: "sessoes",
