@@ -3,6 +3,8 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { randomUUID } from "crypto";
+import { config } from "./config.ts";
+import { checkPathAccess } from "./local-api/path-policy.ts";
 
 /**
  * Porta de cli/src/exec/shell.ts#runCommand (que por sua vez veio de
@@ -105,6 +107,14 @@ export function runCommandInternal(
     callbacks?: StreamCallbacks
 ): Promise<{ stdout: string; stderr: string; code: number | null }> {
     const spawnOpts = { cwd: expandHome(cwd) };
+
+    // Diretório de trabalho numa pasta protegida (~/.ssh, deniedPaths, fora de allowedDirs) é recusado (2026-09-24).
+    // Não é uma política de caminhos do COMANDO (shell não dá pra checar de forma confiável — por isso segue só do
+    // dono e com aprovação); só impede o atalho óbvio de "rodar dentro" de uma pasta protegida.
+    if (spawnOpts.cwd !== undefined) {
+        const check = checkPathAccess(path.resolve(spawnOpts.cwd), { allowedDirs: config.allowedDirs, deniedPaths: config.deniedPaths, extraDeniedDirs: [path.resolve(config.whatsappAuthDir)] });
+        if (!check.ok) return Promise.resolve({ stdout: "", stderr: `Acesso negado ao diretório de trabalho: ${check.reason}.`, code: null });
+    }
 
     // `cwd` inexistente ANTES do spawn — sem isso, vira "spawn /bin/sh ENOENT"
     // (o Node reporta a falha de chdir como se fosse o shell que não existe,

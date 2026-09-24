@@ -216,6 +216,12 @@ export function grepFiles(dirPath: string, pattern: string, filePattern?: string
     const fileRegex = filePattern ? safeRegex(filePattern) : undefined;
     if (filePattern && !fileRegex) return { matches: [], error: `Padrão de arquivo inválido: "${filePattern}"` };
 
+    // Política de arquivos (2026-09-24): antes grep NÃO passava pelo guard — `grep_files` em "~" devolvia linhas de
+    // `~/.ssh/*` e `.env` sem confirmação nenhuma (grep é comando "seguro"). Raiz e cada entrada passam pelo guard.
+    const root = resolvePath(dirPath);
+    const rootDenied = guard(root);
+    if (rootDenied) return { matches: [], error: rootDenied };
+
     const matches: GrepMatch[] = [];
 
     function walkGrep(dir: string): void {
@@ -230,6 +236,7 @@ export function grepFiles(dirPath: string, pattern: string, filePattern?: string
 
         for (const entry of entries) {
             if (matches.length >= MAX_GREP_RESULTS) return;
+            if (guard(path.join(dir, entry.name))) continue; // nunca entra nem lê o que a política protege
 
             if (entry.isDirectory()) {
                 if (IGNORED_DIR_NAMES.has(entry.name)) continue;
@@ -267,7 +274,7 @@ export function grepFiles(dirPath: string, pattern: string, filePattern?: string
         }
     }
 
-    walkGrep(resolvePath(dirPath));
+    walkGrep(root);
     return { matches };
 }
 
@@ -285,6 +292,11 @@ export function globFiles(dirPath: string, pattern: string): GlobResult {
     const regex = safeRegex(regexPattern);
     if (!regex) return { paths: [], error: `Padrão glob inválido: "${pattern}"` };
 
+    // Mesmo furo do grep (2026-09-24): glob listava nomes dentro de pastas protegidas.
+    const root = resolvePath(dirPath);
+    const rootDenied = guard(root);
+    if (rootDenied) return { paths: [], error: rootDenied };
+
     const results: string[] = [];
 
     function walkGlob(dir: string): void {
@@ -299,6 +311,7 @@ export function globFiles(dirPath: string, pattern: string): GlobResult {
 
         for (const entry of entries) {
             if (results.length >= MAX_SEARCH_RESULTS) return;
+            if (guard(path.join(dir, entry.name))) continue;
 
             if (entry.isDirectory()) {
                 if (IGNORED_DIR_NAMES.has(entry.name)) continue;
@@ -314,7 +327,7 @@ export function globFiles(dirPath: string, pattern: string): GlobResult {
         }
     }
 
-    walkGlob(resolvePath(dirPath));
+    walkGlob(root);
     return { paths: results };
 }
 
@@ -391,6 +404,9 @@ export function writeFile(filePath: string, edits: FileEdit[]): WriteFileResult 
  * das edições — sem aplicar as edições. Útil pra preview antes de confirmar.
  */
 export function previewDiff(filePath: string, edits: FileEdit[]): { diff: string; error?: string } {
+    // O diff MOSTRA o conteúdo original — sem guard, previewDiff lia qualquer arquivo protegido (2026-09-24).
+    const denied = guard(resolvePath(filePath));
+    if (denied) return { diff: "", error: denied };
     const replaceAll = edits.find((edit) => edit.type === "replace_all");
     if (replaceAll) {
         if (edits.length > 1) return { diff: "", error: "replace_all não pode ser combinado com outras edições." };
