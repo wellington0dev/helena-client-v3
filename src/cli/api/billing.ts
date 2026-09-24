@@ -43,3 +43,50 @@ export function setDefaultContactLimit(baseUrl: string, token: string, defaultMo
 export function cancelPendingPurchase(baseUrl: string, token: string): Promise<{ cancelled: boolean }> {
     return authed(baseUrl, token, "POST", "/billing/purchase/cancel");
 }
+
+export interface Bounds {
+    min: number;
+    max: number;
+}
+
+/** `GET /billing/limits` — limites de custo e de passos que o próprio dono configura, com as faixas válidas. Dinheiro em R$. */
+export interface LimitsView {
+    owner: { maxTurns: number; maxCostBrl: number | null };
+    contacts: { ratePerHour: number; groupRatePerHour: number; maxTurnsWithRules: number; defaultMonthlyLimitBrl: number };
+    tasks: { defaultBudgetBrl: number; maxSteps: number; maxConcurrent: number };
+    bounds: Record<"ownerMaxTurns" | "ownerMaxCostBrl" | "contactRatePerHour" | "groupRatePerHour" | "contactMaxTurnsWithRules" | "taskDefaultBudgetBrl" | "taskMaxSteps" | "taskMaxConcurrent", Bounds>;
+}
+
+export type LimitsPatch = Partial<{
+    ownerMaxTurns: number;
+    ownerMaxCostBrl: number | null;
+    contactRatePerHour: number;
+    groupRatePerHour: number;
+    contactMaxTurnsWithRules: number;
+    defaultContactMonthlyLimitBrl: number;
+    taskDefaultBudgetBrl: number;
+    taskMaxSteps: number;
+    taskMaxConcurrent: number;
+}>;
+
+/** `GET /billing/rate` — como a cotação funciona. `updatedAt` null = valor fixo (.env/padrão), nenhuma API respondeu ainda. */
+export interface RateInfo {
+    usdBrlRate: number;
+    source: string;
+    updatedAt: string | null;
+    refreshIntervalMinutes: number;
+    markup: number;
+    example: { source: "history" | "synthetic"; costBrl: number; messages?: number };
+}
+
+export function getLimits(baseUrl: string, token: string): Promise<LimitsView> {
+    return authed(baseUrl, token, "GET", "/billing/limits");
+}
+
+export function patchLimits(baseUrl: string, token: string, patch: LimitsPatch): Promise<LimitsView> {
+    return authed(baseUrl, token, "PATCH", "/billing/limits", patch);
+}
+
+export function getRateInfo(baseUrl: string, token: string): Promise<RateInfo> {
+    return authed(baseUrl, token, "GET", "/billing/rate");
+}
