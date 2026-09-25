@@ -76,7 +76,7 @@ export const COMMANDS: Command[] = [
     {
         name: "cobranca",
         section: "Conta",
-        description: "Saldo de tokens da plataforma, comprar mais",
+        description: "Créditos em R$ — saldo, comprar mais, limite mensal padrão dos contatos",
         run: (ctx) => ctx.setScreen("billing"),
     },
     {

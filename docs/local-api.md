@@ -25,7 +25,7 @@ daemon guarda o JWT do usuário e o token de dispositivo e fala com o backend. S
 | `POST /v1/chat/messages` | `POST /chat/messages`; injeta `machineName` (hostname) se a TUI não mandar |
 | `POST /v1/chat/sessions/:id/resolve`, `GET /v1/chat/sessions`, `GET /v1/chat/sessions/:id/history?limit&offset` | passagem 1:1 a `/chat/*` (query preservada) |
 | `ANY /v1/backend/<prefixo>/*` | passagem autenticada; **allowlist**: `contacts`, `mcp-connections`, `billing`, `payments`, `dashboard`, `telemetry`, `feedback`, `auth/me`, `auth/api-tokens`, `auth/sessions`. Nunca repassa `Authorization`/`Cookie` do chamador; corpo ≤ 1 MB (413); rejeita `..`, `//`, `\` |
-| `GET /v1/events` (WS) | ao conectar: `{type:"hello"}` e `{type:"state", data:{channels, session, backend…}}`; depois cada evento `{id, ts, type, data}`. `?since=<id>` reenvia o que foi perdido (`job_done`, `project_event`, `session.expired`) com `replayed:true` |
+| `GET /v1/events` (WS) | ao conectar: `{type:"hello"}` e `{type:"state", data:{channels, session, backend…}}`; depois cada evento `{id, ts, type, data}`. `?since=<id>` reenvia o que foi perdido (`job_done`, `session.expired`) com `replayed:true` |
 | `GET /v1/channels` | estado dos canais (`whatsapp` com `qrText`, `telegram` com `tokenSet`, `machineAgent`) |
 | `POST /v1/channels/whatsapp/{start,stop,logout}` · `POST /v1/channels/telegram/{start,stop}` | ações. `logout` do WhatsApp desvincula o aparelho e apaga o auth local (próximo `start` pede QR novo); `stop`/`start` preservam a sessão |
 | `PUT /v1/channels/telegram/token` `{token}` · `DELETE …/token` | grava/remove o token do bot (validado, **write-only**: nunca ecoado) e reinicia o Telegram |
@@ -38,8 +38,10 @@ daemon guarda o JWT do usuário e o token de dispositivo e fala com o backend. S
 
 ### Eventos do hub
 `state.channels` (WhatsApp/Telegram/máquina, inclui QR), `state.session`, `state.backend` (`ok|down|unauth`),
-`chat.progress` (`turn_start`, `tool_call`, `turn_end`, `turn_error`, `job_done` —
-vindos de **uma única** conexão `/ws/chat-progress`, com reconexão por backoff), `session.expired` (o backend
+`chat.progress` (todo evento do `/ws/chat-progress` do backend, repassado como veio: `turn_start`, `tool_call`,
+`tool_stream`, `text_delta`, `reasoning_delta`, `turn_end`, `turn_error`, `job_done`, `plan_*` — lista e campos em
+`docs/rest-api-reference.md` do `helena-bk-v3`; vêm de **uma única** conexão, com reconexão por backoff; só `job_done`
+entra no buffer de reenvio, streaming nunca), `session.expired` (o backend
 devolveu 401: a TUI pede login de novo sem perder a tela).
 
 ## Política de arquivos (capabilities `read_file`/`list_files`/`search_files`/`write_file`)
