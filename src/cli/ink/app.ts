@@ -38,7 +38,7 @@ import { spendingLines, type SpendingInfo } from "./sidebar-spending.ts";
 import { historyItem, noticeItem, toolCallItem, toolResultItem, type HistoryItem } from "./history-item.ts";
 import { connectProgress, type ChatProgressEvent, type AgentPlan, type PlanStep } from "./progress-client.ts";
 import { renderMarkdownAnsi } from "./render-markdown.ts";
-import { countWrappedLines, fitLines, measureDraftBubble, measureHistoryItem, pageDown, pageUp, scrollByLines } from "./viewport.ts";
+import { countWrappedLines, fitLines, measureDraftBubble, measureHistoryItem, pageDown, pageUp, scrollByLines, thinkingSnippet } from "./viewport.ts";
 import { Banner } from "./banner.ts";
 import { bg, c, theme, panel, MESSAGE_PADDING_X, MESSAGE_PADDING_Y, SPACE } from "./theme.ts";
 
@@ -111,12 +111,15 @@ function HistoryLine({ item }: { item: HistoryItem }): React.ReactElement {
  * no fim do histórico, com o texto que já chegou em stream (`text_delta`) e o spinner dizendo o que ela está fazendo.
  * `measureDraftBubble` (viewport.ts) mede com os mesmos paddings; mudou aqui, muda lá.
  */
-function DraftBubble({ draft, status }: { draft: string; status: string }): React.ReactElement {
+function DraftBubble({ draft, status, thinking, width }: { draft: string; status: string; thinking: string; width: number }): React.ReactElement {
+    // Enquanto não há texto, as últimas linhas do raciocínio (reasoning_delta) aparecem embaixo do spinner — some quando a resposta começa.
+    const snippet = draft ? [] : thinkingSnippet(thinking, width - 2 * MESSAGE_PADDING_X);
     return h(
         Box,
         { flexDirection: "column", marginBottom: SPACE.tight, backgroundColor: bg.helena, paddingX: MESSAGE_PADDING_X, paddingY: MESSAGE_PADDING_Y },
         draft ? h(Text, null, c.accent.bold("Helena:"), " ", renderMarkdownAnsi(draft)) : null,
         h(Loader, { text: status }),
+        ...snippet.map((line, i) => h(Text, { key: i, color: theme.textMuted, italic: true, wrap: "truncate" }, line)),
     );
 }
 
@@ -396,6 +399,7 @@ export function App(props: AppProps): React.ReactElement {
     const [statusLine, setStatusLine] = React.useState("Helena está pensando...");
     // Texto da resposta chegando em stream (só do turno `turnIdRef` — ver evento text_delta); some quando a resposta final chega.
     const [draft, setDraft] = React.useState("");
+    const [thinking, setThinking] = React.useState("");
     const turnIdRef = React.useRef<string | undefined>(undefined);
     const [pending, setPending] = React.useState<PendingConfirmation | undefined>(undefined);
     const [error, setError] = React.useState<string | undefined>(undefined);
@@ -580,7 +584,7 @@ export function App(props: AppProps): React.ReactElement {
 
     const historyHeights = React.useMemo(() => history.map((item) => measureHistoryItem(item, mainColumns)), [history, mainColumns]);
     const showDraft = sending && !pending;
-    const draftHeight = React.useMemo(() => measureDraftBubble(draft, statusLine, mainColumns), [draft, statusLine, mainColumns]);
+    const draftHeight = React.useMemo(() => measureDraftBubble(draft, statusLine, mainColumns, thinking), [draft, statusLine, mainColumns, thinking]);
     const view = fitLines(showDraft ? [...historyHeights, draftHeight] : historyHeights, availableHistoryRows, scrollAnchor);
     const { canScrollUp, canScrollDown } = view;
 
@@ -606,7 +610,10 @@ export function App(props: AppProps): React.ReactElement {
             // dono ter acabado de mandar mensagem nenhuma.
             // Evento com turnId de OUTRO turno (painel web ao mesmo tempo, turno abandonado com Ctrl+C) nunca mexe nesta tela.
             if ("turnId" in event && event.turnId && event.turnId !== turnIdRef.current) return;
-            if (event.type === "text_delta") {
+            if (event.type === "reasoning_delta") {
+                if (!sendingRef.current) return;
+                setThinking((prev) => prev + event.text);
+            } else if (event.type === "text_delta") {
                 if (!sendingRef.current) return;
                 setDraft((prev) => prev + event.text);
                 setStatusLine("Helena está escrevendo...");
@@ -614,6 +621,7 @@ export function App(props: AppProps): React.ReactElement {
                 if (!sendingRef.current) return;
                 // Texto antes de uma ferramenta é "vou fazer X" — a resposta de verdade vem depois; recomeça o rascunho.
                 setDraft("");
+                setThinking("");
                 // Vira uma entrada PERMANENTE do histórico na hora (padrão Claude Code) — antes só
                 // sobrescrevia a linha de status, que sumia sem deixar rastro assim que o turno acabava.
                 setHistory((prev) => [...prev, toolCallItem(event.tool, event.input)]);
@@ -769,6 +777,7 @@ export function App(props: AppProps): React.ReactElement {
         const turnId = randomUUID();
         turnIdRef.current = turnId;
         setDraft("");
+        setThinking("");
         setScrollAnchor(null); // mandou mensagem → volta pro fim, onde a resposta vai aparecer
         setSending(true);
         setStatusLine("Helena está pensando...");
@@ -804,6 +813,7 @@ export function App(props: AppProps): React.ReactElement {
         } finally {
             // Rascunho sai junto com a entrada da resposta final no histórico (mesmo lote de render) — a final é a fonte de verdade.
             setDraft("");
+            setThinking("");
             if (turnIdRef.current === turnId) turnIdRef.current = undefined;
             setSending(false);
             if (abortRef.current === controller) abortRef.current = undefined;
@@ -1016,7 +1026,7 @@ export function App(props: AppProps): React.ReactElement {
                 return h(
                     Box,
                     { key: isDraft ? "draft" : history[index]!.id, height: rows, overflow: "hidden", flexDirection: "column", flexShrink: 0 },
-                    h(Box, { marginTop: -clipTop, flexDirection: "column", flexShrink: 0 }, isDraft ? h(DraftBubble, { draft, status: statusLine }) : h(HistoryLine, { item: history[index]! })),
+                    h(Box, { marginTop: -clipTop, flexDirection: "column", flexShrink: 0 }, isDraft ? h(DraftBubble, { draft, status: statusLine, thinking, width: mainColumns }) : h(HistoryLine, { item: history[index]! })),
                 );
             }),
         ),

@@ -66,11 +66,28 @@ export function measureHistoryItem(item: HistoryItem, columns: number): number {
  * Bolha da resposta "ainda carregando" (DraftBubble em app.ts): texto que já chegou em stream (se houver) + linha do
  * spinner com o que a Helena está fazendo. Mesmas caixas/paddings da mensagem da Helena.
  */
-export function measureDraftBubble(draft: string, status: string, columns: number): number {
+export function measureDraftBubble(draft: string, status: string, columns: number, thinking = ""): number {
     const boxWidth = columns - 2 * MESSAGE_PADDING_X;
     const textRows = draft ? countWrappedLines(`Helena: ${renderMarkdownAnsi(draft)}`, boxWidth) : 0;
+    const thinkingRows = draft ? 0 : thinkingSnippet(thinking, boxWidth).length;
     // Spinner (1 col) + gap (1) antes do texto do Loader.
-    return textRows + countWrappedLines(status, boxWidth - 2) + 2 * MESSAGE_PADDING_Y + 1;
+    return textRows + thinkingRows + countWrappedLines(status, boxWidth - 2) + 2 * MESSAGE_PADDING_Y + 1;
+}
+
+/** Quantas linhas do raciocínio aparecem no "carregando" — as ÚLTIMAS (o que ela está pensando agora), nunca a bolha inteira. */
+export const THINKING_MAX_LINES = 4;
+
+/**
+ * Últimas linhas do raciocínio, já quebradas na largura (cada uma cabe numa linha — o render usa `wrap:"truncate"`,
+ * então a contagem é exata). Linhas em branco saem: o resumo do Gemini vem cheio de parágrafos vazios.
+ */
+export function thinkingSnippet(thinking: string, width: number, maxLines = THINKING_MAX_LINES): string[] {
+    const rendered = renderMarkdownAnsi(thinking).trim();
+    if (!rendered) return [];
+    const lines = wrapAnsi(rendered, Math.max(1, Math.floor(width)), { trim: true, hard: true })
+        .split("\n")
+        .filter((line) => line.trim().length > 0);
+    return lines.slice(-maxLines);
 }
 
 export interface VisibleSlice {

@@ -33,6 +33,8 @@ export type ChatProgressEvent =
     | { type: "tool_call"; sessionId?: string; turnId?: string; tool: string; input?: unknown; at: string }
     /** Pedaço da resposta em tempo real — só chega pro turno que ESTE cliente mandou com `turnId` (ver backend ChatService#streamOptions). */
     | { type: "text_delta"; sessionId?: string; turnId: string; text: string; at: string }
+    /** Resumo do raciocínio do modelo (vem em inglês — é o Google que gera) — mostrado no "carregando" até o texto começar. */
+    | { type: "reasoning_delta"; sessionId?: string; turnId: string; text: string; at: string }
     | { type: "tool_stream"; sessionId?: string; tool: string; stdoutChunk?: string; stderrChunk?: string; at: string }
     | { type: "turn_end"; sessionId?: string; turnId?: string; at: string }
     | { type: "turn_error"; sessionId?: string; turnId?: string; message: string; at: string }

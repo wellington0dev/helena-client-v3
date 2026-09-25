@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { countWrappedLines, fitLines, measureDraftBubble, pageDown, pageUp, scrollByLines } from "./viewport.ts";
+import { countWrappedLines, fitLines, measureDraftBubble, pageDown, pageUp, scrollByLines, thinkingSnippet } from "./viewport.ts";
 
 const shown = (r: ReturnType<typeof fitLines>) => r.items.map((i) => [i.index, i.clipTop, i.rows]);
 
@@ -117,4 +117,19 @@ test("scrollByLines (roda do mouse): sobe/desce por linha, para no topo, volta a
     assert.equal(scrollByLines(47, 3, 50, 20), null); // chegou no fim → gruda de novo
     assert.equal(scrollByLines(null, 3, 50, 20), null); // já no fim, descer não faz nada
     assert.equal(scrollByLines(null, -3, 10, 20), null); // tudo cabe: nada pra rolar
+});
+
+test("thinkingSnippet: só as ÚLTIMAS linhas do raciocínio, sem linhas em branco, cada uma cabendo na largura", () => {
+    const thinking = "**Analyzing the request**\n\n" + Array.from({ length: 8 }, (_, i) => `step ${i + 1} of the reasoning`).join("\n\n");
+    const lines = thinkingSnippet(thinking, 40);
+    assert.equal(lines.length, 4);
+    assert.match(lines.at(-1)!, /step 8/);
+    assert.ok(lines.every((l) => l.trim().length > 0 && countWrappedLines(l, 40) === 1));
+    assert.deepEqual(thinkingSnippet("", 40), []);
+});
+
+test("measureDraftBubble: raciocínio conta enquanto não há texto; quando o texto começa, some da conta", () => {
+    const thinking = "linha a\n\nlinha b";
+    assert.equal(measureDraftBubble("", "pensando", 80, thinking), 1 + 2 + 3);
+    assert.equal(measureDraftBubble("oi", "escrevendo", 80, thinking), 1 + 1 + 3);
 });
