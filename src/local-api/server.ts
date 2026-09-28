@@ -4,8 +4,8 @@ import type { Duplex } from "node:stream";
 import { WebSocketServer, type WebSocket } from "ws";
 import type { EventHub, HubEvent } from "./event-hub.ts";
 import { rotateLocalToken, tokensMatch } from "./local-token.ts";
-import { forward, isAllowedBackendPath, MAX_BODY_BYTES, payloadTooLarge, readBody, sendJson } from "./proxy.ts";
-import { HttpError, type SessionManager } from "./session-manager.ts";
+import { payloadTooLarge, readBody, sendJson } from "./http-utils.ts";
+import type { SessionManager } from "./session-manager.ts";
 
 /** Versão do contrato `/v1`. A TUI recusa daemon com `apiVersion` maior que o que conhece. */
 export const API_VERSION = 1;
@@ -85,28 +85,9 @@ export function startLocalApi(options: LocalApiOptions): Server {
     async function handleSession(req: IncomingMessage, res: ServerResponse, path: string): Promise<void> {
         const method = req.method ?? "GET";
         if (path === "/v1/session/status" && method === "GET") return sendJson(res, 200, { loggedIn: session.isLoggedIn() });
-        if (path === "/v1/session/me" && method === "GET") return forward(session, req, res, "/auth/me");
         if (path === "/v1/session/logout" && method === "POST") {
             session.logout();
             return sendJson(res, 200, { ok: true });
-        }
-        if ((path === "/v1/session/login" || path === "/v1/session/register") && method === "POST") {
-            const raw = await readBody(req, 20_000);
-            if (raw === "too_large") return payloadTooLarge(req, res);
-            let body: { email?: string; password?: string; displayName?: string };
-            try {
-                body = JSON.parse(raw.toString("utf8")) as typeof body;
-            } catch {
-                return deny(res, 400, "invalid_json", "Corpo não é JSON válido.");
-            }
-            if (!body.email || !body.password) return deny(res, 400, "invalid_body", "email e password são obrigatórios.");
-            try {
-                const result = path.endsWith("login") ? await session.login(body.email, body.password) : await session.register(body.email, body.password, body.displayName);
-                return sendJson(res, 200, result); // { user } — NUNCA o JWT
-            } catch (error) {
-                if (error instanceof HttpError) return deny(res, error.status, "backend_error", error.message);
-                return deny(res, 502, "backend_unreachable", `Backend indisponível: ${error instanceof Error ? error.message : String(error)}`);
-            }
         }
         return deny(res, 404, "not_found", "Rota de sessão desconhecida.");
     }
@@ -201,28 +182,6 @@ export function startLocalApi(options: LocalApiOptions): Server {
         return false;
     }
 
-    async function handleChat(req: IncomingMessage, res: ServerResponse, path: string): Promise<void> {
-        const backendPath = `/chat${path.slice("/v1/chat".length)}`;
-        if (req.method === "POST" && path === "/v1/chat/messages") {
-            // Injeta o nome da máquina como contexto advisório (a TUI hoje monta isso; agora é o daemon).
-            const raw = await readBody(req, MAX_BODY_BYTES);
-            if (raw === "too_large") return payloadTooLarge(req, res);
-            let body: Record<string, unknown>;
-            try {
-                body = JSON.parse(raw.toString("utf8")) as Record<string, unknown>;
-            } catch {
-                return deny(res, 400, "invalid_json", "Corpo não é JSON válido.");
-            }
-            if (body.machineName === undefined) body.machineName = machineName;
-            const upstream = await session.authedFetch(backendPath, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => undefined);
-            if (!upstream) return deny(res, 502, "backend_unreachable", "Backend indisponível.");
-            res.writeHead(upstream.status, { "Content-Type": upstream.headers.get("content-type") ?? "application/json" });
-            res.end(Buffer.from(await upstream.arrayBuffer()));
-            return;
-        }
-        return forward(session, req, res, backendPath + (req.url?.includes("?") ? req.url.slice(req.url.indexOf("?")) : ""));
-    }
-
     const server = createServer((req, res) => {
         void (async () => {
             const url = new URL(req.url ?? "/", "http://x");
@@ -234,14 +193,8 @@ export function startLocalApi(options: LocalApiOptions): Server {
             if (!authorize(req, res, bearerFrom(req))) return;
 
             if (path.startsWith("/v1/session/")) return handleSession(req, res, path);
-            if (path.startsWith("/v1/chat/")) return handleChat(req, res, path);
             if (path === "/v1/channels" || path.startsWith("/v1/channels/")) return handleChannels(req, res, path);
             if (await handleMisc(req, res, path)) return;
-            if (path.startsWith("/v1/backend/")) {
-                const backendPath = path.slice("/v1/backend/".length) + url.search;
-                if (!isAllowedBackendPath(backendPath)) return deny(res, 403, "path_not_allowed", "Caminho fora da allowlist do daemon.");
-                return forward(session, req, res, `/${backendPath}`);
-            }
             // Rota LEGADA (CLI antigo): agora exige o token local.
             if (path === "/cli-session" && req.method === "POST") {
                 const raw = await readBody(req, 10_000);

@@ -28,7 +28,6 @@ interface Seen {
 let backend: Server;
 let backendUrl: string;
 let seen: Seen[] = [];
-let backendMode: "ok" | "expired" = "ok";
 let backendWss: WebSocketServer;
 
 let api: Server;
@@ -45,10 +44,6 @@ before(async () => {
             seen.push({ method: req.method ?? "", url: req.url ?? "", authorization: req.headers.authorization, body: Buffer.concat(chunks).toString() });
             res.setHeader("Content-Type", "application/json");
             if (req.url === "/auth/login") return res.end(JSON.stringify({ accessToken: "JWT-DO-USUARIO", user: { id: "u1", email: "a@b.c" } }));
-            if (backendMode === "expired" && req.headers.authorization) {
-                res.statusCode = 401;
-                return res.end(JSON.stringify({ message: "expirado" }));
-            }
             if (req.url === "/auth/me") return res.end(JSON.stringify({ id: "u1" }));
             res.end(JSON.stringify({ ok: true, url: req.url, echoBody: req.method === "POST" ? Buffer.concat(chunks).toString() : undefined }));
         });
@@ -93,89 +88,28 @@ test("rotas /v1 recusam sem token, com token errado e com Origin de navegador (m
     assert.equal((await fetch(`${apiUrl}/v1/session/status`, { headers: auth })).status, 200);
 });
 
-test("login: a TUI recebe só {user} — o JWT fica no daemon (e no session.json 0600)", async () => {
-    seen = [];
-    const r = await fetch(`${apiUrl}/v1/session/login`, { method: "POST", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify({ email: "a@b.c", password: "senha-forte-123" }) });
-    assert.equal(r.status, 200);
-    const body = await j(r);
-    assert.deepEqual(Object.keys(body), ["user"]);
-    assert.equal(JSON.stringify(body).includes("JWT-DO-USUARIO"), false);
-    assert.equal(loadSession()?.accessToken, "JWT-DO-USUARIO");
-    const mode = fs.statSync(path.join(fakeHome, ".config", "helena", "session.json")).mode & 0o777;
-    assert.equal(mode, 0o600);
+test("rotas de proxy e chat foram removidas e respondem 404", async () => {
+    assert.equal((await fetch(`${apiUrl}/v1/chat/messages`, { method: "POST", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify({ text: "olá" }) })).status, 404);
+    assert.equal((await fetch(`${apiUrl}/v1/chat/sessions`, { headers: auth })).status, 404);
+    assert.equal((await fetch(`${apiUrl}/v1/backend/contacts`, { headers: auth })).status, 404);
+    assert.equal((await fetch(`${apiUrl}/v1/session/login`, { method: "POST", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify({ email: "a@b.c", password: "123" }) })).status, 404);
+    assert.equal((await fetch(`${apiUrl}/v1/session/me`, { headers: auth })).status, 404);
 });
 
-test("login com corpo inválido → 400 e sem chamar o backend", async () => {
-    seen = [];
-    const r = await fetch(`${apiUrl}/v1/session/login`, { method: "POST", headers: auth, body: "não-json" });
-    assert.equal(r.status, 400);
-    assert.equal(seen.length, 0);
-});
-
-test("passagem: o backend recebe o JWT do daemon, NUNCA o token local nem um Authorization do chamador", async () => {
-    seen = [];
-    const r = await fetch(`${apiUrl}/v1/backend/contacts?limit=5`, { headers: { ...auth, Cookie: "sessao=x" } });
-    assert.equal(r.status, 200);
-    assert.equal(seen.length, 1);
-    assert.equal(seen[0].url, "/contacts?limit=5");
-    assert.equal(seen[0].authorization, "Bearer JWT-DO-USUARIO");
-    assert.notEqual(seen[0].authorization, `Bearer ${LOCAL}`);
-});
-
-test("allowlist: prefixos fora da lista, login do backend e traversal são recusados sem tocar o backend", async () => {
-    seen = [];
-    for (const p of ["channels/inbound", "auth/login", "auth/register", "webhooks/asaas/x", "contacts/../channels/inbound", "..%2Fchannels", "//channels"]) {
-        const r = await fetch(`${apiUrl}/v1/backend/${p}`, { headers: auth });
-        assert.ok([403, 404].includes(r.status), `${p} → ${r.status}`);
-    }
-    assert.equal(seen.length, 0);
-});
-
-test("allowlist: auth/sessions (dispositivos/revogação) passa; auth/refresh e auth/logout do backend não", async () => {
-    seen = [];
-    assert.equal((await fetch(`${apiUrl}/v1/backend/auth/sessions`, { headers: auth })).status, 200);
-    assert.equal(seen[0].url, "/auth/sessions");
-    seen = [];
-    for (const p of ["auth/refresh", "auth/logout"]) {
-        const r = await fetch(`${apiUrl}/v1/backend/${p}`, { method: "POST", headers: auth });
-        assert.ok([403, 404].includes(r.status), `${p} → ${r.status}`);
-    }
-    assert.equal(seen.length, 0);
-});
-
-test("chat: POST /v1/chat/messages injeta machineName e preserva o resto; GET mantém a query", async () => {
-    seen = [];
-    await fetch(`${apiUrl}/v1/chat/messages`, { method: "POST", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify({ text: "olá", sessionId: "s1" }) });
-    assert.equal(seen[0].url, "/chat/messages");
-    assert.deepEqual(JSON.parse(seen[0].body), { text: "olá", sessionId: "s1", machineName: "maquina-teste" });
-    await fetch(`${apiUrl}/v1/chat/messages`, { method: "POST", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify({ text: "x", machineName: "outra" }) });
-    assert.equal(JSON.parse(seen[1].body).machineName, "outra");
-    seen = [];
-    await fetch(`${apiUrl}/v1/chat/sessions/abc/history?limit=20&offset=40`, { headers: auth });
-    assert.equal(seen[0].url, "/chat/sessions/abc/history?limit=20&offset=40");
-});
-
-test("corpo acima do teto → 413", async () => {
-    const big = "x".repeat(1_100_000);
-    const r = await fetch(`${apiUrl}/v1/backend/contacts`, { method: "POST", headers: { ...auth, "Content-Type": "application/json" }, body: big });
-    assert.equal(r.status, 413);
-});
-
-test("401 do backend limpa a sessão e publica session.expired no hub", async () => {
-    const events: string[] = [];
-    const off = hub.subscribe((e) => events.push(e.type));
-    backendMode = "expired";
-    const r = await fetch(`${apiUrl}/v1/chat/sessions`, { headers: auth });
-    backendMode = "ok";
-    off();
-    assert.equal(r.status, 401);
-    assert.ok(events.includes("session.expired"));
-    assert.equal(loadSession(), undefined);
+test("sessão local: status, adoção via cli-session e logout", async () => {
+    // Inicia deslogado
+    clearSession();
     assert.equal((await j(await fetch(`${apiUrl}/v1/session/status`, { headers: auth }))).loggedIn, false);
-    // sem sessão: 401 sintético, sem chamar o backend
-    seen = [];
-    assert.equal((await fetch(`${apiUrl}/v1/backend/contacts`, { headers: auth })).status, 401);
-    assert.equal(seen.length, 0);
+
+    // Adota token via cli-session
+    const ok = await fetch(`${apiUrl}/cli-session`, { method: "POST", headers: auth, body: JSON.stringify({ accessToken: "JWT-TESTE-123" }) });
+    assert.equal(ok.status, 200);
+    assert.equal((await j(await fetch(`${apiUrl}/v1/session/status`, { headers: auth }))).loggedIn, true);
+
+    // Logout local
+    const logoutRes = await fetch(`${apiUrl}/v1/session/logout`, { method: "POST", headers: auth });
+    assert.equal(logoutRes.status, 200);
+    assert.equal((await j(await fetch(`${apiUrl}/v1/session/status`, { headers: auth }))).loggedIn, false);
 });
 
 function openWs(pathAndQuery: string, protocols?: string[], headers?: Record<string, string>): Promise<{ ws: WebSocket; messages: any[] } | { status: number }> {
