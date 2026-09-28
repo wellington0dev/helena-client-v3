@@ -10,12 +10,18 @@ O que roda no computador do dono. Dois programas no mesmo pacote:
 
 ## Instalação
 
+**2026-09-28: os scripts `install.sh`/`install.ps1`/`update.sh`/`stop.sh`/`scripts/link-helena.sh` foram removidos**
+— provisionar, atualizar e parar a máquina é manual agora:
+
 ```bash
-./install.sh                    # npm install + serviço systemd de usuário (idempotente)
-bash scripts/link-helena.sh     # comando global `helena`, sem sudo
+npm install
+systemctl --user restart helena-client.service   # serviço systemd de usuário — crie a unit a partir de systemd/helena-client.service
+journalctl --user -u helena-client.service -f
 ```
 
-Windows: `install.ps1` / `npm run service:install:windows`. Atualizar: `./update.sh`. Parar: `./stop.sh`.
+Comando global `helena` (sem sudo), à mão: `mkdir -p ~/.local/bin && ln -sf "$(pwd)/bin/helena.js" ~/.local/bin/helena`
+(garanta que `~/.local/bin` está no `PATH`). Windows: `npm run service:install:windows` /
+`npm run service:uninstall:windows` (scripts Node, não removidos — só o `.ps1` que os chamava).
 
 `.env` (ver `.env.example`): `BACKEND_V2_URL`, `CLIENT_LOCAL_PORT`, `TELEGRAM_BOT_TOKEN`, `WHATSAPP_AUTH_DIR`,
 `CLIENT_BACKGROUND_SHELL_TIMEOUT_MINUTES`. A máquina é vinculada à conta **pelo login** da CLI
