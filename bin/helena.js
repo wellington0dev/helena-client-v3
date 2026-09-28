@@ -24,7 +24,7 @@ Uso: helena [comando] [--help]
   helena                          abre o chat (conecta em BACKEND_V2_URL, .env do client/)
   helena local-token rotate       gera um token local novo pra API do daemon
   helena local-token path         mostra onde está o arquivo do token (nunca imprime o token)
-  helena mcp-server               inicia MCP server via stdio (expondo shell, file ops, etc)
+  helena mcp-server               inicia MCP server via stdio (expondo list/read/search/grep/glob/write/preview de arquivo)
   helena --help, -h               mostra esta ajuda
 
 Execução de comando remoto (antigo 'helena agent'), WhatsApp e Telegram não

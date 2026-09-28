@@ -5,34 +5,29 @@ import {
     ListToolsRequestSchema,
     type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
-import { config } from "./config.ts";
-import { deleteFile, globFiles, grepFiles, listFiles, previewDiff, readFile, searchFiles, writeFile, type FileEdit } from "./local-files.ts";
-import { runCommand, type StreamCallbacks } from "./local-shell.ts";
+import { globFiles, grepFiles, listFiles, previewDiff, readFile, searchFiles, writeFile, type FileEdit } from "./local-files.ts";
 import { captureError } from "./telemetry.ts";
 
 /**
- * MCP Server que expõe as capacidades locais do client/ (shell, file ops, etc)
- * pra clientes MCP externos poderem conectar e usar.
+ * MCP Server que expõe as capacidades locais do client/ (list/read/search/grep/glob/write/preview de arquivo) pra
+ * clientes MCP externos poderem conectar e usar (ex: o próprio dono ligando isso no Claude Desktop dele).
  *
  * Roda no MESMO processo do client/ (main.ts), expondo via stdio.
  * Clientes MCP externos conectam via stdio (ex: `helena mcp-server`).
+ *
+ * `shell` e `delete_file` foram REMOVIDOS de propósito (2026-09-28, achado real numa revisão de segurança): as
+ * demais tools passam pelo `guard()`/`policy()` de `local-files.ts` (nega `.ssh`, `.env`, o diretório de auth do
+ * WhatsApp etc.), mas `shell` chamava `runCommand()` — o executor CRU, documentado no próprio `local-shell.ts` como
+ * dependente de quem chama já ter feito a classificação/confirmação (isso é papel do backend-v2, no caminho normal
+ * via `machine-agent.ts`; aqui não existe backend no meio, então rodaria QUALQUER comando de um cliente MCP externo
+ * sem aprovação nenhuma). `delete_file` também nunca é exposto como tool solta no resto do sistema, de propósito
+ * (ver comentário em `local-files.ts#deleteFile`) — só reaparecia aqui. Se um dia isso precisar de shell/delete de
+ * verdade, precisa de um mecanismo de confirmação PRÓPRIO deste servidor (não existe backend pra aprovar nesse
+ * caminho), não reabrir as funções cruas direto.
  */
 
 // Mapeia capabilities locais pra tools MCP
 const MCP_TOOLS: Tool[] = [
-    {
-        name: "shell",
-        description: "Executa um comando shell na máquina local. Use para rodar comandos, scripts, builds, etc.",
-        inputSchema: {
-            type: "object",
-            properties: {
-                command: { type: "string", description: "Comando a executar" },
-                cwd: { type: "string", description: "Diretório de trabalho (opcional)" },
-                background: { type: "boolean", description: "Se true, roda em background e devolve jobId" },
-            },
-            required: ["command"],
-        },
-    },
     {
         name: "list_files",
         description: "Lista arquivos em um diretório",
@@ -118,17 +113,6 @@ const MCP_TOOLS: Tool[] = [
         },
     },
     {
-        name: "delete_file",
-        description: "Apaga um arquivo",
-        inputSchema: {
-            type: "object",
-            properties: {
-                path: { type: "string", description: "Caminho do arquivo" },
-            },
-            required: ["path"],
-        },
-    },
-    {
         name: "preview_diff",
         description: "Gera diff unificado (git diff) das edições sem aplicar",
         inputSchema: {
@@ -179,17 +163,6 @@ function createMcpServer(): Server {
 
         try {
             switch (name) {
-                case "shell": {
-                    const { command, cwd, background } = args as { command: string; cwd?: string; background?: boolean };
-                    if (background) {
-                        // Para background, usa runCommandInternal com callback vazio
-                        const result = await runCommand(command, cwd);
-                        return { content: [{ type: "text", text: JSON.stringify({ jobId: "bg-" + Date.now(), status: "started" }) }] };
-                    }
-                    const result = await runCommand(command, cwd);
-                    return { content: [{ type: "text", text: JSON.stringify(result) }] };
-                }
-
                 case "list_files": {
                     const { path, pattern } = args as { path: string; pattern?: string };
                     const result = listFiles(path, pattern);
@@ -223,12 +196,6 @@ function createMcpServer(): Server {
                 case "write_file": {
                     const { path, edits } = args as { path: string; edits: FileEdit[] };
                     const result = writeFile(path, edits);
-                    return { content: [{ type: "text", text: JSON.stringify(result) }] };
-                }
-
-                case "delete_file": {
-                    const { path } = args as { path: string };
-                    const result = deleteFile(path);
                     return { content: [{ type: "text", text: JSON.stringify(result) }] };
                 }
 
