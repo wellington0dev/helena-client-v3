@@ -38,8 +38,10 @@ import { startMcpServer, stopMcpServer } from "./mcp-server.ts";
  * agora; ver `client/docs/local-server-api.md`.
  *
  * MCP Server (novo): se `CLIENT_MCP_SERVER=1` no .env, também sobe o
- * MCP server via stdio expondo capacidades locais (shell, file ops, etc)
- * pra clientes MCP externos conectarem.
+ * MCP server via stdio expondo capacidades locais de ARQUIVO (list/read/
+ * search/grep/glob/write/preview) pra clientes MCP externos conectarem.
+ * `shell`/`delete_file` foram removidos de propósito (2026-09-28) — ver
+ * o comentário no topo de mcp-server.ts.
  */
 // API local (`/v1`): o daemon é o hub — a TUI fala só com ele. Ver docs/local-api.md.
 const hub = createEventHub();
