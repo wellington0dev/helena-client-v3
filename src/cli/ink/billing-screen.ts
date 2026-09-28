@@ -2,6 +2,7 @@ import React from "react";
 import { Box, Text, useInput } from "ink";
 import qrcodeTerminal from "qrcode-terminal";
 import { cancelPendingPurchase, getBillingBalance, MAX_PURCHASE_BRL, MIN_PURCHASE_BRL, purchaseCredits, setDefaultContactLimit, type BillingBalance, type PurchaseResult } from "../api/billing.ts";
+import { getPendingCoupons, redeemCoupon, type PendingCoupon, type RedeemedCoupon } from "../api/coupons.ts";
 import { formatMoney, parseBrlInput } from "./format-money.ts";
 import { UnauthorizedError } from "../backend.ts";
 import { Form } from "./form.ts";
@@ -19,13 +20,15 @@ function renderQrAscii(text: string): string {
 }
 
 
-type ScreenState = { kind: "balance" } | { kind: "form" } | { kind: "limit" };
+type ScreenState = { kind: "balance" } | { kind: "form" } | { kind: "limit" } | { kind: "redeem" };
 
-/** `/cobranca` — créditos em R$ da plataforma + comprar/cancelar. Só sobre `billing.controller.ts` (saldo que o dono consome) — nada a ver com `payments.controller.ts` (gateway do dono pra cobrar os PRÓPRIOS contatos), sem equivalente na CLI hoje. */
+/** `/cobranca` — créditos em R$ da plataforma + comprar/cancelar/resgatar cupom. Só sobre `billing.controller.ts` (saldo que o dono consome) + `coupons.controller.ts` (2026-09-28, mesmo saldo) — nada a ver com `payments.controller.ts` (gateway do dono pra cobrar os PRÓPRIOS contatos), sem equivalente na CLI hoje. */
 export function BillingScreen(props: { backendUrl: string; token: string; onExit: () => void; onUnauthorized: () => void }): React.ReactElement {
     const { backendUrl, token, onExit, onUnauthorized } = props;
     const [balance, setBalance] = React.useState<BillingBalance | undefined>(undefined);
     const [purchaseResult, setPurchaseResult] = React.useState<PurchaseResult | undefined>(undefined);
+    const [pendingCoupons, setPendingCoupons] = React.useState<PendingCoupon[]>([]);
+    const [redeemResult, setRedeemResult] = React.useState<RedeemedCoupon | undefined>(undefined);
     const [busy, setBusy] = React.useState(false);
     const [error, setError] = React.useState<string | undefined>(undefined);
     const [screen, setScreen] = React.useState<ScreenState>({ kind: "balance" });
@@ -43,6 +46,14 @@ export function BillingScreen(props: { backendUrl: string; token: string; onExit
             setBalance(await getBillingBalance(backendUrl, token));
         } catch (err) {
             handleAsyncError(err);
+            return;
+        }
+        // Cupons pendentes são secundários — uma falha aqui (ex: 401 já tratado acima nunca chega, mas qualquer
+        // outra) nunca pode esconder o saldo, que é a informação principal desta tela.
+        try {
+            setPendingCoupons(await getPendingCoupons(backendUrl, token));
+        } catch (err) {
+            if (err instanceof UnauthorizedError) onUnauthorized();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [backendUrl, token]);
@@ -65,6 +76,10 @@ export function BillingScreen(props: { backendUrl: string; token: string; onExit
             setScreen({ kind: "limit" });
             return;
         }
+        if (input === "r") {
+            setScreen({ kind: "redeem" });
+            return;
+        }
         if (balance?.hasPendingPayment && input === "c") {
             void handleCancel();
         }
@@ -76,6 +91,26 @@ export function BillingScreen(props: { backendUrl: string; token: string; onExit
         try {
             await cancelPendingPurchase(backendUrl, token);
             setPurchaseResult(undefined);
+            await reload();
+        } catch (err) {
+            handleAsyncError(err);
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    async function handleRedeem(values: Record<string, string>): Promise<void> {
+        const code = (values.code ?? "").trim().toUpperCase();
+        if (!/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code)) {
+            setError("Código inválido — formato esperado XXXX-XXXX.");
+            return;
+        }
+        setBusy(true);
+        setError(undefined);
+        try {
+            const result = await redeemCoupon(backendUrl, token, code);
+            setRedeemResult(result);
+            setScreen({ kind: "balance" });
             await reload();
         } catch (err) {
             handleAsyncError(err);
@@ -156,6 +191,18 @@ export function BillingScreen(props: { backendUrl: string; token: string; onExit
         });
     }
 
+    if (screen.kind === "redeem") {
+        return h(Form, {
+            title: "Resgatar cupom",
+            description: ["Código de 8 caracteres no formato XXXX-XXXX, recebido por email ou de quem gerou o cupom."],
+            fields: [{ key: "code", label: "Código do cupom" }],
+            onSubmit: (values) => void handleRedeem(values),
+            onCancel: () => setScreen({ kind: "balance" }),
+            busy,
+            error,
+        });
+    }
+
     return h(
         Box,
         { flexDirection: "column", ...panel("border") },
@@ -168,12 +215,39 @@ export function BillingScreen(props: { backendUrl: string; token: string; onExit
         h(Box, { marginTop: SPACE.tight }),
         error ? h(Text, { color: theme.danger }, `Erro: ${error}`) : null,
         balance.hasPendingPayment ? h(PendingPurchaseView, { balance, purchaseResult }) : null,
+        redeemResult ? h(RedeemResultView, { result: redeemResult }) : null,
+        pendingCoupons.length > 0 ? h(PendingCouponsView, { coupons: pendingCoupons }) : null,
         h(Box, { marginTop: SPACE.tight }),
         h(
             Text,
             { color: theme.textMuted },
-            busy ? "aplicando..." : balance.hasPendingPayment ? "c cancela a cobrança pendente · l limite por contato · Esc volta" : "Enter compra créditos · l limite por contato · Esc volta",
+            busy
+                ? "aplicando..."
+                : balance.hasPendingPayment
+                  ? "c cancela a cobrança pendente · l limite por contato · r resgatar cupom · Esc volta"
+                  : "Enter compra créditos · l limite por contato · r resgatar cupom · Esc volta",
         ),
+    );
+}
+
+function RedeemResultView(props: { result: RedeemedCoupon }): React.ReactElement {
+    const { result } = props;
+    return h(
+        Box,
+        { flexDirection: "column", marginTop: SPACE.tight, ...panel("success") },
+        h(Text, { bold: true, color: theme.success }, `Cupom resgatado — +${formatMoney(result.creditBrl)}`),
+        h(Text, null, result.confirmationMessage),
+    );
+}
+
+function PendingCouponsView(props: { coupons: PendingCoupon[] }): React.ReactElement {
+    const { coupons } = props;
+    return h(
+        Box,
+        { flexDirection: "column", marginTop: SPACE.tight, ...panel("border") },
+        h(Text, { bold: true, color: theme.primary }, coupons.length === 1 ? "Você tem 1 cupom esperando" : `Você tem ${coupons.length} cupons esperando`),
+        ...coupons.map((c) => h(Text, { key: c.id, color: theme.textMuted }, `${c.code} — ${formatMoney(c.creditBrl)}`)),
+        h(Text, { color: theme.textMuted }, "r pra resgatar (peça o código a quem enviou, ou veja no email)."),
     );
 }
 
