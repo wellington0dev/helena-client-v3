@@ -95,6 +95,34 @@ function blocksToText(blocks: Block[], opts: RenderOptions): string {
             case 'paragraph':
                 rendered.push(opts.inline(block.inline));
                 break;
+            // Blocos interativos (docs/formato-interativo-chat.md) — o modelo nunca deveria gerar essas tags
+            // fora do painel/CLI (só `defineChatAgent` aprende a sintaxe), mas o switch precisa tratar todo
+            // `Block.kind` mesmo assim: rede de segurança contra vazamento acidental pra WhatsApp/Telegram, onde
+            // não dá pra renderizar um widget clicável — degrada pra texto simples numerado.
+            case 'box': {
+                const title = block.title ? `${opts.heading(block.title)}\n` : '';
+                rendered.push(`${title}${blocksToText(block.content, opts)}`);
+                break;
+            }
+            case 'select':
+                rendered.push(
+                    [block.label, ...block.options.map((o, i) => `${opts.listPrefix(true, i)}${o.text}`), '(responda com o número ou o texto da opção)'].join('\n'),
+                );
+                break;
+            case 'form':
+                rendered.push(
+                    [
+                        block.label,
+                        ...block.items.filter((it) => it.kind !== 'button').map((it, i) => `${opts.listPrefix(true, i)}${it.label}`),
+                        '(responda tudo numa mensagem só, no formato campo: valor)',
+                    ]
+                        .filter((line): line is string => Boolean(line))
+                        .join('\n'),
+                );
+                break;
+            case 'button':
+                rendered.push(block.text);
+                break;
         }
     }
 

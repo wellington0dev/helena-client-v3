@@ -1,6 +1,6 @@
 import chalk from "chalk";
 import { c } from "./theme.ts";
-import { parseBlocks, type InlineNode } from "../../channels/markdown.ts";
+import { parseBlocks, type Block, type InlineNode } from "../../channels/markdown.ts";
 
 /**
  * Renderer ANSI da MESMA árvore de `channels/markdown.ts` (que já serve
@@ -10,6 +10,13 @@ import { parseBlocks, type InlineNode } from "../../channels/markdown.ts";
  * string devolvida já carrega os códigos ANSI de verdade (Ink escreve o
  * conteúdo de `<Text>` como veio, então um `chalk.bold(...)` aninhado
  * funciona igual imprimir direto no terminal).
+ *
+ * ESTÁTICO de propósito — box/select/form aqui sempre viram texto simples
+ * (numerado/rotulado), nunca clicável. É o modo "somente leitura" usado
+ * pro rascunho em streaming e pro histórico (ver docs/formato-interativo-
+ * chat.md §3/§4) — a versão CLICÁVEL da última mensagem é montada à parte
+ * (componente Ink de verdade, reaproveitando Form/SelectMenu), fora deste
+ * arquivo.
  */
 function inlineToAnsi(nodes: InlineNode[]): string {
     return nodes
@@ -32,9 +39,9 @@ function inlineToAnsi(nodes: InlineNode[]): string {
         .join("");
 }
 
-export function renderMarkdownAnsi(text: string): string {
+function renderBlocksAnsi(blocks: Block[]): string[] {
     const rendered: string[] = [];
-    for (const block of parseBlocks(text)) {
+    for (const block of blocks) {
         switch (block.kind) {
             case "heading":
                 rendered.push(chalk.bold.underline(inlineToAnsi(block.inline)));
@@ -51,7 +58,40 @@ export function renderMarkdownAnsi(text: string): string {
             case "paragraph":
                 rendered.push(inlineToAnsi(block.inline));
                 break;
+            case "box": {
+                const title = block.title ? `${chalk.bold(block.title)}\n` : "";
+                const inner = renderBlocksAnsi(block.content)
+                    .join("\n\n")
+                    .split("\n")
+                    .map((line) => `${chalk.dim("│")} ${line}`)
+                    .join("\n");
+                rendered.push(`${title}${inner}`);
+                break;
+            }
+            case "select":
+                rendered.push(
+                    [chalk.bold(block.label), ...block.options.map((opt, i) => `  ${i + 1}. ${opt.text}`), c.muted("(responda com o número ou o texto da opção)")].join("\n"),
+                );
+                break;
+            case "form":
+                rendered.push(
+                    [
+                        block.label ? chalk.bold(block.label) : undefined,
+                        ...block.items.filter((it) => it.kind !== "button").map((it) => `  ${it.kind === "select" ? it.label : it.label}:`),
+                        c.muted("(responda tudo numa mensagem só, no formato campo: valor)"),
+                    ]
+                        .filter((line): line is string => line !== undefined)
+                        .join("\n"),
+                );
+                break;
+            case "button":
+                rendered.push(c.muted(`▸ ${block.text}`));
+                break;
         }
     }
-    return rendered.join("\n\n");
+    return rendered;
+}
+
+export function renderMarkdownAnsi(text: string): string {
+    return renderBlocksAnsi(parseBlocks(text)).join("\n\n");
 }

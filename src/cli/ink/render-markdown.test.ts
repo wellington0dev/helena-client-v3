@@ -23,3 +23,35 @@ test("renderMarkdownAnsi: link mostra texto e url", () => {
     assert.match(out, /Ver fatura/);
     assert.match(out, /https:\/\/asaas\.com\/i\/abc/);
 });
+
+// --- Blocos interativos — modo ESTÁTICO (streaming/histórico, ver docs/formato-interativo-chat.md §3/§4).
+// A versão clicável de verdade é um componente Ink separado, fora deste renderer. ---
+
+test("renderMarkdownAnsi: <select> vira lista numerada com a pergunta e instrução", () => {
+    const out = renderMarkdownAnsi('<select label="Qual prato você quer?">\n<option>Pizza</option>\n<option>Sushi</option>\n</select>');
+    assert.match(out, /Qual prato você quer\?/);
+    assert.match(out, /1\. Pizza/);
+    assert.match(out, /2\. Sushi/);
+    assert.match(out, /responda com o número ou o texto da opção/);
+});
+
+test("renderMarkdownAnsi: <box> mostra título e indenta o conteúdo", () => {
+    const out = renderMarkdownAnsi('<box title="Resumo">\nConteúdo aqui.\n</box>');
+    assert.match(out, /Resumo/);
+    assert.match(out, /Conteúdo aqui\./);
+});
+
+test("renderMarkdownAnsi: <form> lista os labels dos campos sem valor (somente leitura)", () => {
+    const out = renderMarkdownAnsi('<form label="Cadastro">\n<input name="nome" label="Seu nome" />\n<button>Enviar</button>\n</form>');
+    assert.match(out, /Cadastro/);
+    assert.match(out, /Seu nome:/);
+});
+
+test("renderMarkdownAnsi: <button> avulso mostra o próprio texto", () => {
+    const out = renderMarkdownAnsi("<button>Pode cancelar a viagem</button>");
+    assert.match(out, /Pode cancelar a viagem/);
+});
+
+test("renderMarkdownAnsi: tag malformada nunca lança, vira texto literal", () => {
+    assert.doesNotThrow(() => renderMarkdownAnsi('<select label="sem fechamento">\n<option>A</option>'));
+});

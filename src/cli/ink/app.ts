@@ -37,6 +37,12 @@ import { formatToolCall, formatToolResult } from "./format-tool-call.ts";
 import { spendingLines, type SpendingInfo } from "./sidebar-spending.ts";
 import { historyItem, noticeItem, toolCallItem, toolResultItem, type HistoryItem } from "./history-item.ts";
 import { connectProgress, type ChatProgressEvent, type AgentPlan, type PlanStep } from "./progress-client.ts";
+import { composeFormAnswer, composeSelectAnswer, findLatestAnswerable, measureFormAnswer, measureSelectAnswer } from "./interactive-answer.ts";
+import { Form } from "./form.ts";
+import { SelectMenu, type SelectMenuItem } from "./select-menu.ts";
+
+/** `SelectMenu<T>` é genérico — `React.createElement` não infere `T` sozinho fora de JSX, então instanciamos explicitamente pro caso de uso daqui (índice da opção escolhida). */
+const OptionSelectMenu = SelectMenu as (props: { items: SelectMenuItem<number>[]; onSelect: (value: number) => void; onCancel?: () => void }) => React.ReactElement;
 import { renderMarkdownAnsi } from "./render-markdown.ts";
 import { countWrappedLines, fitLines, measureDraftBubble, measureHistoryItem, pageDown, pageUp, scrollByLines, thinkingSnippet } from "./viewport.ts";
 import { Banner } from "./banner.ts";
@@ -179,7 +185,9 @@ function measurePlanPanel(plan: AgentPlan | null, columns: number): number {
     return total;
 }
 
-function Composer(props: { value: string; onChange: (v: string) => void; onSubmit: (v: string) => void; disabled: boolean; resetKey: number }): React.ReactElement {
+const DEFAULT_COMPOSER_PLACEHOLDER = "Escreva sua mensagem...";
+
+function Composer(props: { value: string; onChange: (v: string) => void; onSubmit: (v: string) => void; disabled: boolean; resetKey: number; placeholder?: string }): React.ReactElement {
     return h(
         Box,
         // Caixa em volta do input: borda (1 col cada lado) + paddingX 1 => 4 colunas e 2 linhas
@@ -196,13 +204,17 @@ function Composer(props: { value: string; onChange: (v: string) => void; onSubmi
         // palavra ao meio em vez de continuar no fim. Remontar reinicia o
         // cursor pro fim do valor novo, único jeito de resetar esse estado
         // interno sem prop pra isso.
-        h(TextInput, { key: props.resetKey, value: props.value, onChange: props.onChange, onSubmit: props.onSubmit, placeholder: "Escreva sua mensagem...", focus: !props.disabled }),
+        h(TextInput, { key: props.resetKey, value: props.value, onChange: props.onChange, onSubmit: props.onSubmit, placeholder: props.placeholder ?? DEFAULT_COMPOSER_PLACEHOLDER, focus: !props.disabled }),
     );
 }
 
-/** Texto útil = colunas - 4 (borda + padding da caixa) - 3 ("❯" + gap + margem de segurança); +2 linhas de borda. */
-function measureComposer(value: string, columns: number): number {
-    return countWrappedLines(value.length > 0 ? value : "Escreva sua mensagem...", columns - 7) + 2;
+/**
+ * Texto útil = colunas - 4 (borda + padding da caixa) - 3 ("❯" + gap + margem de segurança); +2 linhas de
+ * borda. `placeholder` PRECISA ser o MESMO texto passado pro `Composer` renderizado (ver liveRegion mais
+ * abaixo) — nunca dois valores diferentes, senão a altura medida diverge da altura real desenhada.
+ */
+function measureComposer(value: string, columns: number, placeholder: string = DEFAULT_COMPOSER_PLACEHOLDER): number {
+    return countWrappedLines(value.length > 0 ? value : placeholder, columns - 7) + 2;
 }
 
 /**
@@ -402,6 +414,10 @@ export function App(props: AppProps): React.ReactElement {
     const [thinking, setThinking] = React.useState("");
     const turnIdRef = React.useRef<string | undefined>(undefined);
     const [pending, setPending] = React.useState<PendingConfirmation | undefined>(undefined);
+    // "Modo resposta" (docs/formato-interativo-chat.md) — SelectMenu/Form montados no lugar do composer pra
+    // responder um <select>/<form> da ÚLTIMA mensagem da Helena. Nunca persiste — qualquer mudança no
+    // histórico fecha o modo (ver useEffect logo abaixo de `latestAnswerable`).
+    const [answering, setAnswering] = React.useState(false);
     const [error, setError] = React.useState<string | undefined>(undefined);
     const [activePlan, setActivePlan] = React.useState<AgentPlan | null>(null);
     const [screen, setScreen] = React.useState<Screen>("chat");
@@ -546,6 +562,28 @@ export function App(props: AppProps): React.ReactElement {
         return matchFiles(fileIndexRef.current.files, mentionToken.query, 6);
     }, [mentionToken?.query, mentionToken !== undefined, props.invocationCwd]);
     const showMentionMenu = mentionMatches.length > 0;
+
+    // Bloco interativo respondível da ÚLTIMA mensagem da Helena (docs/formato-interativo-chat.md) — `null`
+    // quando não há um, ou quando o que tem passa da v1 do cliente (multi-seleção, form com mais de um botão
+    // ou select aninhado, ver interactive-answer.ts). Qualquer mudança no histórico fecha o modo resposta —
+    // mais simples e mais seguro que tentar rastrear "é o MESMO bloco de antes".
+    const latestAnswerable = React.useMemo(() => findLatestAnswerable(history), [history]);
+    React.useEffect(() => {
+        setAnswering(false);
+    }, [history.length]);
+    useInput(
+        (_input, key) => {
+            if (!key.tab || !latestAnswerable) return;
+            // Botão avulso não tem "escolha" nenhuma — Tab já manda a resposta direto, sem passar por modo resposta.
+            if (latestAnswerable.kind === "button") {
+                handleSubmit(latestAnswerable.block.text);
+                return;
+            }
+            setAnswering(true);
+        },
+        { isActive: screen === "chat" && !sending && !pending && !paletteOpen && !showCommandMenu && !showMentionMenu && !answering && latestAnswerable !== null },
+    );
+
     const [mentionIndex, setMentionIndex] = React.useState(0);
     React.useEffect(() => {
         setMentionIndex(0);
@@ -570,8 +608,17 @@ export function App(props: AppProps): React.ReactElement {
     // seguro (sobra uma linha em branco); subestimar faz o conteúdo
     // estourar `rows` e o buffer alternativo ROLAR — sem scrollback, isso
     // é conteúdo perdido de vez (ver viewport.ts).
+    // Dica no placeholder do composer quando há bloco respondível e o modo resposta ainda não foi aberto —
+    // measureComposer PRECISA receber o mesmo texto (ver comentário na função).
+    const composerPlaceholder = latestAnswerable && !answering ? "Escreva, ou Tab pra responder as opções acima..." : undefined;
     // Enquanto a Helena responde, o input continua no lugar (desativado) — o "carregando" virou a bolha DraftBubble.
-    const liveRegionRows = pending ? measurePermissionDialog(pending, mainColumns) : measureComposer(inputValue, mainColumns);
+    const liveRegionRows = pending
+        ? measurePermissionDialog(pending, mainColumns)
+        : answering && latestAnswerable?.kind === "select"
+          ? measureSelectAnswer(latestAnswerable.block, mainColumns)
+          : answering && latestAnswerable?.kind === "form"
+            ? measureFormAnswer(latestAnswerable.block, mainColumns)
+            : measureComposer(inputValue, mainColumns, composerPlaceholder);
     const chromeRows =
         measurePlanPanel(activePlan, mainColumns) +
         (error ? countWrappedLines(`[erro] ${error}`, mainColumns) : 0) +
@@ -1004,7 +1051,30 @@ export function App(props: AppProps): React.ReactElement {
 
     let liveRegion: React.ReactElement;
     if (pending) liveRegion = h(PermissionDialog, { pending, onAnswer: handleConfirmation });
-    else liveRegion = h(Composer, { value: inputValue, onChange: handleInputChange, onSubmit: handleSubmit, disabled: sending || screen === "settings" || paletteOpen, resetKey: composerResetKey });
+    else if (answering && latestAnswerable?.kind === "select") {
+        const block = latestAnswerable.block;
+        liveRegion = h(OptionSelectMenu, {
+            items: block.options.map((opt, i) => ({ label: opt.text, value: i })),
+            onSelect: (i: number) => {
+                setAnswering(false);
+                handleSubmit(composeSelectAnswer(block.label, block.options[i]!.text));
+            },
+            onCancel: () => setAnswering(false),
+        });
+    } else if (answering && latestAnswerable?.kind === "form") {
+        const block = latestAnswerable.block;
+        const submitLabel = block.items.find((it): it is Extract<typeof block.items[number], { kind: "button" }> => it.kind === "button")?.text;
+        liveRegion = h(Form, {
+            title: block.label,
+            fields: block.items.filter((it): it is Extract<typeof block.items[number], { kind: "input" }> => it.kind === "input").map((it) => ({ key: it.name, label: it.label, optional: true })),
+            submitLabel: submitLabel ? `Enter confirma (${submitLabel})` : undefined,
+            onSubmit: (values: Record<string, string>) => {
+                setAnswering(false);
+                handleSubmit(composeFormAnswer(block.items, values));
+            },
+            onCancel: () => setAnswering(false),
+        });
+    } else liveRegion = h(Composer, { value: inputValue, onChange: handleInputChange, onSubmit: handleSubmit, disabled: sending || screen === "settings" || paletteOpen, resetKey: composerResetKey, placeholder: composerPlaceholder });
 
     const chat = h(
         Box,

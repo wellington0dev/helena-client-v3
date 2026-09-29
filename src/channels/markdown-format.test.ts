@@ -61,3 +61,43 @@ test("toWhatsappText: link markdown vira 'texto: url' (WhatsApp não suporta lin
     const out = toWhatsappText("[Ver Fatura](https://asaas.com/i/abc)");
     assert.equal(out, "Ver Fatura: https://asaas.com/i/abc");
 });
+
+// --- Degradação de blocos interativos (docs/formato-interativo-chat.md §6) — rede de segurança: o modelo
+// nunca deveria emitir essas tags fora do painel/CLI, mas se acontecer, WhatsApp/Telegram não podem mostrar
+// um <select>/<form> cru, então vira texto numerado simples. ---
+
+const SELECT = '<select label="Qual prato você quer?">\n<option>Pizza</option>\n<option>Sushi</option>\n</select>';
+const FORM = '<form label="Cadastro">\n<input name="nome" label="Seu nome" />\n<button>Enviar</button>\n</form>';
+
+test("toTelegramHtml: <select> degrada pra lista numerada com instrução", () => {
+    const out = toTelegramHtml(SELECT);
+    assert.match(out, /Qual prato você quer\?/);
+    assert.match(out, /1\. Pizza/);
+    assert.match(out, /2\. Sushi/);
+    assert.match(out, /responda com o número ou o texto da opção/);
+});
+
+test("toWhatsappText: <select> degrada pra lista numerada (mesmo texto, sem HTML)", () => {
+    const out = toWhatsappText(SELECT);
+    assert.doesNotMatch(out, /<select|<option/);
+    assert.match(out, /1\. Pizza/);
+});
+
+test("toTelegramHtml: <form> degrada pra perguntas numeradas + instrução de resposta única", () => {
+    const out = toTelegramHtml(FORM);
+    assert.match(out, /Cadastro/);
+    assert.match(out, /1\. Seu nome/);
+    assert.doesNotMatch(out, /Enviar/); // botão não vira "pergunta" numerada
+    assert.match(out, /campo: valor/);
+});
+
+test("toWhatsappText: <box> degrada pro título em negrito (1 asterisco) + conteúdo, sem borda desenhada", () => {
+    const out = toWhatsappText('<box title="Resumo">\nConteúdo aqui.\n</box>');
+    assert.match(out, /\*Resumo\*/);
+    assert.match(out, /Conteúdo aqui\./);
+});
+
+test("toTelegramHtml: <button> avulso degrada pro próprio texto, sem numeração", () => {
+    const out = toTelegramHtml("<button>Pode cancelar a viagem</button>");
+    assert.equal(out, "Pode cancelar a viagem");
+});

@@ -1,20 +1,14 @@
 /**
- * Parser de markdown mínimo — MESMA gramática (e mesmo arquivo-fonte,
- * duplicado de propósito, não importado) de backend/src/channels/shared/
- * markdown.ts e web/src/app/shared/chat-panel/markdown.ts: título
- * `#`/`##`/`###`, negrito/itálico, `---` como separador, listas, código
- * inline/em bloco (```), e imagem `![alt](url)`. client/ nunca importa nada
- * de backend/ (pacotes TS totalmente separados) — mesmo padrão de
- * duplicação já usado entre backend/ e web/ (e antes, entre backend/ e
- * cli/, de onde este arquivo foi copiado ao migrar a ponte de canal do
- * cli/ pro client/ — ver docs/architecture-v2.md §4). Qualquer mudança de
- * gramática num lado precisa ser espelhada nos outros.
+ * Parser de markdown mínimo — MESMA gramática (e mesmo arquivo-fonte, duplicado de propósito, não importado)
+ * de web-app/src/app/shared/chat-panel/markdown.ts (repo `helena-web-v3`): título `#`/`##`/`###`, negrito/
+ * itálico, `---` como separador, listas, código inline/em bloco (```), imagem `![alt](url)`, e os blocos
+ * interativos `<box>`/`<select>`/`<form>` (ver ../../../docs/formato-interativo-chat.md na raiz do monorepo —
+ * gramática completa, protocolo de resposta, streaming, degradação por canal). client/ nunca importa nada de
+ * backend-v2/ nem de web-app/ (pacotes TS totalmente separados) — qualquer mudança de gramática num lado
+ * precisa ser espelhada no outro.
  *
- * Aqui vira a base pra `markdown-format.ts`, que traduz essa árvore pro
- * dialeto de cada canal de mensagem (Telegram HTML, WhatsApp markdown
- * próprio) — usado pela ponte de canal (Fase 5, ver
- * docs/architecture-v2.md §4) pra formatar a resposta da Helena antes de
- * mandar de volta pro WhatsApp/Telegram.
+ * Aqui vira a base pra `markdown-format.ts` (Telegram HTML, WhatsApp texto) e `render-markdown.ts`
+ * (ANSI/Ink) — "um parser, N renderers".
  */
 
 export type InlineNode =
@@ -25,12 +19,31 @@ export type InlineNode =
     | { kind: 'image'; alt: string; url: string }
     | { kind: 'link'; text: string; url: string };
 
+export interface OptionNode {
+    text: string;
+    value: string;
+}
+
+/** Item dentro de `<form>` — input, select aninhado ou botão. Mesma forma de `select`/`button` de nível de bloco, só reusada aqui. */
+export type FormItem =
+    | { kind: 'input'; name: string; label: string; inputType: 'text' | 'number'; placeholder?: string }
+    | { kind: 'select'; label: string; multiple: boolean; options: OptionNode[] }
+    | { kind: 'button'; text: string };
+
 export type Block =
     | { kind: 'heading'; level: 1 | 2 | 3; inline: InlineNode[] }
     | { kind: 'hr' }
     | { kind: 'list'; ordered: boolean; items: InlineNode[][] }
     | { kind: 'codeblock'; text: string }
-    | { kind: 'paragraph'; inline: InlineNode[] };
+    | { kind: 'paragraph'; inline: InlineNode[] }
+    /** Container — `title` opcional, `content` é markdown normal (recursivo, pode ter select/form dentro). */
+    | { kind: 'box'; title?: string; content: Block[] }
+    /** Escolha avulsa (fora de `<form>`) — `label` é a pergunta, sempre obrigatório. */
+    | { kind: 'select'; label: string; multiple: boolean; options: OptionNode[] }
+    /** `label` opcional (título do form — cada campo já tem o próprio label). */
+    | { kind: 'form'; label?: string; items: FormItem[] }
+    /** Botão avulso (fora de `<form>`) — clicar nele envia o próprio texto como resposta, sem prefixo. */
+    | { kind: 'button'; text: string };
 
 // Ordem importa: !imagem antes de link comum (senão "![alt](url)" casaria
 // como link "[alt](url)" com um "!" solto sobrando); **negrito** antes de
@@ -64,6 +77,115 @@ const HR = /^(?:-{3,}|\*{3,}|_{3,})$/;
 const UL_ITEM = /^[-*]\s+(.+)$/;
 const OL_ITEM = /^\d+\.\s+(.+)$/;
 const CODE_FENCE = /^```/;
+
+// --- Blocos interativos (docs/formato-interativo-chat.md) — cada elemento cabe numa linha (abre+conteúdo+
+// fecha), exceto box/select/form que abrem numa linha e fecham em outra. Atributos sempre `chave="valor"`
+// entre aspas duplas — outro formato não casa e o bloco vira texto literal (nunca lança).
+const BOX_OPEN = /^<box([^>]*)>$/;
+const BOX_CLOSE = /^<\/box>$/;
+const SELECT_OPEN = /^<select([^>]*)>$/;
+const SELECT_CLOSE = /^<\/select>$/;
+const FORM_OPEN = /^<form([^>]*)>$/;
+const FORM_CLOSE = /^<\/form>$/;
+const OPTION_LINE = /^<option([^>]*)>(.*)<\/option>$/;
+const BUTTON_LINE = /^<button([^>]*)>(.*)<\/button>$/;
+const INPUT_LINE = /^<input\s+([^>]*?)\s*\/?>$/;
+
+function parseAttrs(tagAttrs: string): Record<string, string> {
+    const attrs: Record<string, string> = {};
+    for (const m of tagAttrs.matchAll(/(\w+)="([^"]*)"/g)) attrs[m[1]!] = m[2]!;
+    return attrs;
+}
+
+function parseOptions(lines: string[], start: number): { options: OptionNode[]; end: number } | null {
+    const options: OptionNode[] = [];
+    for (let i = start; i < lines.length; i++) {
+        const line = lines[i]!.trim();
+        if (SELECT_CLOSE.test(line)) return options.length ? { options, end: i } : null;
+        const m = OPTION_LINE.exec(line);
+        if (!m) return null;
+        const attrs = parseAttrs(m[1]!);
+        const text = m[2]!;
+        options.push({ text, value: attrs.value ?? text });
+    }
+    return null; // nunca fechou
+}
+
+function parseFormItems(lines: string[], start: number): { items: FormItem[]; end: number } | null {
+    const items: FormItem[] = [];
+    for (let i = start; i < lines.length; i++) {
+        const line = lines[i]!.trim();
+        if (FORM_CLOSE.test(line)) return items.some((it) => it.kind === 'button') ? { items, end: i } : null;
+
+        const inputM = INPUT_LINE.exec(line);
+        if (inputM) {
+            const attrs = parseAttrs(inputM[1]!);
+            if (!attrs.name || !attrs.label) return null;
+            items.push({ kind: 'input', name: attrs.name, label: attrs.label, inputType: attrs.type === 'number' ? 'number' : 'text', placeholder: attrs.placeholder });
+            continue;
+        }
+
+        const buttonM = BUTTON_LINE.exec(line);
+        if (buttonM) {
+            items.push({ kind: 'button', text: buttonM[2]! });
+            continue;
+        }
+
+        const selectM = SELECT_OPEN.exec(line);
+        if (selectM) {
+            const attrs = parseAttrs(selectM[1]!);
+            if (!attrs.label) return null;
+            const body = parseOptions(lines, i + 1);
+            if (!body) return null;
+            items.push({ kind: 'select', label: attrs.label, multiple: attrs.multiple === 'true', options: body.options });
+            i = body.end;
+            continue;
+        }
+
+        return null; // linha não reconhecida dentro do form
+    }
+    return null; // nunca fechou
+}
+
+/** Tenta reconhecer `<box>`/`<select>`/`<form>`/`<button>` avulso a partir da linha `lines[i]` (já sabida começar com "<"). `null` = malformado, cai pra texto literal (chamador não faz nada especial, deixa a linha seguir o fluxo normal de parágrafo). */
+function tryParseTagBlock(lines: string[], i: number): { block: Block; end: number } | null {
+    const line = lines[i]!.trim();
+
+    const boxM = BOX_OPEN.exec(line);
+    if (boxM) {
+        const attrs = parseAttrs(boxM[1]!);
+        const contentLines: string[] = [];
+        for (let j = i + 1; j < lines.length; j++) {
+            if (BOX_CLOSE.test(lines[j]!.trim())) {
+                return { block: { kind: 'box', title: attrs.title, content: parseBlocks(contentLines.join('\n')) }, end: j };
+            }
+            contentLines.push(lines[j]!);
+        }
+        return null;
+    }
+
+    const selectM = SELECT_OPEN.exec(line);
+    if (selectM) {
+        const attrs = parseAttrs(selectM[1]!);
+        if (!attrs.label) return null;
+        const body = parseOptions(lines, i + 1);
+        if (!body) return null;
+        return { block: { kind: 'select', label: attrs.label, multiple: attrs.multiple === 'true', options: body.options }, end: body.end };
+    }
+
+    const formM = FORM_OPEN.exec(line);
+    if (formM) {
+        const attrs = parseAttrs(formM[1]!);
+        const body = parseFormItems(lines, i + 1);
+        if (!body) return null;
+        return { block: { kind: 'form', label: attrs.label, items: body.items }, end: body.end };
+    }
+
+    const buttonM = BUTTON_LINE.exec(line);
+    if (buttonM) return { block: { kind: 'button', text: buttonM[2]! }, end: i };
+
+    return null;
+}
 
 export function parseBlocks(text: string): Block[] {
     const lines = text.split('\n');
@@ -111,6 +233,19 @@ export function parseBlocks(text: string): Block[] {
             flushParagraph();
             flushList();
             continue;
+        }
+
+        // Blocos interativos — só tentados fora de code fence (já tratado acima) e só quando a linha começa
+        // com uma dessas tags; malformado cai pro fluxo normal (linha vira parágrafo, igual texto puro).
+        if (line.startsWith('<box') || line.startsWith('<select') || line.startsWith('<form') || line.startsWith('<button')) {
+            const tag = tryParseTagBlock(lines, i);
+            if (tag) {
+                flushParagraph();
+                flushList();
+                blocks.push(tag.block);
+                i = tag.end;
+                continue;
+            }
         }
 
         const heading = HEADING.exec(line);
