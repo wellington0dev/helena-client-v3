@@ -43,7 +43,7 @@ import { SelectMenu, type SelectMenuItem } from "./select-menu.ts";
 
 /** `SelectMenu<T>` é genérico — `React.createElement` não infere `T` sozinho fora de JSX, então instanciamos explicitamente pro caso de uso daqui (índice da opção escolhida). */
 const OptionSelectMenu = SelectMenu as (props: { items: SelectMenuItem<number>[]; onSelect: (value: number) => void; onCancel?: () => void }) => React.ReactElement;
-import { renderMarkdownAnsi } from "./render-markdown.ts";
+import { renderDraftAnsi, renderMarkdownAnsi } from "./render-markdown.ts";
 import { countWrappedLines, fitLines, measureDraftBubble, measureHistoryItem, pageDown, pageUp, scrollByLines, thinkingSnippet } from "./viewport.ts";
 import { Banner } from "./banner.ts";
 import { bg, c, theme, panel, MESSAGE_PADDING_X, MESSAGE_PADDING_Y, SPACE } from "./theme.ts";
@@ -123,7 +123,7 @@ function DraftBubble({ draft, status, thinking, width }: { draft: string; status
     return h(
         Box,
         { flexDirection: "column", marginBottom: SPACE.tight, backgroundColor: bg.helena, paddingX: MESSAGE_PADDING_X, paddingY: MESSAGE_PADDING_Y },
-        draft ? h(Text, null, c.accent.bold("Helena:"), " ", renderMarkdownAnsi(draft)) : null,
+        draft ? h(Text, null, c.accent.bold("Helena:"), " ", renderDraftAnsi(draft)) : null,
         h(Loader, { text: status }),
         ...snippet.map((line, i) => h(Text, { key: i, color: theme.textMuted, italic: true, wrap: "truncate" }, line)),
     );

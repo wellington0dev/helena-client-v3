@@ -1,6 +1,6 @@
 import wrapAnsi from "wrap-ansi";
 import { formatToolCall, formatToolResult } from "./format-tool-call.ts";
-import { renderMarkdownAnsi } from "./render-markdown.ts";
+import { renderDraftAnsi, renderMarkdownAnsi } from "./render-markdown.ts";
 import type { HistoryItem } from "./history-item.ts";
 import { MESSAGE_PADDING_X, MESSAGE_PADDING_Y, NOTICE_PADDING_Y } from "./theme.ts";
 
@@ -68,7 +68,7 @@ export function measureHistoryItem(item: HistoryItem, columns: number): number {
  */
 export function measureDraftBubble(draft: string, status: string, columns: number, thinking = ""): number {
     const boxWidth = columns - 2 * MESSAGE_PADDING_X;
-    const textRows = draft ? countWrappedLines(`Helena: ${renderMarkdownAnsi(draft)}`, boxWidth) : 0;
+    const textRows = draft ? countWrappedLines(`Helena: ${renderDraftAnsi(draft)}`, boxWidth) : 0;
     const thinkingRows = draft ? 0 : thinkingSnippet(thinking, boxWidth).length;
     // Spinner (1 col) + gap (1) antes do texto do Loader.
     return textRows + thinkingRows + countWrappedLines(status, boxWidth - 2) + 2 * MESSAGE_PADDING_Y + 1;

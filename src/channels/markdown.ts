@@ -289,3 +289,47 @@ export function parseBlocks(text: string): Block[] {
 
     return blocks;
 }
+
+const OPEN_TAG_LINE = /^<(box|select|form)\b/;
+/** Fecham na MESMA linha (`<tag>texto</tag>`) — diferente de box/select/form, que abrem numa linha e fecham bem depois. */
+const LEAF_TAGS = ['option', 'button'] as const;
+const BLOCK_OPEN_TAGS = ['box', 'select', 'form'] as const;
+
+/** A ÚLTIMA linha do buffer parece o começo de uma tag conhecida mas ainda não terminou de ser digitada. */
+function looksUnfinished(line: string): boolean {
+    if (!line.startsWith('<')) return false;
+    for (const tag of LEAF_TAGS) if (line.startsWith(`<${tag}`)) return !line.endsWith(`</${tag}>`);
+    if (line.startsWith('<input')) return !line.endsWith('/>') && !line.endsWith('>');
+    for (const tag of BLOCK_OPEN_TAGS) if (line.startsWith(`<${tag}`)) return !line.endsWith('>');
+    return false; // "<" solto que não bate com tag nenhuma conhecida — texto normal, não esconde.
+}
+
+/**
+ * Só durante STREAMING (texto ainda chegando aos pedaços via `text_delta`) — nunca no texto final. Esconde
+ * qualquer bloco interativo aberto sem fechamento correspondente AINDA no buffer, pra nunca mostrar
+ * `<select label=` ou `<button>Confi` pela metade (docs/formato-interativo-chat.md §3). Os dois clientes
+ * (TUI e web) chamam isto sobre o RASCUNHO em streaming antes de `parseBlocks`/renderizar — nunca sobre o
+ * texto de uma mensagem já finalizada.
+ */
+export function hideIncompleteTag(text: string): string {
+    const lines = text.split('\n');
+
+    // 1) Última linha ainda sendo digitada (não terminou nem a PRÓPRIA sintaxe) — remove ela inteira.
+    if (looksUnfinished(lines[lines.length - 1]!.trim())) lines.pop();
+
+    // 2) Bloco de várias linhas (<box>/<select>/<form>) já abriu (linha 1 terminada) mas ainda não fechou em
+    //    nenhum lugar do que sobrou — corta tudo a partir da linha de abertura.
+    for (let i = 0; i < lines.length; i++) {
+        const m = OPEN_TAG_LINE.exec(lines[i]!.trim());
+        if (!m) continue;
+        const closeTag = `</${m[1]}>`;
+        if (!lines.slice(i + 1).some((l) => l.trim() === closeTag)) {
+            lines.length = i;
+            break;
+        }
+    }
+
+    // Sem linha em branco sobrando no fim (o bloco cortado deixaria um "\n" solto atrás).
+    while (lines.length && lines[lines.length - 1] === '') lines.pop();
+    return lines.join('\n');
+}

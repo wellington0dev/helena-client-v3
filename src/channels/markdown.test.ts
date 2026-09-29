@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseInline, parseBlocks } from "./markdown.ts";
+import { parseInline, parseBlocks, hideIncompleteTag } from "./markdown.ts";
 
 test("parseInline: negrito, itálico e código inline", () => {
     const nodes = parseInline("normal **negrito** *itálico* `código`");
@@ -129,4 +129,31 @@ test("parseBlocks: tag interativa dentro de code fence nunca é interpretada", (
     const blocks = parseBlocks('```\n<select label="Isso é só exemplo">\n<option>A</option>\n</select>\n```');
     assert.equal(blocks.length, 1);
     assert.equal(blocks[0]!.kind, "codeblock");
+});
+
+// --- hideIncompleteTag (docs/formato-interativo-chat.md §3, streaming) ---
+
+test("hideIncompleteTag: <select> ainda aberto (sem </select> no buffer) some do texto exibido", () => {
+    const out = hideIncompleteTag('Olha essas opções:\n\n<select label="Qual prato?">\n<option>Pizza');
+    assert.equal(out, "Olha essas opções:");
+});
+
+test("hideIncompleteTag: <select> já fechado no buffer passa intacto (não é mais 'incompleto')", () => {
+    const text = 'antes\n\n<select label="Qual prato?">\n<option>Pizza</option>\n</select>\n\ndepois';
+    assert.equal(hideIncompleteTag(text), text);
+});
+
+test("hideIncompleteTag: tag de uma linha só ainda sendo digitada (sem '>' de fechamento) some", () => {
+    const out = hideIncompleteTag("texto normal\n\n<button>Confi");
+    assert.equal(out, "texto normal");
+});
+
+test("hideIncompleteTag: '<' solto no meio de uma frase (não abre linha) não é tratado como tag", () => {
+    const out = hideIncompleteTag("1 < 2 e ainda tô escrevendo");
+    assert.equal(out, "1 < 2 e ainda tô escrevendo");
+});
+
+test("hideIncompleteTag: texto sem nenhuma tag passa 100% intacto", () => {
+    const out = hideIncompleteTag("resposta normal, sem formatação nenhuma");
+    assert.equal(out, "resposta normal, sem formatação nenhuma");
 });

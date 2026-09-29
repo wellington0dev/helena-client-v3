@@ -1,6 +1,6 @@
 import chalk from "chalk";
 import { c } from "./theme.ts";
-import { parseBlocks, type Block, type InlineNode } from "../../channels/markdown.ts";
+import { hideIncompleteTag, parseBlocks, type Block, type InlineNode } from "../../channels/markdown.ts";
 
 /**
  * Renderer ANSI da MESMA árvore de `channels/markdown.ts` (que já serve
@@ -94,4 +94,14 @@ function renderBlocksAnsi(blocks: Block[]): string[] {
 
 export function renderMarkdownAnsi(text: string): string {
     return renderBlocksAnsi(parseBlocks(text)).join("\n\n");
+}
+
+/**
+ * Mesma coisa, mas pro RASCUNHO em streaming (`draft`, ver app.ts/viewport.ts) — aplica
+ * `hideIncompleteTag` antes de renderizar, pra nunca mostrar bloco interativo pela metade. `measureDraftBubble`
+ * (viewport.ts) e a renderização de verdade (app.ts) PRECISAM chamar exatamente esta função (nunca
+ * `renderMarkdownAnsi(draft)` direto), senão a altura medida diverge do que é desenhado.
+ */
+export function renderDraftAnsi(draft: string): string {
+    return renderMarkdownAnsi(hideIncompleteTag(draft));
 }
