@@ -95,6 +95,22 @@ test("política: allowedDirs restringe e link simbólico não escapa", () => {
     assert.equal(checkPathAccess(path.join(project, "..", "fora-x"), p).ok, false, "../ escapando");
 });
 
+test("política: nome de arquivo que começa com '..' (não é travessia) dentro de pasta negada continua bloqueado", () => {
+    // Bug real corrigido (2026-09-30, mesmo do servidor — ver file-policy.spec.ts no bk): `isInside` comparava com
+    // `rel.startsWith("..")` cru, que também casava um nome de arquivo/pasta que meramente COMEÇA com ".." (não é
+    // travessia nenhuma — volumes de secret do Kubernetes usam exatamente esse padrão, ex: "..data"). Resultado: um
+    // arquivo assim dentro de uma pasta negada (`deniedPaths`) não era bloqueado.
+    const negada = fs.mkdtempSync(path.join(fakeHome, "negada-"));
+    fs.writeFileSync(path.join(negada, "..segredo.txt"), "sigiloso");
+    const p = { allowedDirs: [], deniedPaths: [negada] };
+    assert.equal(checkPathAccess(path.join(negada, "..segredo.txt"), p).ok, false);
+
+    // O mesmo nome de arquivo, FORA da pasta negada, continua liberado normalmente.
+    const fora = fs.mkdtempSync(path.join(fakeHome, "fora-nao-negada-"));
+    fs.writeFileSync(path.join(fora, "..naosegredo.txt"), "ok");
+    assert.equal(checkPathAccess(path.join(fora, "..naosegredo.txt"), p).ok, true);
+});
+
 test("local-files aplica a política: lê código, recusa .env, não lista nem busca o que é protegido, não escreve", () => {
     assert.equal(files.readFile(path.join(project, "app.ts")).error, undefined);
     assert.match(files.readFile(path.join(project, ".env")).error ?? "", /Acesso negado/);

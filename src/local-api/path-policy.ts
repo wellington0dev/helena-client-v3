@@ -59,7 +59,14 @@ export function realResolve(target: string): string {
 
 function isInside(child: string, parent: string): boolean {
     const rel = path.relative(parent, child);
-    return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+    if (rel === "") return true;
+    if (path.isAbsolute(rel)) return false;
+    // Só ".." como SEGMENTO de caminho (traversal de verdade) conta como "fora" do parent — bug real corrigido
+    // (2026-09-30, mesmo do servidor, ver file-policy.ts#isInside no bk): `rel.startsWith("..")` cru também casava
+    // um nome de arquivo/pasta que meramente COMEÇA com ".." (ex: "..segredo.txt", ou "..data"/"..2024_..." —
+    // padrão real de volumes de secret do Kubernetes), que está DENTRO do parent, não fora. Isso fazia uma pasta
+    // negada (`deniedPaths`/`defaultDeniedDirs`) não bloquear um arquivo assim dentro dela.
+    return rel !== ".." && !rel.startsWith(".." + path.sep);
 }
 
 export function defaultDeniedDirs(): string[] {
