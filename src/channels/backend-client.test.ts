@@ -30,6 +30,23 @@ test("sendInboundMessage: manda Authorization: Bearer <apiToken> e o payload cer
     assert.deepEqual(result, { sessionId: "abc", text: "oi" });
 });
 
+test("sendInboundMessage: preserva o payload de áudio multimodal", async () => {
+    let capturedBody: unknown;
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+        capturedBody = JSON.parse(init?.body as string);
+        return new Response(JSON.stringify({ sessionId: "audio-session", text: "ouvi" }), { status: 200 });
+    }) as typeof fetch;
+
+    await sendInboundMessage("http://127.0.0.1:3001", "token", {
+        channel: "telegram",
+        contactId: "42",
+        text: "o que eu disse?",
+        audio: { mimeType: "audio/ogg", base64: "YXVkaW8=" },
+    });
+
+    assert.deepEqual(capturedBody, { channel: "telegram", contactId: "42", text: "o que eu disse?", audio: { mimeType: "audio/ogg", base64: "YXVkaW8=" } });
+});
+
 test("sendInboundMessage: resposta {blocked:true} (rate limit) chega como está, sem lançar", async () => {
     globalThis.fetch = (async () => new Response(JSON.stringify({ blocked: true }), { status: 201 })) as typeof fetch;
 

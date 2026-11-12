@@ -23,6 +23,11 @@ export interface InboundImagePayload {
     caption?: string;
 }
 
+export interface InboundAudioPayload {
+    mimeType: string;
+    base64: string;
+}
+
 export interface InboundStickerPayload {
     mimeType: string;
     base64: string;
@@ -40,6 +45,7 @@ export interface InboundMessagePayload {
     /** Ausente quando a mensagem é imagem/figurinha sem legenda — ver `image`/`sticker`. */
     text?: string;
     image?: InboundImagePayload;
+    audio?: InboundAudioPayload;
     sticker?: InboundStickerPayload;
 }
 

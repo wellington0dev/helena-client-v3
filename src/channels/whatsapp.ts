@@ -161,8 +161,9 @@ async function handleMessage(msg: WAMessage, sock: WASocket): Promise<void> {
     const text = textOf(msg);
     const imageMessage = msg.message?.imageMessage;
     const stickerMessage = msg.message?.stickerMessage;
+    const audioMessage = msg.message?.audioMessage;
 
-    if (!text && !imageMessage && !stickerMessage) return; // outra mídia (áudio/vídeo/documento): fora de escopo desta leva, ignora silenciosamente.
+    if (!text && !imageMessage && !stickerMessage && !audioMessage) return; // vídeo/documento seguem fora do escopo.
 
     try {
         if (imageMessage && exceedsMediaLimit(toNumber(imageMessage.fileLength))) {
@@ -171,6 +172,10 @@ async function handleMessage(msg: WAMessage, sock: WASocket): Promise<void> {
         }
         if (stickerMessage && exceedsMediaLimit(toNumber(stickerMessage.fileLength))) {
             await sendWhatsappMessage(remoteJid, mediaTooLargeMessage());
+            return;
+        }
+        if (audioMessage && exceedsMediaLimit(toNumber(audioMessage.fileLength))) {
+            await sendWhatsappMessage(remoteJid, mediaTooLargeMessage("áudio"));
             return;
         }
 
@@ -183,12 +188,17 @@ async function handleMessage(msg: WAMessage, sock: WASocket): Promise<void> {
             ? { mimeType: stickerMessage.mimetype || "image/webp", base64: (await downloadMedia(msg, sock)).toString("base64"), animated: stickerMessage.isAnimated ?? false }
             : undefined;
 
+        const audio = audioMessage
+            ? { mimeType: audioMessage.mimetype || "audio/ogg", base64: (await downloadMedia(msg, sock)).toString("base64") }
+            : undefined;
+
         const result = await sendInboundMessage(config.backendUrl, config.backendApiToken, {
             channel: "whatsapp",
             contactId: resolvePhoneContactId(remoteJid, msg.key.senderPn),
             senderName: msg.pushName || undefined,
             text,
             image,
+            audio,
             sticker,
         });
         if ("blocked" in result) return; // rate limit — sem resposta, mesmo comportamento do backend single-owner.

@@ -64,7 +64,10 @@ async function handlePrivateMessage(ctx: TelegramContext): Promise<void> {
     const text = ctx.message?.text;
     const photo = ctx.message?.photo;
     const stickerMsg = ctx.message?.sticker;
-    if (!text && !photo && !stickerMsg) return; // outra mídia (áudio/vídeo/documento): fora de escopo desta leva, ignora silenciosamente.
+    const voice = ctx.message?.voice;
+    const audioMsg = ctx.message?.audio;
+    const audioFile = voice ?? audioMsg;
+    if (!text && !photo && !stickerMsg && !audioFile) return; // vídeo/documento seguem fora do escopo.
     if (!ctx.from) return;
 
     try {
@@ -74,6 +77,10 @@ async function handlePrivateMessage(ctx: TelegramContext): Promise<void> {
         }
         if (stickerMsg && exceedsMediaLimit(stickerMsg.file_size)) {
             await ctx.reply(mediaTooLargeMessage());
+            return;
+        }
+        if (audioFile && exceedsMediaLimit(audioFile.file_size)) {
+            await ctx.reply(mediaTooLargeMessage("áudio"));
             return;
         }
 
@@ -91,12 +98,20 @@ async function handlePrivateMessage(ctx: TelegramContext): Promise<void> {
               }
             : undefined;
 
+        const audio = audioFile
+            ? {
+                  mimeType: audioFile.mime_type || (voice ? "audio/ogg" : "audio/mpeg"),
+                  base64: Buffer.from(await (await fetch((await ctx.getFile()).getUrl())).arrayBuffer()).toString("base64"),
+              }
+            : undefined;
+
         const result = await sendInboundMessage(config.backendUrl, config.backendApiToken, {
             channel: "telegram",
             contactId: String(ctx.from.id),
             senderName: ctx.from.first_name || undefined,
             text,
             image,
+            audio,
             sticker,
         });
         if ("blocked" in result) return;

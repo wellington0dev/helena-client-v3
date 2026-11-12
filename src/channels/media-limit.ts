@@ -11,6 +11,6 @@ export function exceedsMediaLimit(sizeBytes: number | undefined): boolean {
     return sizeBytes !== undefined && sizeBytes > MEDIA_MAX_BYTES;
 }
 
-export function mediaTooLargeMessage(): string {
-    return `Essa imagem é grande demais pra eu processar (limite: ${config.mediaMaxMb}MB) — manda uma menor, por favor.`;
+export function mediaTooLargeMessage(kind: "imagem" | "áudio" = "imagem"): string {
+    return `Esse${kind === "imagem" ? "a" : ""} ${kind} é grande demais pra eu processar (limite: ${config.mediaMaxMb}MB) — manda ${kind === "imagem" ? "uma menor" : "um menor"}, por favor.`;
 }
