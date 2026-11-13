@@ -88,11 +88,10 @@ test("rotas /v1 recusam sem token, com token errado e com Origin de navegador (m
     assert.equal((await fetch(`${apiUrl}/v1/session/status`, { headers: auth })).status, 200);
 });
 
-test("rotas de proxy e chat foram removidas e respondem 404", async () => {
+test("rotas de chat removidas dão 404 e o proxy recusa chamadas sem sessão central", async () => {
     assert.equal((await fetch(`${apiUrl}/v1/chat/messages`, { method: "POST", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify({ text: "olá" }) })).status, 404);
     assert.equal((await fetch(`${apiUrl}/v1/chat/sessions`, { headers: auth })).status, 404);
-    assert.equal((await fetch(`${apiUrl}/v1/backend/contacts`, { headers: auth })).status, 404);
-    assert.equal((await fetch(`${apiUrl}/v1/session/login`, { method: "POST", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify({ email: "a@b.c", password: "123" }) })).status, 404);
+    assert.equal((await fetch(`${apiUrl}/v1/backend/contacts`, { headers: auth })).status, 401);
     assert.equal((await fetch(`${apiUrl}/v1/session/me`, { headers: auth })).status, 404);
 });
 

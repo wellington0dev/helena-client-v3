@@ -208,11 +208,15 @@ async function handleExecBackground(message: AgentExecBackgroundRequest): Promis
 /** Para a instância anterior — chamar `startMachineAgent` de novo (token trocado no login, ver device-auth.ts) REINICIA em vez de abrir uma 2ª conexão; sem isso a antiga seguiria reconectando pra sempre com o token velho (na conta errada). */
 let stopCurrent: (() => void) | undefined;
 
-export function startMachineAgent(backendUrl: string, apiToken: string): void {
+export function stopMachineAgent(): void {
     stopCurrent?.();
     stopCurrent = undefined;
-    if (!backendUrl || !apiToken) {
-        updateMachineAgent({ status: "error", error: "BACKEND_V2_URL/BACKEND_V2_API_TOKEN não configurados no .env." });
+}
+
+export function startMachineAgent(backendUrl: string, getAccessToken: () => Promise<string | undefined>): void {
+    stopMachineAgent();
+    if (!backendUrl) {
+        updateMachineAgent({ status: "error", error: "URL do backend central não configurada." });
         return;
     }
 
@@ -227,12 +231,18 @@ export function startMachineAgent(backendUrl: string, apiToken: string): void {
         socket?.close();
     };
 
-    function connect(): void {
+    async function connect(): Promise<void> {
         if (stopped) return;
+        const accessToken = await getAccessToken().catch(() => undefined);
+        if (stopped) return;
+        if (!accessToken) {
+            updateMachineAgent({ status: "connecting", machineName, error: "Aguardando autenticação." });
+            reconnectTimer = setTimeout(() => { void connect(); }, RECONNECT_DELAY_MS);
+            return;
+        }
         updateMachineAgent({ status: "connecting", machineName, error: undefined });
-        // Token por query string (não `Sec-WebSocket-Protocol`) — ver
-        // machines.gateway.ts no backend-v2.
-        const ws = new WebSocket(`${backendWsUrl}/ws/agent?token=${encodeURIComponent(apiToken)}`);
+        // O JWT de acesso é obtido/renovado pelo daemon imediatamente antes do handshake.
+        const ws = new WebSocket(`${backendWsUrl}/ws/agent?token=${encodeURIComponent(accessToken)}`);
         socket = ws;
 
         ws.addEventListener("open", () => {
@@ -278,7 +288,7 @@ export function startMachineAgent(backendUrl: string, apiToken: string): void {
         ws.addEventListener("close", () => {
             if (stopped) return; // parado de propósito (reinício com token novo) — a instância nova já cuida do status
             updateMachineAgent({ status: "connecting", machineName });
-            reconnectTimer = setTimeout(connect, RECONNECT_DELAY_MS);
+            reconnectTimer = setTimeout(() => { void connect(); }, RECONNECT_DELAY_MS);
         });
 
         ws.addEventListener("error", (event) => {
@@ -288,5 +298,5 @@ export function startMachineAgent(backendUrl: string, apiToken: string): void {
         });
     }
 
-    connect();
+    void connect();
 }

@@ -105,7 +105,7 @@ async function handlePrivateMessage(ctx: TelegramContext): Promise<void> {
               }
             : undefined;
 
-        const result = await sendInboundMessage(config.backendUrl, config.backendApiToken, {
+        const result = await sendInboundMessage({
             channel: "telegram",
             contactId: String(ctx.from.id),
             senderName: ctx.from.first_name || undefined,
@@ -132,7 +132,7 @@ async function handleGroupMessage(ctx: Context): Promise<void> {
     const groupName = ("title" in ctx.chat ? ctx.chat.title : undefined) ?? groupId;
 
     try {
-        const result = await sendGroupInboundMessage(config.backendUrl, config.backendApiToken, {
+        const result = await sendGroupInboundMessage({
             channel: "telegram",
             groupId,
             groupName,
@@ -149,8 +149,8 @@ async function handleGroupMessage(ctx: Context): Promise<void> {
 }
 
 export function startTelegram(): void {
-    if (!config.backendUrl || !config.backendApiToken) {
-        updateTelegram({ status: "error", error: "BACKEND_V2_URL/BACKEND_V2_API_TOKEN não configurados no .env." });
+    if (!config.backendUrl) {
+        updateTelegram({ status: "error", error: "URL do backend central não configurada." });
         return;
     }
     if (!config.telegramBotToken) {

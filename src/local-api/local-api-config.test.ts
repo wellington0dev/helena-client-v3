@@ -11,7 +11,7 @@ const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), "helena-localapi2-test-")
 const originalHome = process.env.HOME;
 process.env.HOME = fakeHome;
 
-const { patchFileConfig, loadFileConfig, publicView, importEnvOnce, configFilePath } = await import("./config-store.ts");
+const { patchFileConfig, loadFileConfig, publicView, configFilePath } = await import("./config-store.ts");
 const { checkPathAccess } = await import("./path-policy.ts");
 const { hardenPermissions, looseSecrets } = await import("./harden.ts");
 const { runDoctor } = await import("./doctor.ts");
@@ -57,14 +57,6 @@ test("config: segredo (token do Telegram) é validado, gravado e NUNCA aparece n
     assert.equal(JSON.stringify(view).includes(token), false);
 });
 
-test("config: importEnvOnce só importa se ainda não existe config.json", () => {
-    fs.rmSync(configFilePath());
-    const first = importEnvOnce({ BACKEND_V2_URL: "http://x:1", MEDIA_MAX_MB: "30", TELEGRAM_BOT_TOKEN: "lixo" } as NodeJS.ProcessEnv);
-    assert.deepEqual(first.imported.sort(), ["backendUrl", "mediaMaxMb"]); // token inválido não entra
-    assert.deepEqual(importEnvOnce({ BACKEND_V2_URL: "http://outra" } as NodeJS.ProcessEnv).imported, []);
-    assert.equal(loadFileConfig().backendUrl, "http://x:1");
-});
-
 // ---------------- path-policy + local-files ----------------
 const project = fs.mkdtempSync(path.join(fakeHome, "proj-"));
 fs.writeFileSync(path.join(project, "app.ts"), "console.log('ok')");
@@ -74,11 +66,10 @@ fs.writeFileSync(path.join(project, "chave.pem"), "-----BEGIN-----");
 fs.mkdirSync(path.join(fakeHome, ".ssh"), { recursive: true });
 fs.writeFileSync(path.join(fakeHome, ".ssh", "id_ed25519"), "privada");
 
-test("política: nega .env, .pem, ~/.ssh e a pasta de config da Helena; libera .env.example e código", () => {
+test("política: nega arquivos .env, .pem, ~/.ssh e a pasta de config da Helena; libera código", () => {
     const p = { allowedDirs: [], deniedPaths: [] };
     assert.equal(checkPathAccess(path.join(project, "app.ts"), p).ok, true);
-    assert.equal(checkPathAccess(path.join(project, ".env.example"), p).ok, true);
-    for (const denied of [path.join(project, ".env"), path.join(project, "chave.pem"), path.join(fakeHome, ".ssh", "id_ed25519"), path.join(fakeHome, ".config", "helena", "local-token"), "~/.ssh"]) {
+    for (const denied of [path.join(project, ".env"), path.join(project, ".env.example"), path.join(project, "chave.pem"), path.join(fakeHome, ".ssh", "id_ed25519"), path.join(fakeHome, ".config", "helena", "local-token"), "~/.ssh"]) {
         assert.equal(checkPathAccess(denied, p).ok, false, denied);
     }
 });
@@ -115,7 +106,7 @@ test("local-files aplica a política: lê código, recusa .env, não lista nem b
     assert.equal(files.readFile(path.join(project, "app.ts")).error, undefined);
     assert.match(files.readFile(path.join(project, ".env")).error ?? "", /Acesso negado/);
     const listed = files.listFiles(project).files.map((f) => f.name);
-    assert.ok(listed.includes("app.ts") && listed.includes(".env.example"));
+    assert.ok(listed.includes("app.ts"));
     assert.equal(listed.includes(".env"), false);
     assert.equal(listed.includes("chave.pem"), false);
     assert.equal(files.searchFiles(project, undefined, "SEGREDO").paths.some((p) => p.endsWith(".env")), false, "busca por conteúdo não entra no .env");
@@ -153,7 +144,7 @@ test("doctor: reporta backend, sessão, canais, permissões e bind — sem vazar
     const fetchImpl = (async () => new Response("{}", { status: 200 })) as typeof fetch;
     const loose = path.join(fakeHome, "frouxo.txt");
     fs.writeFileSync(loose, "s", { mode: 0o644 });
-    const r = await runDoctor({ backendUrl: "http://x", session, hub, fetchImpl, deviceTokenPresent: false, secretPaths: [loose], listenHost: "0.0.0.0", version: "t" });
+    const r = await runDoctor({ backendUrl: "http://x", session, hub, fetchImpl, secretPaths: [loose], listenHost: "0.0.0.0", version: "t" });
     const by = Object.fromEntries(r.checks.map((c) => [c.name, c.status]));
     assert.equal(by.backend, "ok");
     assert.equal(by["sessão"], "warn");
@@ -162,7 +153,7 @@ test("doctor: reporta backend, sessão, canais, permissões e bind — sem vazar
     assert.equal(by["permissões"], "warn");
     assert.equal(by["bind da API local"], "warn");
     assert.equal(r.ok, false);
-    const down = await runDoctor({ backendUrl: "http://x", session, hub, fetchImpl: (async () => { throw new Error("recusou"); }) as typeof fetch, deviceTokenPresent: true, secretPaths: [], listenHost: "127.0.0.1", version: "t" });
+    const down = await runDoctor({ backendUrl: "http://x", session, hub, fetchImpl: (async () => { throw new Error("recusou"); }) as typeof fetch, secretPaths: [], listenHost: "127.0.0.1", version: "t" });
     assert.equal(down.checks[0].status, "fail");
 });
 

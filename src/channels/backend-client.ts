@@ -1,9 +1,7 @@
 /**
  * Cliente HTTP pro backend-v2 (Nest, multiusuário — ver
  * docs/architecture-v2.md) — chama `POST /channels/inbound`, autenticado
- * pelo token de longa duração emitido em `POST /auth/api-tokens` (nunca o
- * `PANEL_AUTH_TOKEN`/JWT de 24h do usuário logado no navegador, ver §3/§4
- * do doc). Deliberadamente simples (`fetch` cru, sem WS): o backend-v2
+ * pelo JWT de sessão mantido e renovado pelo daemon. Deliberadamente simples (`fetch` cru, sem WS): o backend-v2
  * ainda não tem streaming pro chat de canal nesta fase — a resposta vem
  * inteira, de uma vez, na própria resposta HTTP.
  *
@@ -16,6 +14,7 @@
  * todo o resto do projeto (contact-store.ts, notes-store.ts etc no backend
  * single-owner nunca usam classe).
  */
+import { backendSessionFetch } from "../backend-session.ts";
 
 export interface InboundImagePayload {
     mimeType: string;
@@ -56,13 +55,10 @@ export interface InboundMessageResult {
     sticker?: { mimeType: string; base64: string };
 }
 
-export async function sendInboundMessage(baseUrl: string, apiToken: string, payload: InboundMessagePayload): Promise<InboundMessageResult | { blocked: true }> {
-    const response = await fetch(`${baseUrl}/channels/inbound`, {
+export async function sendInboundMessage(payload: InboundMessagePayload): Promise<InboundMessageResult | { blocked: true }> {
+    const response = await backendSessionFetch("/channels/inbound", {
         method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiToken}`,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
     });
 
@@ -84,13 +80,10 @@ export interface GroupInboundMessagePayload {
 }
 
 /** `mentioned` já resolvido pelo chamador (client/) — ver channels/whatsapp.ts/telegram.ts, únicos lugares com acesso às estruturas específicas de canal pra detectar menção/reply. */
-export async function sendGroupInboundMessage(baseUrl: string, apiToken: string, payload: GroupInboundMessagePayload): Promise<InboundMessageResult | { blocked: true } | { noReply: true }> {
-    const response = await fetch(`${baseUrl}/channels/group-inbound`, {
+export async function sendGroupInboundMessage(payload: GroupInboundMessagePayload): Promise<InboundMessageResult | { blocked: true } | { noReply: true }> {
+    const response = await backendSessionFetch("/channels/group-inbound", {
         method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiToken}`,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
     });
 
@@ -112,10 +105,8 @@ export interface PendingOutboundMessage {
 }
 
 /** Consultado periodicamente pelo outbound-poller — ver outbound-poller.ts. */
-export async function fetchPendingOutbound(baseUrl: string, apiToken: string): Promise<PendingOutboundMessage[]> {
-    const response = await fetch(`${baseUrl}/channels/pending-outbound`, {
-        headers: { Authorization: `Bearer ${apiToken}` },
-    });
+export async function fetchPendingOutbound(): Promise<PendingOutboundMessage[]> {
+    const response = await backendSessionFetch("/channels/pending-outbound");
 
     if (!response.ok) {
         const body = await response.text().catch(() => "");

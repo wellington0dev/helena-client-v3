@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 // FERRAMENTA DE DESENVOLVIMENTO — não faz parte do client/ de produção,
 // não é instalada por install.sh/install.ps1, não é mencionada pro
 // usuário final. Serve só pra testar se o MODELO escolhe o comando certo
@@ -11,9 +15,7 @@
 // comando roda de verdade nesse SO?" (a segunda só um Windows/macOS real
 // responde).
 //
-// Uso:
-//   BACKEND_V2_URL=http://localhost:4001 BACKEND_V2_API_TOKEN=<token de teste> \
-//     node scripts/dev-fake-os-agent.js <machineName> <win32|linux|darwin>
+// Uso: node scripts/dev-fake-os-agent.js <machineName> <win32|linux|darwin>
 
 const [, , machineName, platform] = process.argv;
 const VALID_PLATFORMS = new Set(["win32", "linux", "darwin"]);
@@ -23,15 +25,21 @@ if (!machineName || !VALID_PLATFORMS.has(platform)) {
     process.exit(1);
 }
 
-const backendUrl = process.env.BACKEND_V2_URL || "";
-const apiToken = process.env.BACKEND_V2_API_TOKEN || "";
-if (!backendUrl || !apiToken) {
-    console.error("BACKEND_V2_URL/BACKEND_V2_API_TOKEN precisam estar no ambiente (use um token de TESTE, nunca o de produção).");
+const here = path.dirname(fileURLToPath(import.meta.url));
+const { url: backendUrl } = JSON.parse(fs.readFileSync(path.join(here, "../src/backend-url.json"), "utf8"));
+let accessToken;
+try {
+    accessToken = JSON.parse(fs.readFileSync(path.join(os.homedir(), ".config/helena/session.json"), "utf8")).accessToken;
+} catch {
+    // Login pela CLI ou pelo aplicativo antes de executar este utilitário.
+}
+if (!backendUrl || !accessToken) {
+    console.error("URL do backend ausente no build ou sessão inexistente. Faça login no client primeiro.");
     process.exit(1);
 }
 
 const backendWsUrl = backendUrl.replace(/^http/, "ws");
-const socket = new WebSocket(`${backendWsUrl}/ws/agent?token=${encodeURIComponent(apiToken)}`);
+const socket = new WebSocket(`${backendWsUrl}/ws/agent?token=${encodeURIComponent(accessToken)}`);
 
 socket.addEventListener("open", () => {
     console.log(`[fake-os-agent] conectado como "${machineName}" fingindo platform="${platform}".`);

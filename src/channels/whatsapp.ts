@@ -192,7 +192,7 @@ async function handleMessage(msg: WAMessage, sock: WASocket): Promise<void> {
             ? { mimeType: audioMessage.mimetype || "audio/ogg", base64: (await downloadMedia(msg, sock)).toString("base64") }
             : undefined;
 
-        const result = await sendInboundMessage(config.backendUrl, config.backendApiToken, {
+        const result = await sendInboundMessage({
             channel: "whatsapp",
             contactId: resolvePhoneContactId(remoteJid, msg.key.senderPn),
             senderName: msg.pushName || undefined,
@@ -248,7 +248,7 @@ async function handleGroupMessage(msg: WAMessage): Promise<void> {
     }
 
     try {
-        const result = await sendGroupInboundMessage(config.backendUrl, config.backendApiToken, {
+        const result = await sendGroupInboundMessage({
             channel: "whatsapp",
             groupId: remoteJid,
             groupName,
@@ -320,8 +320,8 @@ async function connect(): Promise<void> {
 
 /** Não lança — falha de configuração só reporta status "error" no painel, deixando o resto do client/ (painel, Telegram) de pé. */
 export function startWhatsapp(): void {
-    if (!config.backendUrl || !config.backendApiToken) {
-        updateWhatsapp({ status: "error", error: "BACKEND_V2_URL/BACKEND_V2_API_TOKEN não configurados no .env." });
+    if (!config.backendUrl) {
+        updateWhatsapp({ status: "error", error: "URL do backend central não configurada." });
         return;
     }
 

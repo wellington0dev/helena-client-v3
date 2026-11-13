@@ -2,7 +2,7 @@
 // Dispatcher do comando global `helena` (CLI de chat, agora dentro de
 // client/). Captura o cwd de onde a pessoa chamou `helena` ANTES de
 // qualquer coisa — o processo real roda com cwd = client/ (pra
-// dotenv/config achar o .env do pacote), então o diretório original só
+// resolver os caminhos relativos, então o diretório original só
 // sobrevive via env var (HELENA_CLI_CWD, lido em src/cli/chat.ts).
 //
 // `agent`/`whatsapp`/`telegram` não existem mais como subcomando: viraram
@@ -21,7 +21,7 @@ const HELP = `helena — chat interativo com a Helena
 
 Uso: helena [comando] [--help]
 
-  helena                          abre o chat (conecta em BACKEND_V2_URL, .env do client/)
+  helena                          abre o chat (conecta ao backend configurado no build)
   helena local-token rotate       gera um token local novo pra API do daemon
   helena local-token path         mostra onde está o arquivo do token (nunca imprime o token)
   helena mcp-server               inicia MCP server via stdio (expondo list/read/search/grep/glob/write/preview de arquivo)

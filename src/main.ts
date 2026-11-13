@@ -1,12 +1,12 @@
 import os from "node:os";
 import path from "node:path";
 import { applyFileConfig, config } from "./config.ts";
-import { importEnvOnce, loadFileConfig, patchFileConfig, publicView } from "./local-api/config-store.ts";
+import { loadFileConfig, patchFileConfig, publicView } from "./local-api/config-store.ts";
 import { runDoctor } from "./local-api/doctor.ts";
 import { hardenPermissions } from "./local-api/harden.ts";
 import { configDir } from "./local-api/paths.ts";
 import fs from "node:fs";
-import { ensureDeviceToken } from "./device-auth.ts";
+import { configureBackendSession } from "./backend-session.ts";
 import { createEventHub } from "./local-api/event-hub.ts";
 import { loadOrCreateLocalToken } from "./local-api/local-token.ts";
 import { startProgressUpstream } from "./local-api/progress-upstream.ts";
@@ -16,7 +16,7 @@ import { clearSession, loadSession, saveSession } from "./cli/session-store.ts";
 import { getState, onStateChange } from "./local-api/status-bus.ts";
 import { logoutWhatsapp, startWhatsapp, stopWhatsapp } from "./channels/whatsapp.ts";
 import { startTelegram, stopTelegram, validateTelegramToken } from "./channels/telegram.ts";
-import { startMachineAgent } from "./machine-agent.ts";
+import { startMachineAgent, stopMachineAgent } from "./machine-agent.ts";
 import { startOutboundPoller } from "./outbound-poller.ts";
 import { captureError, reportError } from "./telemetry.ts";
 import { startMachineMetrics } from "./machine-metrics.ts";
@@ -47,23 +47,34 @@ import { startMcpServer, stopMcpServer } from "./mcp-server.ts";
 const hub = createEventHub();
 hub.setState("channels", getState());
 onStateChange((state) => hub.setState("channels", { ...state }));
-const session = createSessionManager({
+let session: ReturnType<typeof createSessionManager>;
+let clientRuntimeActive = false;
+function startClientRuntime(): void {
+    if (clientRuntimeActive || !session?.isLoggedIn()) return;
+    clientRuntimeActive = true;
+    startWhatsapp();
+    startTelegram();
+    startMachineAgent(config.backendUrl, () => session.getAccessToken());
+}
+function stopClientRuntime(): void {
+    clientRuntimeActive = false;
+    void stopWhatsapp();
+    void stopTelegram();
+    stopMachineAgent();
+}
+session = createSessionManager({
     backendUrl: () => config.backendUrl,
     store: { load: loadSession, save: saveSession, clear: clearSession },
     hub,
-    onLogin: ensureDeviceToken,
+    onLogin: () => startClientRuntime(),
+    onLogout: stopClientRuntime,
     deviceLabel: config.machineName || os.hostname(),
 });
+configureBackendSession((path, init) => session.authedFetch(path, init));
 const version = (JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string }).version;
-const clientDir = path.resolve(new URL("..", import.meta.url).pathname);
-const secretPaths = [configDir(), path.join(clientDir, ".env"), path.resolve(config.whatsappAuthDir), path.resolve(config.whatsappLidPinsFile)];
+const secretPaths = [configDir(), path.resolve(config.whatsappAuthDir), path.resolve(config.whatsappLidPinsFile)];
 
-// Config central: importa o .env UMA vez e endurece permissões de segredos (achado C5 da auditoria).
-const imported = importEnvOnce();
-if (imported.imported.length > 0) {
-    applyFileConfig();
-    console.log(`[config] importado do .env para ${configDir()}/config.json: ${imported.imported.join(", ")} (o .env segue como fallback)`);
-}
+// Config central e permissões de segredos locais.
 const { fixed } = hardenPermissions(secretPaths);
 if (fixed.length > 0) console.log(`[segurança] permissões endurecidas em ${fixed.length} item(ns) de segredo.`);
 
@@ -77,9 +88,13 @@ startLocalApi({
     machineName: config.machineName || os.hostname(),
     channels: {
         info: () => ({ telegramTokenSet: Boolean(config.telegramBotToken) }),
-        whatsapp: { start: startWhatsapp, stop: stopWhatsapp, logout: logoutWhatsapp },
+        whatsapp: {
+            start() { if (!session.isLoggedIn()) throw new Error("Faça login para conectar o WhatsApp."); startWhatsapp(); },
+            stop: stopWhatsapp,
+            logout: logoutWhatsapp,
+        },
         telegram: {
-            start: startTelegram,
+            start() { if (!session.isLoggedIn()) throw new Error("Faça login para conectar o Telegram."); startTelegram(); },
             stop: stopTelegram,
             async setToken(token) {
                 if (token !== "") {
@@ -90,7 +105,7 @@ startLocalApi({
                 if (!result.ok) return { ok: false, error: Object.values(result.errors).join("; ") };
                 if (token === "") config.telegramBotToken = "";
                 applyFileConfig();
-                void stopTelegram().then(() => startTelegram());
+                void stopTelegram().then(() => { if (session.isLoggedIn()) startTelegram(); });
                 return { ok: true };
             },
         },
@@ -105,17 +120,11 @@ startLocalApi({
         },
     },
     machine: () => ({ name: config.machineName || os.hostname(), hostname: os.hostname(), platform: process.platform, agent: hub.snapshot().channels ? (hub.snapshot().channels as { machineAgent?: unknown }).machineAgent : undefined }),
-    doctor: () => runDoctor({ backendUrl: config.backendUrl, session, hub, deviceTokenPresent: Boolean(config.backendApiToken), secretPaths, listenHost: config.localBind, version }),
+    doctor: () => runDoctor({ backendUrl: config.backendUrl, session, hub, secretPaths, listenHost: config.localBind, version }),
 });
-startProgressUpstream({ backendUrl: config.backendUrl, hub, getToken: () => config.backendApiToken || loadSession()?.accessToken });
-startWhatsapp();
-startTelegram();
-startMachineAgent(config.backendUrl, config.backendApiToken);
-// Já logado de antes (session.json)? Confere se o token da máquina é dessa conta e, se não for, provisiona e
-// reinicia o agente — quem já estava logado nunca precisa relogar pra máquina aparecer (ver device-auth.ts).
-const savedJwt = loadSession()?.accessToken;
-if (savedJwt) void ensureDeviceToken(savedJwt);
-startOutboundPoller();
+startProgressUpstream({ backendUrl: config.backendUrl, hub, getToken: () => session.getAccessToken() });
+void session.getAccessToken().then((accessToken) => { if (accessToken) startClientRuntime(); });
+startOutboundPoller(() => session.isLoggedIn());
 startMachineMetrics();
 
 // MCP Server opcional (via env var)

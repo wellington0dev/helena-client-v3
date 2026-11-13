@@ -2,9 +2,7 @@ const { app, BrowserWindow, ipcMain, shell } = require("electron");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
-
-const DEV_URL = "http://127.0.0.1:5173";
+const DEV_URL = "http://127.0.0.1:4200";
 const isDev = process.argv.includes("--dev");
 let mainWindow;
 let ownsDaemon = false;
@@ -55,9 +53,7 @@ async function startBackend() {
   }
   let packagedConfig = {};
   try { packagedConfig = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "dist-desktop", "runtime-config.json"), "utf8")); } catch { /* desenvolvimento ou instalação antiga */ }
-  const centralUrl = packagedConfig.centralUrl || process.env.HELENA_CENTRAL_URL || process.env.BACKEND_V2_URL || "http://localhost:4510";
-  process.env.HELENA_CENTRAL_URL = centralUrl;
-  process.env.BACKEND_V2_URL = centralUrl;
+  const centralUrl = packagedConfig.centralUrl || "http://localhost:4510";
   await import(path.join(__dirname, "..", "dist-desktop", "daemon.mjs"));
   ownsDaemon = true;
   const deadline = Date.now() + 15_000;
@@ -124,7 +120,9 @@ ipcMain.handle("helena:request", async (event, requestPath, options = {}) => {
       ...(options.body === undefined
         ? {}
         : { body: JSON.stringify(options.body) }),
-      signal: AbortSignal.timeout(65_000),
+      // O backend pode levar vários minutos para concluir um turno de chat; um timeout menor deixaria o turno
+      // rodando e debitando créditos depois que o renderer já recebeu erro.
+      signal: AbortSignal.timeout(15 * 60_000),
     },
   );
   const text = await response.text();

@@ -5,7 +5,7 @@ import path from "node:path";
  * Diretório de configuração/credenciais da Helena nesta máquina. Calculado a CADA chamada (não no
  * module-load) pra os testes conseguirem isolar `HOME` — mesmo motivo de `session-store.ts`, que
  * fixa o caminho no import e por isso os testes dele trocam o HOME antes de importar.
- * Linux/macOS: `~/.config/helena` (igual ao que `session-store.ts`/`device-token.ts` já usam).
+ * Linux/macOS: `~/.config/helena` (igual ao que `session-store.ts` usa).
  * Windows: `%APPDATA%\Helena`.
  */
 export function configDir(): string {

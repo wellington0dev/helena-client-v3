@@ -81,6 +81,15 @@ test("login guarda access + refresh e manda o deviceLabel; sem expirar, nenhuma 
     assert.equal(b.refreshCalls, 0);
 });
 
+test("getAccessToken fornece JWT renovado para handshakes WebSocket", async () => {
+    const soon = jwt(20, "soon");
+    const { session, b } = setup({ initial: { accessToken: soon, refreshToken: "RT-old" } });
+    b.valid.add(soon);
+    const accessToken = await session.getAccessToken();
+    assert.equal(JSON.parse(Buffer.from(accessToken!.split(".")[1], "base64url").toString()).tag, "r1");
+    assert.equal(b.refreshCalls, 1);
+});
+
 test("renovação PREVENTIVA: access perto de expirar é trocado antes da chamada, e o par novo é gravado", async () => {
     const soon = jwt(20, "soon"); // expira em 20 s < leeway de 60 s
     const { session, b, st } = setup({ initial: { accessToken: soon, refreshToken: "RT-old" } });

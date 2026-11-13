@@ -8,18 +8,10 @@
     "helena": "./bin/helena.js"
   },
   "scripts": {
-    "start": "npm run desktop:dev",
-    "start:daemon": "node src/main.ts",
-    "desktop:build:daemon": "node scripts/write-desktop-config.mjs && esbuild src/main.ts --bundle --platform=node --format=esm --target=node24 --packages=external --outfile=dist-desktop/daemon.mjs",
-    "desktop:build:web": "vite build --config desktop-ui/vite.config.ts",
-    "desktop:build": "npm run desktop:build:daemon && npm run desktop:build:web",
-    "desktop:electron": "electron electron/main.cjs",
-    "desktop:dev": "npm run desktop:build:daemon && concurrently -k \"vite --config desktop-ui/vite.config.ts --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && electron electron/main.cjs --dev\"",
-    "desktop:package": "node scripts/write-desktop-config.mjs && npm run desktop:build && electron-builder",
-    "test": "node --test \"src/**/*.test.ts\"",
-    "typecheck": "tsc --noEmit",
-    "service:install:windows": "node scripts/install-windows-service.js",
-    "service:uninstall:windows": "node scripts/uninstall-windows-service.js"
+    "start": "node scripts/build-desktop-daemon.mjs && concurrently -k \"npm --prefix ../helena-web-v3 start -- --host 127.0.0.1 --port 4200\" \"wait-on http://127.0.0.1:4200 && electron electron/main.cjs --dev\"",
+    "build": "node scripts/build-desktop-daemon.mjs && node scripts/build-desktop-ui.mjs && electron-builder",
+    "test": "node scripts/build-desktop-ui.mjs && node --test \"src/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
@@ -44,7 +36,6 @@
     "@modelcontextprotocol/sdk": "^1.30.0",
     "baileys": "6.7.24",
     "chalk": "^6.0.0",
-    "dotenv": "^17.4.2",
     "express": "^5.3.0",
     "grammy": "^1.46.0",
     "ink": "^7.1.1",

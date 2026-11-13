@@ -8,7 +8,7 @@ import { configDir } from "./paths.ts";
  * qualquer caminho era aceito (achado C1 da auditoria de 10/09: prompt injection podia pedir `~/.ssh/id_rsa` ou o
  * `.env` do client e receber de volta no chat). Agora:
  *   1. NEGADOS SEMPRE: diretórios sensíveis (`~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.kube`, a pasta de config da Helena,
- *      o diretório de auth do WhatsApp) e arquivos por nome (`.env*` exceto `.env.example`, `*.pem`, `*.key`, chaves
+ *      o diretório de auth do WhatsApp) e arquivos por nome (`.env*`, `*.pem`, `*.key`, chaves
  *      SSH, `.netrc`, os tokens da Helena) + `deniedPaths` do usuário.
  *   2. Se `allowedDirs` não estiver vazio, só o que estiver DENTRO delas (resolvendo links simbólicos).
  */
@@ -29,7 +29,6 @@ const DENIED_NAME_PATTERNS: RegExp[] = [
     /^(creds|credentials)\.json$/i,
     /^(local-token|session\.json|device-token\.json)$/i,
 ];
-const ALLOWED_NAME_EXCEPTIONS = /^\.env\.(example|sample|template)$/i;
 
 function expand(p: string): string {
     if (p === "~") return os.homedir();
@@ -81,7 +80,7 @@ export function checkPathAccess(target: string, policy: PathPolicy): AccessCheck
         if (isInside(resolved, d)) return { ok: false, reason: `caminho protegido pela política de arquivos (${path.basename(d) || d})` };
     }
     const base = path.basename(resolved);
-    if (!ALLOWED_NAME_EXCEPTIONS.test(base) && DENIED_NAME_PATTERNS.some((re) => re.test(base))) {
+    if (DENIED_NAME_PATTERNS.some((re) => re.test(base))) {
         return { ok: false, reason: `arquivo sensível (${base}) — protegido pela política de arquivos` };
     }
     if (policy.allowedDirs.length > 0) {

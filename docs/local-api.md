@@ -12,7 +12,7 @@ A API Express local (`local-api/server.ts`) expõe o controle dos canais, estado
 - Só `GET /health` é público.
 - Limite honesto: qualquer processo do **mesmo usuário do SO** lê o arquivo do token (mesmo nível do `session.json`).
 - Porta: `CLIENT_LOCAL_PORT` (padrão 4100).
-- O endereço do backend central é injetado pela configuração de build/instalação (`HELENA_CENTRAL_URL`) ou por `BACKEND_V2_URL` em desenvolvimento. O usuário não configura esse endereço; se a instalação estiver sem ele, o app mostra um erro de instalação em vez de tentar buscar uma URL relativa como `/auth/login`.
+- O endereço do backend central vem de `src/backend-url.json` e é fixado no build; o client não precisa de env var para escolher o endpoint.
 
 ## Rotas (apiVersion 1)
 
@@ -32,7 +32,7 @@ A API Express local (`local-api/server.ts`) expõe o controle dos canais, estado
 | `GET /v1/machine`                                              | nome, hostname, plataforma e estado do `machine-agent`                                                                                                                                                                                                                                                          |
 | `GET /v1/doctor`                                               | diagnóstico: backend, sessão, token de dispositivo, canais, permissões dos segredos, bind — sem vazar segredo                                                                                                                                                                                                   |
 | `POST /v1/local-token/rotate`                                  | rotaciona o token local (única rota que o devolve), derruba as conexões WS antigas. CLI: `helena local-token rotate` / `helena local-token path`                                                                                                                                                                |
-| `POST /cli-session`                                            | TUI entrega o JWT obtido no backend para o daemon sincronizar o token de dispositivo (`ensureDeviceToken`); exige token local                                                                                                                                                                                   |
+| `POST /cli-session`                                            | Compatibilidade: CLI entrega o JWT obtido no backend ao daemon para adotar a sessão; exige token local                                                                                                                                                                                   |
 | `GET /ws`                                                      | estado dos canais ao vivo (usado pela TUI para capturar QR Code); exige token local                                                                                                                                                                                                                             |
 | `GET /v1/events` (WS)                                          | eventos do hub local (`hello`, `state`, `chat.progress`); exige token local                                                                                                                                                                                                                                     |
 
@@ -42,4 +42,4 @@ A API Express local (`local-api/server.ts`) expõe o controle dos canais, estado
 
 ## Política de arquivos (capabilities `read_file`/`list_files`/`search_files`/`write_file`)
 
-**Sempre negados**: `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.kube`, `~/.config/gcloud`, a pasta de config da Helena, o diretório de auth do WhatsApp, e por nome `.env*` (exceto `.env.example|sample|template`), `*.pem|*.key|*.p12|*.pfx`, chaves SSH, `.netrc`, `creds.json`, `session.json`, `device-token.json`, `local-token`; mais `deniedPaths` do usuário. Se `allowedDirs` não estiver vazio, só o que estiver dentro delas (links simbólicos são resolvidos, `../` não escapa).
+**Sempre negados**: `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.kube`, `~/.config/gcloud`, a pasta de config da Helena, o diretório de auth do WhatsApp, e por nome `.env*`, `*.pem|*.key|*.p12|*.pfx`, chaves SSH, `.netrc`, `creds.json`, `session.json`, `device-token.json`, `local-token`; mais `deniedPaths` do usuário. Se `allowedDirs` não estiver vazio, só o que estiver dentro delas (links simbólicos são resolvidos, `../` não escapa).

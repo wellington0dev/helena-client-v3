@@ -14,7 +14,6 @@ export interface DoctorDeps {
     session: SessionManager;
     hub: EventHub;
     fetchImpl?: typeof fetch;
-    deviceTokenPresent: boolean;
     /** Arquivos/diretórios com segredo (token local, session.json, .env, auth do WhatsApp…). */
     secretPaths: string[];
     listenHost: string;
@@ -38,8 +37,6 @@ export async function runDoctor(deps: DoctorDeps): Promise<{ ok: boolean; versio
     }
 
     checks.push({ name: "sessão", status: deps.session.isLoggedIn() ? "ok" : "warn", detail: deps.session.isLoggedIn() ? "logado" : "sem sessão — faça login (a TUI pede)" });
-    checks.push({ name: "token de dispositivo", status: deps.deviceTokenPresent ? "ok" : "warn", detail: deps.deviceTokenPresent ? "presente" : "ausente — WhatsApp/Telegram/execução remota ficam parados até o 1º login" });
-
     const channels = (deps.hub.snapshot().channels ?? {}) as { whatsapp?: { status?: string }; telegram?: { status?: string }; machineAgent?: { status?: string } };
     for (const [key, label] of [["whatsapp", "WhatsApp"], ["telegram", "Telegram"], ["machineAgent", "execução remota"]] as const) {
         const status = channels[key]?.status ?? "desconhecido";

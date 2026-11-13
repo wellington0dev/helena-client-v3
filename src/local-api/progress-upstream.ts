@@ -4,12 +4,12 @@ import type { EventHub } from "./event-hub.ts";
 /**
  * UMA conexão com `/ws/chat-progress` do backend, repassada ao hub — N TUIs abertas não abrem N conexões
  * (hoje cada TUI abre a sua e reconecta sozinha). Reconexão com backoff exponencial aqui, no daemon.
- * Autentica com o token de dispositivo (longa duração) quando existir; o backend também aceita o JWT.
+ * Autentica com JWT de sessão, atualizado pelo daemon antes de cada handshake.
  */
 export interface ProgressUpstreamOptions {
     backendUrl: string;
     hub: EventHub;
-    getToken: () => string | undefined;
+    getToken: () => string | undefined | Promise<string | undefined>;
     minDelayMs?: number;
     maxDelayMs?: number;
 }
@@ -23,9 +23,10 @@ export function startProgressUpstream(options: ProgressUpstreamOptions): { stop(
     let socket: WebSocket | undefined;
     let timer: NodeJS.Timeout | undefined;
 
-    function connect(): void {
+    async function connect(): Promise<void> {
         if (stopped) return;
-        const token = options.getToken();
+        let token: string | undefined;
+        try { token = await options.getToken(); } catch { token = undefined; }
         if (!token) {
             hub.setState("backend", "unauth");
             timer = setTimeout(connect, minDelay * 5);

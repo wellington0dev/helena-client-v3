@@ -11,21 +11,21 @@ npm install
 npm start
 ```
 
-`npm start` compila o backend desktop, abre o Vite em loopback e inicia o Electron. Para gerar os instaladores:
+`npm start` compila o backend desktop, abre a interface Angular/Ionic em loopback e inicia o Electron. Para gerar os instaladores:
 
 ```bash
-npm run desktop:package
+npm run build
 ```
 
-O build embute o servidor central. Pode-se definir `HELENA_CENTRAL_URL` no ambiente de build; sem ela, usa `http://localhost:4510`, o padrão do `helena-bk-v3` em desenvolvimento. Quem usa o aplicativo não informa a URL.
+O endereço do backend é fixo no artefato em `src/backend-url.json` (atualmente `http://localhost:4510`). Quem usa o aplicativo não configura URL por variável de ambiente.
 
 Os artefatos são gerados em `release/`. O aplicativo usa `~/.config/helena` no Linux/macOS e `%APPDATA%\Helena` no Windows, preservando configurações, sessão, token local e autenticação do WhatsApp existentes.
 
-O instalador recebe o endereço do servidor central durante o build (`HELENA_CENTRAL_URL` ou `BACKEND_V2_URL`); quem usa o aplicativo não precisa informar URL. O Express que controla este computador roda dentro do próprio Electron. Sem configuração de build, usa `http://localhost:4510`.
+O endereço do servidor central é definido em `src/backend-url.json` e copiado para o runtime do Electron; não depende de env vars. O Express que controla este computador roda dentro do próprio Electron.
 
 ## O que roda no desktop
 
-- Interface React no Chromium do Electron: conversa, canais, contatos, regras, integrações, créditos, uso e configurações.
+- Interface Angular/Ionic no Chromium do Electron: conversa, canais, contatos, regras, integrações, créditos, uso e configurações.
 - Backend Express local: API versionada, proxy autenticado ao backend-v2, configuração local e eventos WebSocket.
 - Serviços de máquina: WhatsApp (Baileys), Telegram, execução remota, arquivos, MCP local, métricas e mensagens de saída.
 
@@ -37,7 +37,7 @@ O código Ink e o comando `helena` permanecem no repositório para compatibilida
 
 ```bash
 npm run typecheck
-npm run desktop:build
+npm run build
 npm test
 ```
 

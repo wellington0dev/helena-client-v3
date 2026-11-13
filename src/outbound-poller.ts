@@ -34,7 +34,7 @@ async function deliverOne(message: PendingOutboundMessage): Promise<void> {
 }
 
 async function pollOnce(): Promise<void> {
-    const messages = await fetchPendingOutbound(config.backendUrl, config.backendApiToken);
+    const messages = await fetchPendingOutbound();
     for (const message of messages) {
         try {
             await deliverOne(message);
@@ -44,10 +44,11 @@ async function pollOnce(): Promise<void> {
     }
 }
 
-export function startOutboundPoller(): void {
+export function startOutboundPoller(isAuthenticated: () => boolean = () => true): void {
     if (!hasBackendConfig()) return; // sem backend configurado, nada a consultar — mesmo critério de startWhatsapp/startTelegram.
 
     setInterval(() => {
+        if (!isAuthenticated()) return;
         pollOnce().catch((error) => captureError("outbound-poller", "loop", error));
     }, POLL_INTERVAL_MS);
 }

@@ -26,6 +26,8 @@ export interface SessionManagerOptions {
     fetchImpl?: typeof fetch;
     /** Chamado (sem esperar) depois de login/registro bem-sucedido — ex.: provisionar o token de dispositivo. */
     onLogin?: (accessToken: string) => void | Promise<void>;
+    /** Desliga integrações locais quando a sessão é revogada ou expira. */
+    onLogout?: () => void | Promise<void>;
     /** Nome desta máquina, enviado no login só pra o usuário reconhecer a sessão em `GET /auth/sessions`. */
     deviceLabel?: string;
     /** Renova quando faltar menos que isto pro access token expirar (padrão 60 s). */
@@ -36,6 +38,8 @@ export interface SessionManager {
     isLoggedIn(): boolean;
     login(email: string, password: string): Promise<{ user: unknown }>;
     register(email: string, password: string, displayName?: string): Promise<{ user: unknown }>;
+    /** JWT válido para um handshake WS; renova preventivamente usando o refresh token mantido pelo daemon. */
+    getAccessToken(): Promise<string | undefined>;
     logout(): void;
     /** Rota legada `/cli-session`: adota um JWT obtido por quem já logou direto no backend (CLI antigo). */
     adoptToken(accessToken: string): void;
@@ -109,6 +113,7 @@ export function createSessionManager(options: SessionManagerOptions): SessionMan
     function expire(): void {
         setSession(undefined);
         hub.publish("session.expired", { reason: "backend_401" });
+        void Promise.resolve(options.onLogout?.()).catch(() => undefined);
     }
 
     async function authenticate(path: string, body: Record<string, unknown>): Promise<{ user: unknown }> {
@@ -152,18 +157,36 @@ export function createSessionManager(options: SessionManagerOptions): SessionMan
     function call(path: string, init: RequestInit): Promise<Response> {
         const headers = new Headers(init.headers);
         headers.set("Authorization", `Bearer ${token}`);
-        return doFetch(`${backendBaseUrl()}${path}`, { ...init, headers, signal: init.signal ?? AbortSignal.timeout(60_000) });
+        // Turnos reais de chat podem levar vários minutos (o teste com S5-free levou até 10 min e 40 s). Não abortar o
+        // proxy antes de o backend responder: o turno continuaria rodando e seria cobrado mesmo sem resposta no client.
+        return doFetch(`${backendBaseUrl()}${path}`, { ...init, headers, signal: init.signal ?? AbortSignal.timeout(15 * 60_000) });
     }
 
     const noSession = () => new Response(JSON.stringify({ message: "Sem sessão — faça login.", error: "no_session", statusCode: 401 }), { status: 401, headers: { "Content-Type": "application/json" } });
 
     return {
         isLoggedIn: () => Boolean(token),
+        async getAccessToken() {
+            if (!token) return undefined;
+            if (refreshToken && expiresAt !== undefined && expiresAt - Date.now() < leeway) {
+                const outcome = await refresh();
+                if (outcome === "rejected") {
+                    expire();
+                    return undefined;
+                }
+                if (outcome === "network" && expiresAt !== undefined && expiresAt <= Date.now()) return undefined;
+            } else if (expiresAt !== undefined && expiresAt <= Date.now()) {
+                expire();
+                return undefined;
+            }
+            return token;
+        },
         login: (email, password) => authenticate("/auth/login", { email, password }),
         register: (email, password, displayName) => authenticate("/auth/register", { email, password, ...(displayName ? { displayName } : {}) }),
         logout() {
             const rt = refreshToken;
             setSession(undefined);
+            void Promise.resolve(options.onLogout?.()).catch(() => undefined);
             // avisa o backend (revoga a família) sem esperar nem falhar por isso
             if (rt) void doFetch(`${backendBaseUrl()}/auth/logout`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refreshToken: rt }), signal: AbortSignal.timeout(5_000) }).catch(() => undefined);
         },

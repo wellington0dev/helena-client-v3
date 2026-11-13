@@ -1,4 +1,3 @@
-import "dotenv/config";
 import os from "node:os";
 import React from "react";
 import { render } from "ink";
@@ -61,7 +60,7 @@ process.on("SIGTERM", () => {
 });
 
 if (!config.backendUrl) {
-    console.error("[helena] BACKEND_V2_URL não configurado no .env.");
+    console.error("[helena] URL do backend ausente no build do aplicativo.");
     process.exit(1);
 }
 

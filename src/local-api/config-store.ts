@@ -4,13 +4,11 @@ import { configDir } from "./paths.ts";
 
 /**
  * Configuração LOCAL desta máquina, num só lugar: `~/.config/helena/config.json` (0600), escrita só pela API
- * (`PATCH /v1/config`) com validação. Precedência: config.json > .env > padrões (o `.env` continua sendo lido
- * como fallback por uma versão). Segredos (token do bot do Telegram) são write-only: nunca voltam em GET.
+ * (`PATCH /v1/config`) com validação. Segredos (token do bot do Telegram) são write-only: nunca voltam em GET.
  * Preferências que valem pra TODOS os dispositivos do usuário (telemetria, auto-approve, mensagens proativas)
  * continuam no BACKEND e são acessadas pelo proxy — não moram aqui.
  */
 export interface FileConfig {
-    backendUrl?: string;
     machineName?: string;
     allowedDirs?: string[];
     deniedPaths?: string[];
@@ -22,10 +20,9 @@ export interface FileConfig {
 type Key = keyof FileConfig;
 const SECRET_KEYS: readonly Key[] = ["telegramBotToken"];
 /** Chaves cuja mudança só vale depois de reiniciar o daemon (ou o canal correspondente). */
-const RESTART_KEYS: readonly Key[] = ["backendUrl", "machineName"];
+const RESTART_KEYS: readonly Key[] = ["machineName"];
 
 const validators: Record<Key, (v: unknown) => string | undefined> = {
-    backendUrl: (v) => (typeof v === "string" && /^https?:\/\/[^\s/]+/.test(v) ? undefined : "deve ser uma URL http(s)"),
     machineName: (v) => (typeof v === "string" && v.trim().length >= 1 && v.length <= 100 ? undefined : "texto de 1 a 100 caracteres"),
     allowedDirs: (v) => (Array.isArray(v) && v.length <= 50 && v.every((x) => typeof x === "string" && path.isAbsolute(x.replace(/^~(?=$|\/)/, "/home"))) ? undefined : "lista de até 50 caminhos absolutos (ou começando com ~)"),
     deniedPaths: (v) => (Array.isArray(v) && v.length <= 100 && v.every((x) => typeof x === "string" && x.length > 0) ? undefined : "lista de até 100 caminhos"),
@@ -103,19 +100,4 @@ export function patchFileConfig(patch: Record<string, unknown>): PatchResult {
     if (Object.keys(errors).length > 0) return { ok: false, errors };
     if (changed.length > 0) saveFileConfig(next as FileConfig);
     return { ok: true, config: next as FileConfig, changed, restartRequired: changed.filter((k) => (RESTART_KEYS as readonly string[]).includes(k)) };
-}
-
-/** Importação ÚNICA do `.env` (só se o config.json ainda não existe): copia o que estiver definido no ambiente. */
-export function importEnvOnce(env: NodeJS.ProcessEnv = process.env): { imported: string[] } {
-    if (fs.existsSync(configFilePath())) return { imported: [] };
-    const candidate: Record<string, unknown> = {};
-    if (env.BACKEND_V2_URL) candidate.backendUrl = env.BACKEND_V2_URL;
-    if (env.CLIENT_BACKGROUND_SHELL_TIMEOUT_MINUTES) candidate.backgroundShellTimeoutMinutes = Number(env.CLIENT_BACKGROUND_SHELL_TIMEOUT_MINUTES);
-    if (env.MEDIA_MAX_MB) candidate.mediaMaxMb = Number(env.MEDIA_MAX_MB);
-    if (env.TELEGRAM_BOT_TOKEN) candidate.telegramBotToken = env.TELEGRAM_BOT_TOKEN;
-    const valid: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(candidate)) if (validators[k as Key](v) === undefined) valid[k] = v;
-    if (Object.keys(valid).length === 0) return { imported: [] };
-    saveFileConfig(valid as FileConfig);
-    return { imported: Object.keys(valid) };
 }

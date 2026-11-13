@@ -1,5 +1,6 @@
 import pkg from "../package.json" with { type: "json" };
 import { config } from "./config.ts";
+import { backendSessionFetch } from "./backend-session.ts";
 
 /**
  * Emissor de telemetria pro DAEMON (`main.ts`/`machine-agent.ts`/canais) —
@@ -55,7 +56,7 @@ export interface ReportTelemetryOptions {
     stack?: string;
     /** "client" | "machine-agent" | "whatsapp" | "telegram" | "cli" — livre, descreve de onde veio dentro do próprio client/. */
     source?: string;
-    /** Bearer explícito — o `cli/` (chat interativo) autentica com JWT de login, não o token de API do daemon; ausente usa `config.backendApiToken`. */
+    /** Bearer explícito para chamadas iniciadas pela CLI; ausente usa a sessão do daemon. */
     token?: string;
 }
 
@@ -75,15 +76,14 @@ export function redact(text: string): string {
 }
 
 export async function reportTelemetry(level: TelemetryLevel, rawMessage: string, opts?: ReportTelemetryOptions): Promise<void> {
-    const token = opts?.token ?? config.backendApiToken;
-    if (!config.backendUrl || !token) return;
+    if (!config.backendUrl) return;
     const message = redact(rawMessage);
     if (!takeReportSlot(level, message)) return;
 
     try {
-        await fetch(`${config.backendUrl}/telemetry/logs`, {
+        const init: RequestInit = {
             method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            headers: { "Content-Type": "application/json", ...(opts?.token ? { Authorization: `Bearer ${opts.token}` } : {}) },
             body: JSON.stringify({
                 level,
                 message: message.slice(0, 4000),
@@ -92,7 +92,9 @@ export async function reportTelemetry(level: TelemetryLevel, rawMessage: string,
                 appVersion: pkg.version,
                 context: { platform: process.platform, nodeVersion: process.version },
             }),
-        });
+        };
+        if (opts?.token) await fetch(`${config.backendUrl}/telemetry/logs`, init);
+        else await backendSessionFetch("/telemetry/logs", init);
     } catch {
         // best-effort — telemetria nunca pode virar um segundo problema.
     }

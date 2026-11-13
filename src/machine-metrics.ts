@@ -1,5 +1,6 @@
 import os from "node:os";
 import { config } from "./config.ts";
+import { backendSessionFetch } from "./backend-session.ts";
 
 /**
  * Snapshot periódico de consumo do PROCESSO do daemon (`main.ts`) — CPU e RAM do próprio processo da Helena, nunca
@@ -63,11 +64,11 @@ export function buildMetricPayload(machineName: string, cpuPercent: number, memo
 }
 
 async function report(payload: MachineMetricPayload): Promise<void> {
-    if (!config.backendUrl || !config.backendApiToken) return;
+    if (!config.backendUrl) return;
     try {
-        await fetch(`${config.backendUrl}/machine-metrics`, {
+        await backendSessionFetch("/machine-metrics", {
             method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.backendApiToken}` },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
             signal: AbortSignal.timeout(10_000),
         });
