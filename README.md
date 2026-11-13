@@ -29,6 +29,17 @@ O endereço do servidor central é definido em `src/backend-url.json` e copiado 
 - Backend Express local: API versionada, proxy autenticado ao backend-v2, configuração local e eventos WebSocket.
 - Serviços de máquina: WhatsApp (Baileys), Telegram, execução remota, arquivos, MCP local, métricas e mensagens de saída.
 
+### Integrações MCP
+
+As conexões MCP consumidas pela Helena são cadastradas no painel web (`/mcp-connections`), que guarda o token de
+forma protegida. Para servidor público, o backend central pode conectar diretamente. Se a conexão estiver associada
+a uma máquina, este client abre o transporte MCP Streamable HTTP a partir do computador selecionado — permitindo
+alcançar `localhost` e redes privadas sem expor esses destinos ao backend central. O token é encaminhado como Bearer
+para o servidor MCP; evite incluí-lo em logs ou diagnósticos compartilhados.
+
+Isso é diferente do **MCP server local** opcional (`CLIENT_MCP_SERVER=1`), que expõe um conjunto limitado de
+capacidades de arquivos do computador para clientes MCP externos via stdio.
+
 ## CLI legado
 
 O código Ink e o comando `helena` permanecem no repositório para compatibilidade e migração. A interface principal e o fluxo de instalação passam a ser o aplicativo Electron; o CLI não é iniciado pelo Electron.
