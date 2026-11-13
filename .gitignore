@@ -9,3 +9,6 @@ node_modules
 # painel web removido — sobras locais de build
 panel-app/.angular/
 panel-app/dist/
+dist-desktop/
+desktop-ui/dist/
+release/

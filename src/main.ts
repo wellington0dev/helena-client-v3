@@ -48,7 +48,7 @@ const hub = createEventHub();
 hub.setState("channels", getState());
 onStateChange((state) => hub.setState("channels", { ...state }));
 const session = createSessionManager({
-    backendUrl: config.backendUrl,
+    backendUrl: () => config.backendUrl,
     store: { load: loadSession, save: saveSession, clear: clearSession },
     hub,
     onLogin: ensureDeviceToken,

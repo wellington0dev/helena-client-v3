@@ -1,83 +1,49 @@
-# Helena — client (helena-client-v3)
+# Helena Desktop
 
-O que roda no computador do dono. Dois programas no mesmo pacote:
+O cliente principal da Helena é um aplicativo **Electron**. A interface é uma aplicação web renderizada pelo Chromium interno; ela não depende de abrir o navegador do sistema. O processo Electron inicia ou conecta ao backend local **Express**, que mantém os canais, a sessão, as integrações com o backend-v2 e as funções da máquina.
 
-- **Daemon** (`src/main.ts`, serviço `helena-client.service`): ponte do **WhatsApp** (Baileys) e do **Telegram**,
-  execução remota na máquina (`src/machine-agent.ts`: shell, arquivos, MCP local), API local `/v1` no loopback
-  (`docs/local-api.md`), entrega de mensagens agendadas, telemetria do próprio processo.
-- **CLI `helena`** (`bin/helena.js` → `src/cli/`): chat em tela cheia feito com **Ink**, falando direto com o backend
-  (`helena-bk-v3`).
+O renderer não recebe o JWT da conta nem o token local. Ele usa uma ponte IPC limitada no preload; chamadas autenticadas e os tokens ficam no processo principal. O backend local continua ligado a `127.0.0.1` por padrão.
 
-## Instalação
-
-**2026-09-28: os scripts `install.sh`/`install.ps1`/`update.sh`/`stop.sh`/`scripts/link-helena.sh` foram removidos**
-— provisionar, atualizar e parar a máquina é manual agora:
+## Desenvolvimento
 
 ```bash
 npm install
-systemctl --user restart helena-client.service   # serviço systemd de usuário — crie a unit a partir de systemd/helena-client.service
-journalctl --user -u helena-client.service -f
+npm start
 ```
 
-Comando global `helena` (sem sudo), à mão: `mkdir -p ~/.local/bin && ln -sf "$(pwd)/bin/helena.js" ~/.local/bin/helena`
-(garanta que `~/.local/bin` está no `PATH`). Windows: `npm run service:install:windows` /
-`npm run service:uninstall:windows` (scripts Node, não removidos — só o `.ps1` que os chamava).
-
-`.env` (ver `.env.example`): `BACKEND_V2_URL`, `CLIENT_LOCAL_PORT`, `TELEGRAM_BOT_TOKEN`, `WHATSAPP_AUTH_DIR`,
-`CLIENT_BACKGROUND_SHELL_TIMEOUT_MINUTES`. A máquina é vinculada à conta **pelo login** da CLI
-(`~/.config/helena/device-token.json`); `BACKEND_V2_API_TOKEN` só existe como reserva de instalação antiga.
+`npm start` compila o backend desktop, abre o Vite em loopback e inicia o Electron. Para gerar os instaladores:
 
 ```bash
-systemctl --user restart helena-client.service
-journalctl --user -u helena-client.service -f
+npm run desktop:package
 ```
 
-O daemon roda o código-fonte direto (`node --experimental-strip-types src/main.ts`), sem build. A CLI também: cada
-`helena` aberto já usa o código atual do repositório.
+O build embute o servidor central. Pode-se definir `HELENA_CENTRAL_URL` no ambiente de build; sem ela, usa `http://localhost:4510`, o padrão do `helena-bk-v3` em desenvolvimento. Quem usa o aplicativo não informa a URL.
 
-## A CLI
+Os artefatos são gerados em `release/`. O aplicativo usa `~/.config/helena` no Linux/macOS e `%APPDATA%\Helena` no Windows, preservando configurações, sessão, token local e autenticação do WhatsApp existentes.
 
-Comandos (`/` abre a lista, Tab completa):
+O instalador recebe o endereço do servidor central durante o build (`HELENA_CENTRAL_URL` ou `BACKEND_V2_URL`); quem usa o aplicativo não precisa informar URL. O Express que controla este computador roda dentro do próprio Electron. Sem configuração de build, usa `http://localhost:4510`.
 
-| Comando | O que faz |
-|---|---|
-| `/sessoes`, `/novo` | Retomar uma conversa / começar outra |
-| `/sidebar` | Mostra/esconde a barra de sessões e gastos (clique pra retomar) |
-| `/cobranca` | Créditos em R$: saldo, comprar mais, limite mensal padrão dos contatos |
-| `/limites` | Limites de custo e passos (tuas mensagens, contatos, grupos, tarefas) + como a cotação funciona |
-| `/regras` | Regras de atendimento: o que contatos/grupos podem fazer e dados que nunca saem; `a` = auditoria |
-| `/contatos`, `/canais` | Contatos (limite mensal, permissões, `r` = regras) e status do WhatsApp/Telegram |
-| `/integracoes` | Conexões MCP + guia de servidor compatível |
-| `/permissoes` | Comandos "sempre permitidos" |
-| `/uso`, `/telemetria` | Uso por canal; CPU/RAM da Helena por máquina e logs (logs só admin) |
-| `/config`, `/logout`, `/help` | Preferências, sair da conta, ajuda |
+## O que roda no desktop
 
-Atalhos: **Ctrl+P** paleta · **Esc** ou **Ctrl+C** interrompe a resposta · **Ctrl+C** duas vezes (ou **Ctrl+D**) sai ·
-**PageUp/PageDown** ou **roda do mouse** rolam o histórico · **@** menciona arquivo.
+- Interface React no Chromium do Electron: conversa, canais, contatos, regras, integrações, créditos, uso e configurações.
+- Backend Express local: API versionada, proxy autenticado ao backend-v2, configuração local e eventos WebSocket.
+- Serviços de máquina: WhatsApp (Baileys), Telegram, execução remota, arquivos, MCP local, métricas e mensagens de saída.
 
-Enquanto a Helena responde, uma bolha dela aparece no fim da conversa: spinner com o que ela está fazendo, as últimas
-linhas do raciocínio (em inglês, é o Google que gera) e, depois, o texto chegando em tempo real. A resposta final
-substitui o rascunho. Cada mensagem manda um `turnId`; a CLI só aceita streaming do próprio turno.
+## CLI legado
 
-A barra lateral mostra o bloco **Gastos**: saldo, custo da última mensagem, da sessão, do dia e o histórico por mensagem.
+O código Ink e o comando `helena` permanecem no repositório para compatibilidade e migração. A interface principal e o fluxo de instalação passam a ser o aplicativo Electron; o CLI não é iniciado pelo Electron.
 
-## Testes
+## Validação
 
 ```bash
-npm test          # node --test src/**/*.test.ts
 npm run typecheck
+npm run desktop:build
+npm test
 ```
 
-**Nunca teste contra o serviço de verdade**: esta máquina roda o `helena-client.service` real (WhatsApp/Telegram do
-dono). Para a TUI use um HOME temporário (com `.config/helena/config.json` apontando pra um backend falso) e um pty.
-Três cuidados que já deram falso "travou":
-
-- `EIO` na leitura do pty é transitório, não fim do processo;
-- defina o tamanho do terminal (`TIOCSWINSZ`) antes de iniciar;
-- mande uma tecla por vez com pausa; rajada de uma vez só dá falso negativo no Ink.
+Não rode o daemon de desenvolvimento numa máquina que já tenha outro cliente Helena ativo sem antes confirmar qual processo está hospedando os canais. Apenas um processo deve controlar a sessão WhatsApp por vez.
 
 ## Documentação
 
-- `docs/local-api.md`: API local `/v1` do daemon (token local, sessão, chat, eventos).
-- Changelog (backend e client juntos): `docs/changelog.md` no `helena-bk-v3`.
-- Referência da API do backend, incluindo os eventos de streaming: `docs/rest-api-reference.md` no `helena-bk-v3`.
+- `docs/local-api.md`: API Express local, sessão, configuração e eventos.
+- `src/cli/`: implementação Ink preservada durante a migração.

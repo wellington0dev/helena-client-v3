@@ -1,0 +1,157 @@
+/* Helena semantic tokens, synced with helena-web-v3/src/theme/variables.scss.
+   Set data-theme="light|dark" on <html> to override
+   the system preference; without it, the theme follows the operating system. */
+:root {
+  color-scheme: light dark;
+
+  --hl-font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --hl-font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+
+  --hl-space-1: 4px;
+  --hl-space-2: 8px;
+  --hl-space-3: 12px;
+  --hl-space-4: 16px;
+  --hl-space-5: 20px;
+  --hl-space-6: 24px;
+  --hl-space-8: 32px;
+  --hl-space-10: 40px;
+  --hl-space-12: 48px;
+
+  --hl-radius-control: 6px;
+  --hl-radius-surface: 10px;
+  --hl-radius-dialog: 14px;
+  --hl-shadow-subtle: 0 1px 2px rgb(16 17 20 / 8%);
+  --hl-shadow-raised: 0 8px 24px rgb(16 17 20 / 12%);
+  --hl-motion-fast: 100ms;
+  --hl-motion-normal: 160ms;
+  --hl-motion-slow: 220ms;
+  --hl-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --hl-z-base: 0;
+  --hl-z-sticky: 10;
+  --hl-z-menu: 30;
+  --hl-z-overlay: 50;
+  --hl-z-toast: 60;
+  --hl-sidebar-width: 248px;
+  --hl-content-max: 1200px;
+  --hl-breakpoint-mobile: 600px;
+  --hl-breakpoint-tablet: 1024px;
+}
+
+:root,
+:root[data-theme='light'] {
+  color-scheme: light;
+  --hl-bg: #f7f7f8;
+  --hl-surface: #ffffff;
+  --hl-surface-raised: #f0eff5;
+  --hl-border: #dedee5;
+  --hl-text: #17181c;
+  --hl-text-secondary: #626572;
+  --hl-accent: #6d4bd6;
+  --hl-accent-rgb: 109, 75, 214;
+  --hl-accent-hover: #5e3fc4;
+  --hl-accent-contrast: #ffffff;
+  --hl-success: #087f5b;
+  --hl-warning: #946200;
+  --hl-danger: #c23b52;
+  --hl-focus: #6d4bd6;
+  --hl-surface-raised-rgb: 240, 239, 245;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --hl-bg: #101114;
+  --hl-surface: #1a1c21;
+  --hl-surface-raised: #22252b;
+  --hl-border: #292c33;
+  --hl-text: #edeef2;
+  --hl-text-secondary: #a0a3ad;
+  --hl-accent: #a78bfa;
+  --hl-accent-rgb: 167, 139, 250;
+  --hl-accent-hover: #b8a2ff;
+  --hl-accent-contrast: #17121f;
+  --hl-success: #34d399;
+  --hl-warning: #fbbf24;
+  --hl-danger: #fb7185;
+  --hl-focus: #b8a2ff;
+  --hl-surface-raised-rgb: 34, 37, 43;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --hl-bg: #101114;
+    --hl-surface: #1a1c21;
+    --hl-surface-raised: #22252b;
+    --hl-border: #292c33;
+    --hl-text: #edeef2;
+    --hl-text-secondary: #a0a3ad;
+    --hl-accent: #a78bfa;
+    --hl-accent-rgb: 167, 139, 250;
+    --hl-accent-hover: #b8a2ff;
+    --hl-accent-contrast: #17121f;
+    --hl-success: #34d399;
+    --hl-warning: #fbbf24;
+    --hl-danger: #fb7185;
+    --hl-focus: #b8a2ff;
+    --hl-surface-raised-rgb: 34, 37, 43;
+  }
+}
+
+/* Compatibility bridge for existing Ionic components during gradual migration. */
+:root {
+  --ion-background-color: var(--hl-bg);
+  --ion-text-color: var(--hl-text);
+  --ion-item-background: var(--hl-surface);
+  --ion-card-background: var(--hl-surface);
+  --ion-toolbar-background: var(--hl-surface);
+  --ion-border-color: var(--hl-border);
+  --ion-color-primary: var(--hl-accent);
+  --ion-color-primary-rgb: var(--hl-accent-rgb);
+  --ion-color-primary-contrast: var(--hl-accent-contrast);
+  --ion-color-primary-contrast-rgb: 255, 255, 255;
+  --ion-color-primary-shade: var(--hl-accent);
+  --ion-color-primary-tint: var(--hl-accent-hover);
+  --ion-color-success: var(--hl-success);
+  --ion-color-warning: var(--hl-warning);
+  --ion-color-danger: var(--hl-danger);
+  --ion-color-medium: var(--hl-text-secondary);
+  --ion-color-medium-shade: var(--hl-text-secondary);
+  --ion-color-light: var(--hl-surface-raised);
+  --ion-color-light-rgb: var(--hl-surface-raised-rgb);
+  --ion-color-light-contrast: var(--hl-text);
+  --ion-color-light-contrast-rgb: var(--ion-text-color-rgb);
+  --ion-color-light-shade: var(--hl-surface);
+  --ion-color-light-tint: var(--hl-surface-raised);
+  --ion-color-dark: var(--hl-text);
+  --ion-color-dark-rgb: var(--ion-text-color-rgb);
+  --ion-color-dark-contrast: var(--hl-bg);
+  --ion-color-dark-contrast-rgb: var(--ion-background-color-rgb);
+}
+
+html,
+body {
+  font-family: var(--hl-font-sans);
+}
+
+code,
+pre,
+kbd,
+samp {
+  font-family: var(--hl-font-mono);
+}
+
+:focus-visible {
+  outline: 2px solid var(--hl-focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

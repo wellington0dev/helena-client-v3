@@ -17,7 +17,7 @@ export const config = {
     localPort: Number(process.env.CLIENT_LOCAL_PORT || process.env.CLIENT_PANEL_PORT || 4100),
     /** Interface da API local. Padrão loopback; qualquer outro valor (ex.: IP da VPN) é opt-in e continua exigindo o token local. */
     localBind: process.env.CLIENT_LOCAL_BIND || "127.0.0.1",
-    backendUrl: process.env.BACKEND_V2_URL || "",
+    backendUrl: process.env.HELENA_CENTRAL_URL || process.env.BACKEND_V2_URL || "",
     /**
      * Mutável de propósito (não `readonly`) — provisionado sozinho no
      * primeiro login (painel ou CLI, ver local-api/server.ts#handleCliSession)
@@ -48,7 +48,7 @@ export const config = {
 /** Aplica o `config.json` (precedência sobre o .env). Chamado no import e depois de cada `PATCH /v1/config`. */
 export function applyFileConfig(): void {
     const file = loadFileConfig();
-    if (file.backendUrl !== undefined) config.backendUrl = file.backendUrl;
+    if (!process.env.HELENA_CENTRAL_URL && file.backendUrl !== undefined) config.backendUrl = file.backendUrl;
     if (file.machineName !== undefined) config.machineName = file.machineName;
     if (file.backgroundShellTimeoutMinutes !== undefined) config.backgroundShellTimeoutMinutes = file.backgroundShellTimeoutMinutes;
     if (file.mediaMaxMb !== undefined) config.mediaMaxMb = file.mediaMaxMb;

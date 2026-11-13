@@ -20,7 +20,7 @@ export interface SessionStore {
 }
 
 export interface SessionManagerOptions {
-    backendUrl: string;
+    backendUrl: string | (() => string);
     store: SessionStore;
     hub: EventHub;
     fetchImpl?: typeof fetch;
@@ -75,7 +75,18 @@ function jwtExpiryMs(token: string): number | undefined {
 type RefreshOutcome = "ok" | "rejected" | "network";
 
 export function createSessionManager(options: SessionManagerOptions): SessionManager {
-    const { backendUrl, store, hub } = options;
+    const { store, hub } = options;
+    function backendBaseUrl(): string {
+        const configured = typeof options.backendUrl === "function" ? options.backendUrl() : options.backendUrl;
+        if (!configured?.trim()) throw new HttpError(503, "O endereço do servidor central não está configurado nesta versão do aplicativo. Atualize a instalação ou contate o administrador.");
+        try {
+            const url = new URL(configured.trim());
+            if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("protocolo inválido");
+            return url.toString().replace(/\/$/, "");
+        } catch {
+            throw new HttpError(503, "A configuração do servidor central desta instalação é inválida. Atualize a instalação ou contate o administrador.");
+        }
+    }
     const doFetch = options.fetchImpl ?? fetch;
     const leeway = options.refreshLeewayMs ?? 60_000;
     const loaded = store.load();
@@ -102,7 +113,7 @@ export function createSessionManager(options: SessionManagerOptions): SessionMan
 
     async function authenticate(path: string, body: Record<string, unknown>): Promise<{ user: unknown }> {
         const payload = { ...body, ...(options.deviceLabel ? { deviceLabel: options.deviceLabel } : {}) };
-        const response = await doFetch(`${backendUrl}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        const response = await doFetch(`${backendBaseUrl()}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
         if (!response.ok) throw new HttpError(response.status, await messageOf(response));
         const parsed = (await response.json()) as { accessToken?: string; refreshToken?: string; expiresIn?: number; user?: unknown };
         if (!parsed.accessToken) throw new HttpError(502, "Resposta do backend sem accessToken.");
@@ -118,7 +129,7 @@ export function createSessionManager(options: SessionManagerOptions): SessionMan
         inflight = (async (): Promise<RefreshOutcome> => {
             let response: Response;
             try {
-                response = await doFetch(`${backendUrl}/auth/refresh`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refreshToken: used }), signal: AbortSignal.timeout(15_000) });
+                response = await doFetch(`${backendBaseUrl()}/auth/refresh`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refreshToken: used }), signal: AbortSignal.timeout(15_000) });
             } catch {
                 return "network";
             }
@@ -141,7 +152,7 @@ export function createSessionManager(options: SessionManagerOptions): SessionMan
     function call(path: string, init: RequestInit): Promise<Response> {
         const headers = new Headers(init.headers);
         headers.set("Authorization", `Bearer ${token}`);
-        return doFetch(`${backendUrl}${path}`, { ...init, headers, signal: init.signal ?? AbortSignal.timeout(60_000) });
+        return doFetch(`${backendBaseUrl()}${path}`, { ...init, headers, signal: init.signal ?? AbortSignal.timeout(60_000) });
     }
 
     const noSession = () => new Response(JSON.stringify({ message: "Sem sessão — faça login.", error: "no_session", statusCode: 401 }), { status: 401, headers: { "Content-Type": "application/json" } });
@@ -154,7 +165,7 @@ export function createSessionManager(options: SessionManagerOptions): SessionMan
             const rt = refreshToken;
             setSession(undefined);
             // avisa o backend (revoga a família) sem esperar nem falhar por isso
-            if (rt) void doFetch(`${backendUrl}/auth/logout`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refreshToken: rt }), signal: AbortSignal.timeout(5_000) }).catch(() => undefined);
+            if (rt) void doFetch(`${backendBaseUrl()}/auth/logout`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refreshToken: rt }), signal: AbortSignal.timeout(5_000) }).catch(() => undefined);
         },
         adoptToken(accessToken) {
             setSession(accessToken); // legado: JWT sem refresh

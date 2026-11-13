@@ -1,25 +1,43 @@
 {
   "name": "helena-client",
   "version": "0.1.0",
-  "description": "Serviço local da Helena — substitui o cli/ como dono da configuração de canais (WhatsApp/Telegram) e da conexão com o backend-v2. Sobe um painel web local (QR do WhatsApp no navegador, status dos canais) e faz a ponte de mensagens com o servidor. Ver docs/architecture-v2.md §4.",
+  "description": "Aplicativo desktop da Helena com interface web no Chromium do Electron e backend Express local.",
   "type": "module",
+  "main": "electron/main.cjs",
   "bin": {
     "helena": "./bin/helena.js"
   },
   "scripts": {
-    "start": "node src/main.ts",
+    "start": "npm run desktop:dev",
+    "start:daemon": "node src/main.ts",
+    "desktop:build:daemon": "node scripts/write-desktop-config.mjs && esbuild src/main.ts --bundle --platform=node --format=esm --target=node24 --packages=external --outfile=dist-desktop/daemon.mjs",
+    "desktop:build:web": "vite build --config desktop-ui/vite.config.ts",
+    "desktop:build": "npm run desktop:build:daemon && npm run desktop:build:web",
+    "desktop:electron": "electron electron/main.cjs",
+    "desktop:dev": "npm run desktop:build:daemon && concurrently -k \"vite --config desktop-ui/vite.config.ts --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && electron electron/main.cjs --dev\"",
+    "desktop:package": "node scripts/write-desktop-config.mjs && npm run desktop:build && electron-builder",
     "test": "node --test \"src/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
     "service:install:windows": "node scripts/install-windows-service.js",
     "service:uninstall:windows": "node scripts/uninstall-windows-service.js"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
     "@types/node": "^26.1.2",
     "@types/qrcode": "^1.5.6",
     "@types/qrcode-terminal": "^0.12.2",
     "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.3.0",
     "@types/ws": "^8.5.13",
-    "typescript": "7.0.2"
+    "@vitejs/plugin-react": "^6.3.0",
+    "concurrently": "^10.0.7",
+    "electron": "^45.3.1",
+    "electron-builder": "^26.18.0",
+    "esbuild": "^0.28.2",
+    "sass": "^1.108.2",
+    "typescript": "7.0.2",
+    "vite": "^8.3.8",
+    "wait-on": "^9.5.1"
   },
   "dependencies": {
     "@grammyjs/files": "^1.2.0",
@@ -27,6 +45,7 @@
     "baileys": "6.7.24",
     "chalk": "^6.0.0",
     "dotenv": "^17.4.2",
+    "express": "^5.3.0",
     "grammy": "^1.46.0",
     "ink": "^7.1.1",
     "ink-spinner": "^5.0.0",
@@ -34,6 +53,7 @@
     "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
     "react": "^19.2.8",
+    "react-dom": "^19.3.1",
     "string-width": "^8.2.0",
     "wrap-ansi": "^10.0.0",
     "ws": "^8.21.3"
@@ -43,6 +63,36 @@
   },
   "allowScripts": {
     "baileys@6.7.24": true,
-    "protobufjs@7.6.6": true
+    "protobufjs@7.6.6": true,
+    "esbuild@0.28.2": true
+  },
+  "build": {
+    "appId": "com.helena.client",
+    "productName": "Helena",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      "desktop-ui/dist/**/*",
+      "dist-desktop/**/*",
+      "package.json"
+    ],
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Utility"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ]
+    }
   }
 }
