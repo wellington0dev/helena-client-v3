@@ -58,3 +58,5 @@ Não rode o daemon de desenvolvimento numa máquina que já tenha outro cliente 
 
 - `docs/local-api.md`: API Express local, sessão, configuração e eventos.
 - `src/cli/`: implementação Ink preservada durante a migração.
+
+Consulte [descoberta de MCPs locais](docs/mcp-discovery.md) para configurar e usar servidores HTTP e stdio.

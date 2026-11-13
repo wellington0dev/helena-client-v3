@@ -1,3 +1,5 @@
+import { StdioClientTransport, getDefaultEnvironment } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { resolveStdioServer } from "./mcp-discovery.ts";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
@@ -23,12 +25,20 @@ export interface McpToolDescriptor {
 }
 
 async function connect(serverUrl: string, authToken?: string): Promise<Client> {
-    const transport = new StreamableHTTPClientTransport(new URL(serverUrl), {
-        ...(authToken && { requestInit: { headers: { Authorization: `Bearer ${authToken}` } } }),
-    });
+    const local = serverUrl.startsWith("stdio://") ? await resolveStdioServer(serverUrl) : undefined;
+    const transport = local
+        ? new StdioClientTransport({ ...local, env: { ...getDefaultEnvironment(), ...local.env }, stderr: "ignore" })
+        : new StreamableHTTPClientTransport(new URL(serverUrl), {
+            ...(authToken && { requestInit: { headers: { Authorization: `Bearer ${authToken}` } } }),
+        });
     const client = new Client({ name: "helena-machine-agent", version: "1.0.0" });
-    await client.connect(transport);
-    return client;
+    try {
+        await client.connect(transport, { timeout: LIST_TOOLS_TIMEOUT_MS });
+        return client;
+    } catch (error) {
+        await transport.close().catch(() => undefined);
+        throw error;
+    }
 }
 
 /** Lista as tools do servidor MCP local — usado pra montar o catálogo de tools do lado do backend-v2 (ver mcp-client-registry.service.ts). Segue paginação (`nextCursor`) até esgotar, mesmo padrão de `@genkit-ai/mcp`. */
