@@ -1,7 +1,7 @@
 /**
- * Dinheiro na TUI (créditos em R$, 2026-09-24). Custo de UMA mensagem é pequeno (~R$ 0,06; no modelo leve,
+ * Formatação monetária na TUI. Custo de UMA mensagem é pequeno (~R$ 0,06; no modelo leve,
  * ~R$ 0,002), então usa 4 casas — com 2, quase tudo viraria "R$ 0,00" ou "R$ 0,06" sem diferença visível entre
- * mensagens. Saldo e totais usam 2 casas, mas nunca mostram "R$ 0,00" pra um valor positivo.
+ * mensagens. Valores monetários e créditos usam 2 casas nos totais.
  */
 export function formatCost(brl: number | null | undefined): string {
     if (brl === null || brl === undefined) return "—";
@@ -14,6 +14,16 @@ export function formatMoney(brl: number | null | undefined): string {
     const sign = brl < 0 ? "-" : "";
     const [int, dec] = Math.abs(brl).toFixed(2).split(".");
     return `${sign}R$ ${int!.replace(/\B(?=(\d{3})+(?!\d))/g, ".")},${dec}`;
+}
+
+/** Quantidade de créditos: mesma precisão do saldo, sem símbolo de moeda. */
+export function formatCredits(credits: number | null | undefined): string {
+    if (credits === null || credits === undefined) return "—";
+    const sign = credits < 0 ? "-" : "";
+    const absolute = Math.abs(credits);
+    const decimals = absolute > 0 && absolute < 0.01 ? 4 : 2;
+    const [int, dec] = absolute.toFixed(decimals).split(".");
+    return `${sign}${int!.replace(/\B(?=(\d{3})+(?!\d))/g, ".")},${dec}`;
 }
 
 /** 31234 → "31k", 1_250_000 → "1.2M" — cabe na sidebar de 30 colunas. */

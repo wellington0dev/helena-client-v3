@@ -33,7 +33,7 @@ export function buildSettingItems(me: CurrentUser | undefined, sidebarOn: boolea
         { id: "proactive", section: "Privacidade", label: "Mensagens por iniciativa própria", kind: "toggle", value: me?.allowProactiveMessages, description: "Permite que a Helena te avise sem você ter perguntado (lembretes, fim de tarefas, resultados)." },
         { id: "tokens", section: "Conta", label: "Tokens de API", kind: "link", description: "Tokens usados pelo helena agent (execução remota). Criar e revogar." },
         { id: "usage", section: "Conta", label: "Uso", kind: "link", description: "Chamadas de chat por canal e nos últimos 7 dias." },
-        { id: "billing", section: "Conta", label: "Cobrança", kind: "link", description: "Saldo de créditos em R$ e compra de mais." },
+        { id: "billing", section: "Conta", label: "Cobrança", kind: "link", description: "Saldo de créditos e compra de mais." },
         { id: "limits", section: "Conta", label: "Limites e custos", kind: "link", description: "Limites de custo e de passos (tuas mensagens, contatos, grupos, tarefas) e como a cotação do dólar funciona." },
         { id: "telemetry-logs", section: "Conta", label: "Telemetria", kind: "link", description: "CPU/RAM da Helena em cada máquina + erros/avisos reportados (logs exigem conta admin)." },
         { id: "contacts", section: "Integrações", label: "Contatos", kind: "link", description: "Editar ou apagar contatos (WhatsApp/Telegram) e permissões extras." },

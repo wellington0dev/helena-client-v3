@@ -489,7 +489,7 @@ export function App(props: AppProps): React.ReactElement {
         };
     }, [sending, sidebarVisible, backendUrl, token]);
 
-    // Gastos (sidebar, bloco "Gastos"): créditos em R$ + histórico por mensagem desta sessão. Relido ao começar/
+    // Gastos (sidebar, bloco "Gastos"): saldo em créditos + histórico de custos por mensagem desta sessão. Relido ao começar/
     // terminar cada turno e ao trocar de sessão; falha de rede só mantém o último valor bom (nunca derruba o chat).
     const [spending, setSpending] = React.useState<SpendingInfo>({ messages: [] });
     React.useEffect(() => {

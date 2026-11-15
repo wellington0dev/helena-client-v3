@@ -3,7 +3,7 @@ import { Box, Text, useInput } from "ink";
 import qrcodeTerminal from "qrcode-terminal";
 import { cancelPendingPurchase, getBillingBalance, MAX_PURCHASE_BRL, MIN_PURCHASE_BRL, purchaseCredits, setDefaultContactLimit, type BillingBalance, type PurchaseResult } from "../api/billing.ts";
 import { getPendingCoupons, redeemCoupon, type PendingCoupon, type RedeemedCoupon } from "../api/coupons.ts";
-import { formatMoney, parseBrlInput } from "./format-money.ts";
+import { formatCredits, formatMoney, parseBrlInput } from "./format-money.ts";
 import { UnauthorizedError } from "../backend.ts";
 import { Form } from "./form.ts";
 import { Loader } from "./loader.ts";
@@ -22,7 +22,7 @@ function renderQrAscii(text: string): string {
 
 type ScreenState = { kind: "balance" } | { kind: "form" } | { kind: "limit" } | { kind: "redeem" };
 
-/** `/cobranca` — créditos em R$ da plataforma + comprar/cancelar/resgatar cupom. Só sobre `billing.controller.ts` (saldo que o dono consome) + `coupons.controller.ts` (2026-09-28, mesmo saldo) — nada a ver com `payments.controller.ts` (gateway do dono pra cobrar os PRÓPRIOS contatos), sem equivalente na CLI hoje. */
+/** `/cobranca` — saldo em créditos da plataforma + comprar/cancelar/resgatar cupom. Limites, pagamentos e custos continuam em reais. */
 export function BillingScreen(props: { backendUrl: string; token: string; onExit: () => void; onUnauthorized: () => void }): React.ReactElement {
     const { backendUrl, token, onExit, onUnauthorized } = props;
     const [balance, setBalance] = React.useState<BillingBalance | undefined>(undefined);
@@ -208,8 +208,8 @@ export function BillingScreen(props: { backendUrl: string; token: string; onExit
         { flexDirection: "column", ...panel("border") },
         h(Text, { bold: true, color: theme.primary }, "Cobrança — créditos"),
         h(Box, { marginTop: SPACE.tight }),
-        h(Text, { color: balance.creditBrl <= 0 ? theme.warning : undefined }, `Saldo atual: ${formatMoney(balance.creditBrl)}`),
-        h(Text, { color: theme.textMuted }, `Cortesia recebida: ${formatMoney(balance.totalGrantedBrl)} · Total comprado: ${formatMoney(balance.totalPurchasedBrl)}`),
+        h(Text, { color: balance.creditBrl <= 0 ? theme.warning : undefined }, `Saldo atual: ${formatCredits(balance.creditBrl)} créditos`),
+        h(Text, { color: theme.textMuted }, `Cortesia recebida: ${formatCredits(balance.totalGrantedBrl)} créditos · Total comprado: ${formatCredits(balance.totalPurchasedBrl)} créditos`),
         h(Text, { color: theme.textMuted }, "Cada mensagem desconta o custo real da IA + 10%. O gasto por mensagem aparece na barra lateral."),
         h(Text, { color: theme.textMuted }, `Limite padrão por contato/grupo de terceiros: ${formatMoney(balance.defaultContactMonthlyLimitBrl)}/mês (l muda; por contato, em /contatos)`),
         h(Box, { marginTop: SPACE.tight }),
@@ -235,7 +235,7 @@ function RedeemResultView(props: { result: RedeemedCoupon }): React.ReactElement
     return h(
         Box,
         { flexDirection: "column", marginTop: SPACE.tight, ...panel("success") },
-        h(Text, { bold: true, color: theme.success }, `Cupom resgatado — +${formatMoney(result.creditBrl)}`),
+        h(Text, { bold: true, color: theme.success }, `Cupom resgatado — +${formatCredits(result.creditBrl)} créditos`),
         h(Text, null, result.confirmationMessage),
     );
 }
@@ -246,7 +246,7 @@ function PendingCouponsView(props: { coupons: PendingCoupon[] }): React.ReactEle
         Box,
         { flexDirection: "column", marginTop: SPACE.tight, ...panel("border") },
         h(Text, { bold: true, color: theme.primary }, coupons.length === 1 ? "Você tem 1 cupom esperando" : `Você tem ${coupons.length} cupons esperando`),
-        ...coupons.map((c) => h(Text, { key: c.id, color: theme.textMuted }, `${c.code} — ${formatMoney(c.creditBrl)}`)),
+        ...coupons.map((c) => h(Text, { key: c.id, color: theme.textMuted }, `${c.code} — ${formatCredits(c.creditBrl)} créditos`)),
         h(Text, { color: theme.textMuted }, "r pra resgatar (peça o código a quem enviou, ou veja no email)."),
     );
 }

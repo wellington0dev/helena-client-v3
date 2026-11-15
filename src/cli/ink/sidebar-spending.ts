@@ -1,8 +1,8 @@
 import type { UsageMessage } from "../api/usage.ts";
-import { compactTokens, formatCost, formatMoney } from "./format-money.ts";
+import { compactTokens, formatCost, formatCredits, formatMoney } from "./format-money.ts";
 
 export interface SpendingInfo {
-    /** Créditos restantes em R$ — `undefined` enquanto carrega (ou se o backend não respondeu). */
+    /** Créditos restantes — `undefined` enquanto carrega (ou se o backend não respondeu). */
     balanceBrl?: number;
     /** Custo da mensagem mais recente desta sessão (vem na própria resposta do chat, sem esperar o histórico). */
     lastCostBrl?: number | null;
@@ -38,7 +38,7 @@ export function spendingLines(info: SpendingInfo, width: number, maxRows: number
     if (maxRows <= 0) return [];
     const lines: SpendingLine[] = [
         { text: "Gastos", tone: "title" },
-        { text: row("Saldo", info.balanceBrl === undefined ? "…" : formatMoney(info.balanceBrl), width), tone: info.balanceBrl !== undefined && info.balanceBrl <= 0 ? "warning" : undefined },
+        { text: row("Saldo", info.balanceBrl === undefined ? "…" : `${formatCredits(info.balanceBrl)} créditos`, width), tone: info.balanceBrl !== undefined && info.balanceBrl <= 0 ? "warning" : undefined },
         { text: row("Última msg", formatCost(info.lastCostBrl), width) },
         { text: row("Sessão", formatMoney(info.sessionCostBrl), width) },
         { text: row("Hoje", formatMoney(info.todayCostBrl), width) },

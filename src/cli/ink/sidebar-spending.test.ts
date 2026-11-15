@@ -7,7 +7,7 @@ const msg = (at: string, costBrl: number | null) => ({ at, sessionId: "s1", inpu
 test("mostra saldo, última, sessão, hoje e o histórico por mensagem (mais recente primeiro)", () => {
     const lines = spendingLines({ balanceBrl: 12.5, lastCostBrl: 0.0612, sessionCostBrl: 0.18, todayCostBrl: 0.5, messages: [msg("2026-09-24T17:32:00Z", 0.0612), msg("2026-09-24T17:30:00Z", null)] }, 27, 20).map((l) => l.text);
     assert.equal(lines[0], "Gastos");
-    assert.match(lines[1]!, /^Saldo\s+R\$ 12,50$/);
+    assert.match(lines[1]!, /^Saldo\s+12,50 créditos$/);
     assert.match(lines[2]!, /^Última msg\s+R\$ 0,0612$/);
     assert.match(lines[3]!, /^Sessão\s+R\$ 0,18$/);
     assert.match(lines[4]!, /^Hoje\s+R\$ 0,50$/);

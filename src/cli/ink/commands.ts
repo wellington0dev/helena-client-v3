@@ -76,7 +76,7 @@ export const COMMANDS: Command[] = [
     {
         name: "cobranca",
         section: "Conta",
-        description: "Créditos em R$ — saldo, comprar mais, resgatar cupom, limite mensal padrão dos contatos",
+        description: "Saldo em créditos — comprar mais, resgatar cupom e ajustar limite mensal dos contatos",
         run: (ctx) => ctx.setScreen("billing"),
     },
     {

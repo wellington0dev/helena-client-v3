@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { compactTokens, formatCost, formatMoney } from "./format-money.ts";
+import { compactTokens, formatCost, formatCredits, formatMoney } from "./format-money.ts";
 
 test("formatCost: 4 casas pra custo de mensagem (senão tudo viraria R$ 0,00/0,06)", () => {
     assert.equal(formatCost(0.0612), "R$ 0,0612");
@@ -14,6 +14,13 @@ test("formatMoney: 2 casas, milhar com ponto, negativo, e nunca 'R$ 0,00' pra va
     assert.equal(formatMoney(-0.4), "-R$ 0,40");
     assert.equal(formatMoney(0), "R$ 0,00");
     assert.equal(formatMoney(0.004), "R$ 0,0040");
+});
+
+test("formatCredits: formata saldo sem símbolo monetário", () => {
+    assert.equal(formatCredits(1234.5), "1.234,50");
+    assert.equal(formatCredits(-0.4), "-0,40");
+    assert.equal(formatCredits(0.004), "0,0040");
+    assert.equal(formatCredits(null), "—");
 });
 
 test("compactTokens", () => {
