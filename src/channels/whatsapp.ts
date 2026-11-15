@@ -133,6 +133,23 @@ export async function sendWhatsappMessage(jid: string, text: string): Promise<vo
     }
 }
 
+/**
+ * Valida se um número existe no WhatsApp (`onWhatsApp`, mesmo mecanismo que
+ * o dono usa pra checar antes de salvar um contato novo). Chamado pela
+ * capability `whatsapp_check_number` do machine-agent (backend-v2
+ * ContactMessagingService#checkWhatsappNumber) — devolve `{exists:false}`
+ * quando o próprio WhatsApp responde que o número não está lá, e LANÇA
+ * quando o socket não está conectado (o backend traduz isso em
+ * "unavailable" e REJEITA criar o contato: sem validação, não se cria um
+ * contato "no escuro"). `jid` só vem quando existe.
+ */
+export async function checkWhatsappNumber(number: string): Promise<{ exists: boolean; jid?: string }> {
+    if (!currentSock) throw new Error("WhatsApp não está conectado.");
+    const results = await currentSock.onWhatsApp(number);
+    const match = results?.[0];
+    return match?.exists ? { exists: true, jid: match.jid } : { exists: false };
+}
+
 /** Mesmo formato aceito no reply de um turno normal (ver handleMessage) — usado tanto ali quanto pelo outbound-poller (message_contact com stickerId). */
 export async function sendWhatsappSticker(jid: string, base64: string): Promise<void> {
     if (!currentSock) throw new Error("WhatsApp não está conectado.");

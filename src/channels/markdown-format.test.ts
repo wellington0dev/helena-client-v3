@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { toTelegramHtml, toWhatsappText } from "./markdown-format.ts";
+import { toTelegramContent, toTelegramHtml, toWhatsappText } from "./markdown-format.ts";
 
 test("toTelegramHtml: negrito/itálico/código viram tags HTML", () => {
     const out = toTelegramHtml("**negrito** *itálico* `código`");
@@ -100,4 +100,73 @@ test("toWhatsappText: <box> degrada pro título em negrito (1 asterisco) + conte
 test("toTelegramHtml: <button> avulso degrada pro próprio texto, sem numeração", () => {
     const out = toTelegramHtml("<button>Pode cancelar a viagem</button>");
     assert.equal(out, "Pode cancelar a viagem");
+});
+
+// --- toTelegramContent (Fase 2): mesmos blocos, mas virando inline keyboard nativo em vez de degradar.
+// O `answer` de cada botão é EXATAMENTE o texto que o clique manda pro backend (protocolo do painel web,
+// ver markdown-blocks.ts) — é o que garante que o agente recebe uma mensagem normal, sem contrato novo. ---
+
+test("toTelegramContent: texto sem interação não gera teclado e rende igual ao toTelegramHtml", () => {
+    const text = "Oi! **tudo bem?**";
+    const content = toTelegramContent(text);
+
+    assert.deepEqual(content.rows, []);
+    assert.equal(content.html, toTelegramHtml(text));
+});
+
+test("toTelegramContent: <select> de escolha única vira uma linha de botões, cada um mandando 'label: opção'", () => {
+    const content = toTelegramContent(SELECT);
+
+    assert.equal(content.rows.length, 1);
+    assert.deepEqual(content.rows[0], [
+        { text: "Pizza", answer: "Qual prato você quer?: Pizza" },
+        { text: "Sushi", answer: "Qual prato você quer?: Sushi" },
+    ]);
+    assert.match(content.html, /Qual prato você quer\?/);
+    // as opções NÃO aparecem como texto numerado — só como botão
+    assert.doesNotMatch(content.html, /1\. Pizza/);
+});
+
+test("toTelegramContent: <select multiple> degrada pra texto numerado, sem teclado (precisa marcar N + confirmar)", () => {
+    const content = toTelegramContent('<select label="Sabores" multiple="true">\n<option>Morango</option>\n<option>Chocolate</option>\n</select>');
+
+    assert.deepEqual(content.rows, []);
+    assert.match(content.html, /1\. Morango/);
+    assert.match(content.html, /responda com o número ou o texto da opção/);
+});
+
+test("toTelegramContent: <button> avulso vira botão que manda o próprio texto; o texto da mensagem cai pro rótulo do botão", () => {
+    const content = toTelegramContent("<button>Pode cancelar a viagem</button>");
+
+    assert.deepEqual(content.rows, [[{ text: "Pode cancelar a viagem", answer: "Pode cancelar a viagem" }]]);
+    assert.equal(content.html, "Pode cancelar a viagem"); // nunca vazio — Telegram recusa mensagem sem texto
+});
+
+test("toTelegramContent: <form> com campo degrada tudo pra texto (botão não coleta valor de input)", () => {
+    const content = toTelegramContent(FORM);
+
+    assert.deepEqual(content.rows, []);
+    assert.match(content.html, /1\. Seu nome/);
+    assert.match(content.html, /campo: valor/);
+    assert.doesNotMatch(content.html, /Enviar/);
+});
+
+test("toTelegramContent: <form> só de botões vira uma linha de botões (cada um manda o próprio texto)", () => {
+    const content = toTelegramContent('<form label="Confirma?">\n<button>Sim</button>\n<button>Não</button>\n</form>');
+
+    assert.deepEqual(content.rows, [
+        [
+            { text: "Sim", answer: "Sim" },
+            { text: "Não", answer: "Não" },
+        ],
+    ]);
+    assert.match(content.html, /Confirma\?/);
+});
+
+test("toTelegramContent: <box> com <select> dentro gera o botão mesmo aninhado", () => {
+    const content = toTelegramContent('<box title="Escolha">\n<select label="Prefere?">\n<option>A</option>\n</select>\n</box>');
+
+    assert.deepEqual(content.rows, [[{ text: "A", answer: "Prefere?: A" }]]);
+    assert.match(content.html, /Escolha/);
+    assert.match(content.html, /Prefere\?/);
 });

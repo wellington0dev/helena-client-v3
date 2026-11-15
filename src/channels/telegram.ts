@@ -1,10 +1,11 @@
+import { randomBytes } from "node:crypto";
 import { Api, Bot, InputFile, type Context } from "grammy";
 import { hydrateFiles, type FileFlavor } from "@grammyjs/files";
 import { config } from "../config.ts";
 import { updateTelegram } from "../local-api/status-bus.ts";
 import { sendGroupInboundMessage, sendInboundMessage } from "./backend-client.ts";
 import { exceedsMediaLimit, mediaTooLargeMessage } from "./media-limit.ts";
-import { toTelegramHtml } from "./markdown-format.ts";
+import { toTelegramContent, toTelegramHtml, type TelegramButtonRow } from "./markdown-format.ts";
 import { captureError } from "../telemetry.ts";
 
 /** Telegram tem 3 formatos de figurinha, bem diferentes — webp (estática), TGS/Lottie (animada) e webm (vídeo). `getFile()` não devolve o mimetype certo sozinho, então infere pelas flags do próprio sticker. Exportada só pra teste (lógica pura). */
@@ -37,15 +38,68 @@ let currentBot: Bot<TelegramContext> | undefined;
 /** Bot em andamento (inclusive antes do `onStart`) — pra `stopTelegram` conseguir parar o polling a qualquer momento. */
 let activeBot: Bot<TelegramContext> | undefined;
 
+/**
+ * Mapa token → { chatId, answer } pros botões de inline keyboard. `callback_data` do Telegram é
+ * limitado a 64 BYTES, então o botão carrega só um token opaco; o texto de resposta (que pode ser
+ * longo — ex.: "Pergunta: opção com nome comprido") vive aqui até o clique. Um clique CONSOME a
+ * entrada (o mesmo botão não responde duas vezes) e um teto descarta as mais antigas (o processo é
+ * de longa duração e cada mensagem com botões gera entradas novas).
+ */
+const CALLBACK_ENTRIES_MAX = 500;
+const callbackAnswers = new Map<string, { chatId: string; answer: string }>();
+
+/** Guarda a resposta de um botão e devolve o token curto que vai no `callback_data`. */
+function rememberCallback(chatId: string, answer: string): string {
+    const token = randomBytes(9).toString("base64url"); // 12 chars — folga enorme sob os 64 bytes do callback_data
+    callbackAnswers.set(token, { chatId, answer });
+    while (callbackAnswers.size > CALLBACK_ENTRIES_MAX) {
+        const oldest = callbackAnswers.keys().next().value;
+        if (oldest === undefined) break;
+        callbackAnswers.delete(oldest);
+    }
+    return token;
+}
+
+/** Recupera e JÁ consome a resposta de um token (clique único). */
+function takeCallback(token: string): { chatId: string; answer: string } | undefined {
+    const entry = callbackAnswers.get(token);
+    if (entry) callbackAnswers.delete(token);
+    return entry;
+}
+
+/** Rótulo de botão do Telegram tem limite prático (~64 chars) — corta com reticências sem perder o `answer` (que fica inteiro no registro). */
+function truncateButtonText(text: string): string {
+    const max = 64;
+    return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
+}
+
+/** Monta o `reply_markup` a partir das linhas de `toTelegramContent`; `undefined` quando a mensagem não tem interação. */
+function buildReplyMarkup(chatId: string, rows: TelegramButtonRow[]): { inline_keyboard: { text: string; callback_data: string }[][] } | undefined {
+    if (!rows.length) return undefined;
+    return {
+        inline_keyboard: rows.map((row) => row.map((btn) => ({ text: truncateButtonText(btn.text), callback_data: rememberCallback(chatId, btn.answer) }))),
+    };
+}
+
 export async function sendTelegramMessage(chatId: string, text: string): Promise<void> {
     if (!currentBot) throw new Error("Telegram não está conectado.");
-    await currentBot.api.sendMessage(chatId, toTelegramHtml(text), { parse_mode: "HTML" });
+    const { html, rows } = toTelegramContent(text);
+    const replyMarkup = buildReplyMarkup(chatId, rows);
+    await currentBot.api.sendMessage(chatId, html, { parse_mode: "HTML", ...(replyMarkup ? { reply_markup: replyMarkup } : {}) });
 }
 
 /** Mesmo formato aceito no reply de um turno normal (ver handlePrivateMessage) — usado tanto ali quanto pelo outbound-poller (message_contact com stickerId). */
 export async function sendTelegramSticker(chatId: string, base64: string): Promise<void> {
     if (!currentBot) throw new Error("Telegram não está conectado.");
     await currentBot.api.sendSticker(chatId, new InputFile(Buffer.from(base64, "base64")));
+}
+
+/** Responde no 1:1 (via `ctx.reply`) já com os botões nativos quando a resposta tiver bloco interativo — mesma conversão de `sendTelegramMessage`. */
+async function replyWithTelegramContent(ctx: TelegramContext, text: string): Promise<void> {
+    const chatId = String(ctx.from?.id ?? ctx.chat?.id ?? "");
+    const { html, rows } = toTelegramContent(text);
+    const replyMarkup = buildReplyMarkup(chatId, rows);
+    await ctx.reply(html, { parse_mode: "HTML", ...(replyMarkup ? { reply_markup: replyMarkup } : {}) });
 }
 
 function isMentioned(ctx: Context): boolean {
@@ -116,7 +170,7 @@ async function handlePrivateMessage(ctx: TelegramContext): Promise<void> {
         });
         if ("blocked" in result) return;
 
-        await ctx.reply(toTelegramHtml(result.text), { parse_mode: "HTML" });
+        await replyWithTelegramContent(ctx, result.text);
         if (result.sticker) await ctx.replyWithSticker(new InputFile(Buffer.from(result.sticker.base64, "base64")));
     } catch (error) {
         captureError("telegram", "falha ao processar mensagem", error);
@@ -148,6 +202,47 @@ async function handleGroupMessage(ctx: Context): Promise<void> {
     }
 }
 
+/**
+ * Clique num botão de inline keyboard (Fase 2 — Telegram nativo). O botão carrega só um token; aqui a
+ * gente recupera o texto de resposta equivalente e manda como uma mensagem de texto NORMAL pro
+ * backend-v2 (`sendInboundMessage`) — o contrato com o agente não muda em nada, ele nem sabe que foi
+ * um clique (docs/formato-interativo-chat.md §2). Tira o "reloginho" e some com o teclado da mensagem
+ * original (um clique já consumiu o token; sem isso o botão continuaria clicável pra sempre).
+ */
+async function handleCallbackQuery(ctx: TelegramContext): Promise<void> {
+    const data = ctx.callbackQuery?.data;
+    if (!data || !ctx.from) {
+        await ctx.answerCallbackQuery().catch(() => {});
+        return;
+    }
+
+    const entry = takeCallback(data);
+    if (!entry || entry.chatId !== String(ctx.from.id)) {
+        await ctx.answerCallbackQuery({ text: "Essa opção expirou. Envie uma nova mensagem." }).catch(() => {});
+        return;
+    }
+
+    // Best-effort: tira o spinner e remove o teclado da mensagem original (pode falhar por mensagem
+    // antiga/inalcançável — não impede a resposta de seguir).
+    await ctx.answerCallbackQuery().catch(() => {});
+    await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } }).catch(() => {});
+
+    try {
+        const result = await sendInboundMessage({
+            channel: "telegram",
+            contactId: String(ctx.from.id),
+            senderName: ctx.from.first_name || undefined,
+            text: entry.answer,
+        });
+        if ("blocked" in result) return;
+
+        await replyWithTelegramContent(ctx, result.text);
+        if (result.sticker) await ctx.replyWithSticker(new InputFile(Buffer.from(result.sticker.base64, "base64")));
+    } catch (error) {
+        captureError("telegram", "falha ao processar clique de botão", error);
+    }
+}
+
 export function startTelegram(): void {
     if (!config.backendUrl) {
         updateTelegram({ status: "error", error: "URL do backend central não configurada." });
@@ -176,6 +271,8 @@ export function startTelegram(): void {
         if (ctx.chat.type === "group" || ctx.chat.type === "supergroup") return handleGroupMessage(ctx);
         // "channel": fora de escopo, ignora.
     });
+
+    bot.on("callback_query:data", handleCallbackQuery);
 
     bot.start({
         onStart: () => {
