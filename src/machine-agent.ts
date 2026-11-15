@@ -1,6 +1,6 @@
 import os from "node:os";
 import { config } from "./config.ts";
-import { deleteFile, globFiles, grepFiles, listFiles, previewDiff, readFile, searchFiles, writeFile, type FileEdit, type NarrowPolicy } from "./local-files.ts";
+import { deleteFile, downloadFile, globFiles, grepFiles, inspectFiles, listFiles, previewDiff, readFile, searchFiles, writeFile, type FileEdit, type NarrowPolicy } from "./local-files.ts";
 import { runCommand, runCommandInternal, type StreamCallbacks } from "./local-shell.ts";
 import { discoverMcpServers } from "./mcp-discovery.ts";
 import { mcpCallTool, mcpListTools } from "./mcp-connection-client.ts";
@@ -93,7 +93,7 @@ const TIMEOUT_MS = 30_000;
  * local-files.ts). Fixa, sem env var pra configurar — YAGNI enquanto o
  * conjunto não mudar por tenant.
  */
-const CAPABILITIES = ["shell", "list_files", "read_file", "search_files", "write_file", "delete_file", "grep_files", "glob_files", "preview_diff", "mcp_list_tools", "mcp_call_tool", "mcp_discover", "path_policy_v1"];
+const CAPABILITIES = ["shell", "list_files", "read_file", "search_files", "write_file", "delete_file", "grep_files", "glob_files", "preview_diff", "inspect_files", "download_file", "mcp_list_tools", "mcp_call_tool", "mcp_discover", "path_policy_v1"];
 
 /** As capabilities de arquivo são síncronas e locais (sem I/O de rede); `mcp_list_tools`/`mcp_call_tool` são assíncronas (rede até o servidor MCP local) — `handleExec` faz `await` no resultado dos dois casos (await num valor que não é Promise é inofensivo). */
 function dispatchCapability(capability: string, payload: unknown): unknown | Promise<unknown> {
@@ -114,6 +114,14 @@ function dispatchCapability(capability: string, payload: unknown): unknown | Pro
         case "read_file": {
             const { path, policy } = payload as { path: string; policy?: NarrowPolicy };
             return readFile(path, policy);
+        }
+        case "inspect_files": {
+            const { paths } = payload as { paths: string[] };
+            return inspectFiles(paths);
+        }
+        case "download_file": {
+            const { path } = payload as { path: string };
+            return downloadFile(path);
         }
         case "search_files": {
             const { path, namePattern, contentPattern } = payload as { path: string; namePattern?: string; contentPattern?: string };

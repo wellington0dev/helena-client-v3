@@ -19,6 +19,7 @@ import { expandHome } from "./local-shell.ts";
 const IGNORED_DIR_NAMES = new Set(["node_modules", ".git", "dist", "build", ".next", ".cache", "coverage"]);
 /** Arquivo de código nunca deveria passar disso — evita carregar um binário gigante na memória sem querer. */
 const MAX_READ_BYTES = 2 * 1024 * 1024;
+const MAX_PLAN_DOWNLOAD_BYTES = 25 * 1024 * 1024;
 /** Teto de resultados de busca — evita devolver uma lista gigante (ou nunca terminar de escanear um projeto enorme). */
 const MAX_SEARCH_RESULTS = 500;
 /** Teto de resultados do grep — evita output explosivo. */
@@ -147,6 +148,75 @@ export function readFile(filePath: string, narrow?: NarrowPolicy): ReadFileResul
         return { content: fs.readFileSync(resolved, "utf8") };
     } catch (err) {
         return { content: "", error: `Não consegui ler "${filePath}": ${describe(err)}` };
+    }
+}
+
+export interface LocalFileInspection {
+    available: boolean;
+    size?: number;
+    mimeType?: string;
+    error?: string;
+}
+
+const MIME_TYPES_BY_EXTENSION: Record<string, string> = {
+    ".doc": "application/msword",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".gif": "image/gif",
+    ".jpeg": "image/jpeg",
+    ".jpg": "image/jpeg",
+    ".pdf": "application/pdf",
+    ".png": "image/png",
+    ".ppt": "application/vnd.ms-powerpoint",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".txt": "text/plain",
+    ".webp": "image/webp",
+    ".xls": "application/vnd.ms-excel",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+};
+
+function mimeTypeFor(filePath: string): string {
+    return MIME_TYPES_BY_EXTENSION[path.extname(filePath).toLowerCase()] ?? "application/octet-stream";
+}
+
+/** Verifica referências locais persistidas sem ler o conteúdo do arquivo. */
+export function inspectFile(filePath: string, narrow?: NarrowPolicy): LocalFileInspection {
+    const resolved = resolvePath(filePath);
+    const denied = guard(resolved, narrow, "file");
+    if (denied) return { available: false, error: denied };
+    try {
+        const stat = fs.statSync(resolved);
+        if (!stat.isFile()) return { available: false, error: "O caminho não é um arquivo." };
+        return { available: true, size: stat.size, mimeType: mimeTypeFor(resolved) };
+    } catch (err) {
+        return { available: false, error: `Arquivo não disponível: ${describe(err)}` };
+    }
+}
+
+export function inspectFiles(filePaths: string[]): LocalFileInspection[] {
+    if (filePaths.length > 200) {
+        return filePaths.map(() => ({ available: false, error: "Máximo de 200 arquivos por consulta." }));
+    }
+    return filePaths.map((filePath) => inspectFile(filePath));
+}
+
+/** Lê bytes respeitando a política local e o limite do protocolo de transferência. */
+export function downloadFile(filePath: string, narrow?: NarrowPolicy): LocalFileInspection & { base64?: string } {
+    const resolved = resolvePath(filePath);
+    const denied = guard(resolved, narrow, "file");
+    if (denied) return { available: false, error: denied };
+    try {
+        const stat = fs.statSync(resolved);
+        if (!stat.isFile()) return { available: false, error: "O caminho não é um arquivo." };
+        if (stat.size > MAX_PLAN_DOWNLOAD_BYTES) {
+            return { available: false, error: "O arquivo excede o limite de download de 25 MB." };
+        }
+        const bytes = fs.readFileSync(resolved);
+        if (bytes.length > MAX_PLAN_DOWNLOAD_BYTES) {
+            return { available: false, error: "O arquivo excede o limite de download de 25 MB." };
+        }
+        return { available: true, size: bytes.length, mimeType: mimeTypeFor(resolved), base64: bytes.toString("base64") };
+    } catch (err) {
+        return { available: false, error: `Não consegui baixar "${filePath}": ${describe(err)}` };
     }
 }
 

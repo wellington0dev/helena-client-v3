@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { deleteFile, listFiles, readFile, searchFiles, writeFile } from "./local-files.ts";
+import { deleteFile, downloadFile, inspectFile, inspectFiles, listFiles, readFile, searchFiles, writeFile } from "./local-files.ts";
 
 function tempDir(): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), "helena-local-files-test-"));
@@ -63,6 +63,43 @@ test("readFile: diretório (não arquivo) devolve error específico", () => {
     const dir = tempDir();
     const result = readFile(dir);
     assert.match(result.error!, /é um diretório/);
+});
+
+test("downloadFile: retorna base64 e MIME preservando bytes binários", () => {
+    const dir = tempDir();
+    const filePath = path.join(dir, "apresentacao.pptx");
+    const bytes = Buffer.from([0, 255, 12, 128]);
+    fs.writeFileSync(filePath, bytes);
+    const result = downloadFile(filePath);
+    assert.equal(result.error, undefined);
+    assert.equal(result.base64, bytes.toString("base64"));
+    assert.equal(result.size, bytes.length);
+    assert.equal(result.mimeType, "application/vnd.openxmlformats-officedocument.presentationml.presentation");
+});
+
+test("downloadFile: aplica teto de 25 MB", () => {
+    const dir = tempDir();
+    const filePath = path.join(dir, "grande.pdf");
+    fs.writeFileSync(filePath, Buffer.alloc(25 * 1024 * 1024 + 1));
+    assert.match(downloadFile(filePath).error!, /limite.*25 MB/i);
+});
+
+test("inspectFile: distingue arquivo existente de referência removida", () => {
+    const dir = tempDir();
+    const filePath = path.join(dir, "referencia.txt");
+    fs.writeFileSync(filePath, "conteúdo");
+    assert.equal(inspectFile(filePath).available, true);
+    assert.equal(inspectFile(path.join(dir, "removido.txt")).available, false);
+});
+
+test("inspectFiles: mantém ordem e limita consultas em lote", () => {
+    const dir = tempDir();
+    const first = path.join(dir, "a.txt");
+    const second = path.join(dir, "b.txt");
+    fs.writeFileSync(first, "a");
+    fs.writeFileSync(second, "b");
+    assert.deepEqual(inspectFiles([second, first]).map((item) => item.available), [true, true]);
+    assert.match(inspectFiles(Array.from({ length: 201 }, () => first))[0].error!, /200 arquivos/);
 });
 
 test("searchFiles: por nome e por conteúdo, ignorando node_modules", () => {
