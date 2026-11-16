@@ -6,6 +6,12 @@ import { discoverMcpServers } from "./mcp-discovery.ts";
 import { mcpCallTool, mcpListTools } from "./mcp-connection-client.ts";
 import { updateMachineAgent } from "./local-api/status-bus.ts";
 import { reportTelemetry } from "./telemetry.ts";
+import {
+    LOCAL_SKILLS_CAPABILITY,
+    LOCAL_SKILLS_PROTOCOL_VERSION,
+    handleLocalSkillsExec,
+    type LocalSkillsProvider,
+} from "./local-skills-protocol.ts";
 
 /**
  * Protocolo de `/ws/agent` no backend-v2 — mesmo shape de
@@ -21,6 +27,7 @@ interface AgentRegisterMessage {
     machineName: string;
     capabilities: string[];
     platform?: NodeJS.Platform;
+    skills?: { version: 1; operations: Array<"list" | "load"> };
 }
 
 interface AgentExecResultMessage {
@@ -152,8 +159,11 @@ function dispatchCapability(capability: string, payload: unknown): unknown | Pro
     }
 }
 
-async function handleExec(message: AgentExecRequest, socket: WebSocket): Promise<AgentClientMessage> {
+async function handleExec(message: AgentExecRequest, socket: WebSocket, localSkills?: LocalSkillsProvider): Promise<AgentClientMessage> {
     try {
+        if (message.capability === LOCAL_SKILLS_CAPABILITY) {
+            return handleLocalSkillsExec(message.requestId, message.payload, localSkills);
+        }
         if (message.capability === "shell") {
             const { command, cwd } = message.payload as { command: string; cwd?: string };
             const shouldStream = message.stream === true;
@@ -223,7 +233,7 @@ export function stopMachineAgent(): void {
     stopCurrent = undefined;
 }
 
-export function startMachineAgent(backendUrl: string, getAccessToken: () => Promise<string | undefined>): void {
+export function startMachineAgent(backendUrl: string, getAccessToken: () => Promise<string | undefined>, localSkills?: LocalSkillsProvider): void {
     stopMachineAgent();
     if (!backendUrl) {
         updateMachineAgent({ status: "error", error: "URL do backend central não configurada." });
@@ -256,14 +266,16 @@ export function startMachineAgent(backendUrl: string, getAccessToken: () => Prom
         socket = ws;
 
         ws.addEventListener("open", () => {
-            console.log(`[machine-agent] conectado a ${backendWsUrl} como "${machineName}" (capacidades: ${CAPABILITIES.join(", ")}).`);
+            const capabilities = localSkills ? [...CAPABILITIES, LOCAL_SKILLS_CAPABILITY] : CAPABILITIES;
+            console.log(`[machine-agent] conectado a ${backendWsUrl} como "${machineName}" (capacidades: ${capabilities.join(", ")}).`);
             updateMachineAgent({ status: "connected", machineName, error: undefined });
             const registerMsg = {
                 type: "register",
                 protocolVersion: PROTOCOL_VERSION,
                 machineName,
-                capabilities: CAPABILITIES,
+                capabilities,
                 platform: process.platform,
+                ...(localSkills && { skills: { version: LOCAL_SKILLS_PROTOCOL_VERSION, operations: ["list", "load"] } }),
             } satisfies AgentRegisterMessage;
             ws.send(JSON.stringify(registerMsg));
         });
@@ -283,7 +295,7 @@ export function startMachineAgent(backendUrl: string, getAccessToken: () => Prom
                 return;
             }
             if (message.type === "exec") {
-                handleExec(message, ws).then((response) => ws.send(JSON.stringify(response)));
+                handleExec(message, ws, localSkills).then((response) => { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(response)); });
                 return;
             }
             if (message.type === "exec-background") {
