@@ -1,4 +1,4 @@
-import { loadFileConfig } from "./local-api/config-store.ts";
+import { DEFAULT_WHATSAPP_FILE_ACCESS, loadFileConfig, type WhatsappFileAccessSettings } from "./local-api/config-store.ts";
 import backendConfig from "./backend-url.json" with { type: "json" };
 
 /**
@@ -33,6 +33,7 @@ export const config = {
     /** Política de arquivos (config.json) — ver local-api/path-policy.ts. */
     allowedDirs: [] as string[],
     deniedPaths: [] as string[],
+    whatsappFileAccess: structuredClone(DEFAULT_WHATSAPP_FILE_ACCESS) as WhatsappFileAccessSettings,
 };
 
 /** Aplica o `config.json`. Chamado no import e depois de cada `PATCH /v1/config`. */
@@ -44,6 +45,7 @@ export function applyFileConfig(): void {
     if (file.telegramBotToken !== undefined) config.telegramBotToken = file.telegramBotToken;
     config.allowedDirs = file.allowedDirs ?? [];
     config.deniedPaths = file.deniedPaths ?? [];
+    config.whatsappFileAccess = file.whatsappFileAccess ?? structuredClone(DEFAULT_WHATSAPP_FILE_ACCESS);
 }
 applyFileConfig();
 

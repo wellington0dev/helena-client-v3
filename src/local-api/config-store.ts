@@ -12,10 +12,29 @@ export interface FileConfig {
     machineName?: string;
     allowedDirs?: string[];
     deniedPaths?: string[];
+    whatsappFileAccess?: WhatsappFileAccessSettings;
     backgroundShellTimeoutMinutes?: number;
     mediaMaxMb?: number;
     telegramBotToken?: string;
 }
+
+export interface WhatsappFileAccessSettings {
+    mode: "selected" | "all";
+    allowedDirs: string[];
+    permissions: {
+        list: boolean;
+        read: boolean;
+        create: boolean;
+        edit: boolean;
+        send: boolean;
+    };
+}
+
+export const DEFAULT_WHATSAPP_FILE_ACCESS: WhatsappFileAccessSettings = {
+    mode: "selected",
+    allowedDirs: [],
+    permissions: { list: false, read: false, create: false, edit: false, send: false },
+};
 
 type Key = keyof FileConfig;
 const SECRET_KEYS: readonly Key[] = ["telegramBotToken"];
@@ -26,6 +45,20 @@ const validators: Record<Key, (v: unknown) => string | undefined> = {
     machineName: (v) => (typeof v === "string" && v.trim().length >= 1 && v.length <= 100 ? undefined : "texto de 1 a 100 caracteres"),
     allowedDirs: (v) => (Array.isArray(v) && v.length <= 50 && v.every((x) => typeof x === "string" && path.isAbsolute(x.replace(/^~(?=$|\/)/, "/home"))) ? undefined : "lista de até 50 caminhos absolutos (ou começando com ~)"),
     deniedPaths: (v) => (Array.isArray(v) && v.length <= 100 && v.every((x) => typeof x === "string" && x.length > 0) ? undefined : "lista de até 100 caminhos"),
+    whatsappFileAccess: (v) => {
+        if (typeof v !== "object" || v === null) return "objeto de permissões inválido";
+        const value = v as Partial<WhatsappFileAccessSettings>;
+        if (value.mode !== "selected" && value.mode !== "all") return 'mode deve ser "selected" ou "all"';
+        if (!Array.isArray(value.allowedDirs) || value.allowedDirs.length > 50 || !value.allowedDirs.every((x) => typeof x === "string" && path.isAbsolute(x.replace(/^~(?=$|\/)/, "/home")))) {
+            return "allowedDirs deve conter até 50 caminhos absolutos";
+        }
+        const permissions = value.permissions;
+        const permissionKeys = ["list", "read", "create", "edit", "send"] as const;
+        if (typeof permissions !== "object" || permissions === null || permissionKeys.some((key) => typeof permissions[key] !== "boolean")) {
+            return "permissions deve declarar list, read, create, edit e send como booleanos";
+        }
+        return undefined;
+    },
     backgroundShellTimeoutMinutes: (v) => (typeof v === "number" && Number.isFinite(v) && v >= 1 && v <= 720 ? undefined : "número entre 1 e 720"),
     mediaMaxMb: (v) => (typeof v === "number" && Number.isFinite(v) && v >= 1 && v <= 200 ? undefined : "número entre 1 e 200"),
     telegramBotToken: (v) => (typeof v === "string" && /^\d+:[A-Za-z0-9_-]{20,}$/.test(v) ? undefined : "formato de token de bot do Telegram inválido"),

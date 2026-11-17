@@ -1,12 +1,14 @@
+import fs from "node:fs";
 import os from "node:os";
 import { WebSocket } from "ws";
 import { config } from "./config.ts";
 import { loadDeviceIdentity } from "./device-identity.ts";
-import { deleteFile, downloadFile, globFiles, grepFiles, inspectFiles, listFiles, previewDiff, readFile, searchFiles, writeFile, type FileEdit, type NarrowPolicy } from "./local-files.ts";
+import { browseDirectories, createFile, deleteFile, downloadFile, globFiles, grepFiles, inspectFiles, listFiles, machineFileRoots, previewDiff, readFile, searchFiles, writeFile, type FileEdit, type NarrowPolicy } from "./local-files.ts";
 import { runCommand, runCommandInternal, type StreamCallbacks } from "./local-shell.ts";
 import { discoverMcpServers } from "./mcp-discovery.ts";
 import { mcpCallTool, mcpListTools } from "./mcp-connection-client.ts";
 import { updateMachineAgent } from "./local-api/status-bus.ts";
+import { patchFileConfig, DEFAULT_WHATSAPP_FILE_ACCESS, type WhatsappFileAccessSettings } from "./local-api/config-store.ts";
 import { reportTelemetry } from "./telemetry.ts";
 import {
     LOCAL_SKILLS_CAPABILITY,
@@ -102,7 +104,7 @@ const TIMEOUT_MS = 30_000;
  * local-files.ts). Fixa, sem env var pra configurar — YAGNI enquanto o
  * conjunto não mudar por tenant.
  */
-const CAPABILITIES = ["shell", "list_files", "read_file", "search_files", "write_file", "delete_file", "grep_files", "glob_files", "preview_diff", "inspect_files", "download_file", "mcp_list_tools", "mcp_call_tool", "mcp_discover", "path_policy_v1"];
+const CAPABILITIES = ["shell", "list_files", "read_file", "search_files", "write_file", "delete_file", "grep_files", "glob_files", "preview_diff", "inspect_files", "download_file", "send_whatsapp_file", "manage_whatsapp_files", "manage_whatsapp_file_access", "mcp_list_tools", "mcp_call_tool", "mcp_discover", "path_policy_v1"];
 
 /** As capabilities de arquivo são síncronas e locais (sem I/O de rede); `mcp_list_tools`/`mcp_call_tool` são assíncronas (rede até o servidor MCP local) — `handleExec` faz `await` no resultado dos dois casos (await num valor que não é Promise é inofensivo). */
 function dispatchCapability(capability: string, payload: unknown): unknown | Promise<unknown> {
@@ -131,6 +133,76 @@ function dispatchCapability(capability: string, payload: unknown): unknown | Pro
         case "download_file": {
             const { path } = payload as { path: string };
             return downloadFile(path);
+        }
+        case "send_whatsapp_file": {
+            const { path } = payload as { path: string };
+            const access = config.whatsappFileAccess ?? structuredClone(DEFAULT_WHATSAPP_FILE_ACCESS);
+            if (!access.permissions.send) return { available: false, error: "O envio de arquivos está desativado nas permissões desta máquina." };
+            const policy: NarrowPolicy = access.mode === "all"
+                ? { allowedDirs: [], deniedPaths: config.deniedPaths, allowAllDirs: true }
+                : { allowedDirs: access.allowedDirs, deniedPaths: config.deniedPaths };
+            return downloadFile(path, policy);
+        }
+        case "manage_whatsapp_files": {
+            const input = payload as {
+                operation: "list" | "search" | "read" | "create" | "edit";
+                path: string;
+                pattern?: string;
+                namePattern?: string;
+                contentPattern?: string;
+                content?: string;
+                edits?: FileEdit[];
+            };
+            const fileAccess = config.whatsappFileAccess ?? structuredClone(DEFAULT_WHATSAPP_FILE_ACCESS);
+            const permission = input.operation === "list" || input.operation === "search"
+                ? "list"
+                : input.operation === "read" ? "read"
+                    : input.operation === "create" ? "create" : "edit";
+            if (!fileAccess.permissions[permission]) {
+                return { error: `A operação "${permission}" está desativada nas permissões desta máquina.` };
+            }
+            const policy: NarrowPolicy = fileAccess.mode === "all"
+                ? { allowedDirs: [], deniedPaths: config.deniedPaths, allowAllDirs: true }
+                : { allowedDirs: fileAccess.allowedDirs, deniedPaths: config.deniedPaths };
+            switch (input.operation) {
+                case "list":
+                    return listFiles(input.path, input.pattern, policy);
+                case "search":
+                    return searchFiles(input.path, input.namePattern, input.contentPattern, policy);
+                case "read":
+                    return readFile(input.path, policy);
+                case "create":
+                    if (typeof input.content !== "string") return { ok: false, error: "O conteúdo do arquivo não foi informado." };
+                    return createFile(input.path, input.content, policy);
+                case "edit":
+                    if (!fs.existsSync(input.path)) return { ok: false, error: "O arquivo não existe; use a operação de criação para criá-lo." };
+                    if (!input.edits?.length) return { ok: false, error: "Informe ao menos uma edição." };
+                    return writeFile(input.path, input.edits, policy);
+            }
+        }
+        case "manage_whatsapp_file_access": {
+            const input = payload as {
+                operation: "get" | "browse" | "save";
+                path?: string;
+                settings?: WhatsappFileAccessSettings;
+            };
+            if (input.operation === "get") {
+                return {
+                    homeDir: os.homedir(),
+                    roots: machineFileRoots(),
+                    platform: process.platform,
+                    settings: config.whatsappFileAccess ?? structuredClone(DEFAULT_WHATSAPP_FILE_ACCESS),
+                };
+            }
+            if (input.operation === "browse") {
+                if (!input.path) return { path: "", directories: [], error: "Informe a pasta para navegar." };
+                return browseDirectories(input.path);
+            }
+            if (!input.settings) return { error: "Configuração de acesso a arquivos ausente." };
+            const patched = patchFileConfig({ whatsappFileAccess: input.settings });
+            if (!patched.ok) return { error: Object.values(patched.errors).join("; ") };
+            config.whatsappFileAccess = patched.config.whatsappFileAccess ?? structuredClone(DEFAULT_WHATSAPP_FILE_ACCESS);
+            return { settings: config.whatsappFileAccess };
         }
         case "search_files": {
             const { path, namePattern, contentPattern } = payload as { path: string; namePattern?: string; contentPattern?: string };

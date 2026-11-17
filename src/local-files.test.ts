@@ -3,11 +3,34 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { deleteFile, downloadFile, inspectFile, inspectFiles, listFiles, readFile, searchFiles, writeFile } from "./local-files.ts";
+import { browseDirectories, createFile, deleteFile, downloadFile, inspectFile, inspectFiles, listFiles, readFile, searchFiles, writeFile } from "./local-files.ts";
 
 function tempDir(): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), "helena-local-files-test-"));
 }
+
+test("browseDirectories: retorna só subdiretórios e caminho de retorno", () => {
+    const dir = tempDir();
+    fs.mkdirSync(path.join(dir, "subpasta"));
+    fs.writeFileSync(path.join(dir, "segredo.txt"), "não deve aparecer");
+
+    const result = browseDirectories(dir);
+
+    assert.equal(result.path, dir);
+    assert.equal(result.parentPath, path.dirname(dir));
+    assert.deepEqual(result.directories.map((entry) => entry.name), ["subpasta"]);
+});
+
+test("createFile: cria sem sobrescrever arquivo existente", () => {
+    const dir = tempDir();
+    const filePath = path.join(dir, "novo.txt");
+    assert.deepEqual(createFile(filePath, "primeiro"), { ok: true, bytesWritten: 8 });
+    assert.equal(fs.readFileSync(filePath, "utf8"), "primeiro");
+    const duplicate = createFile(filePath, "segundo");
+    assert.equal(duplicate.ok, false);
+    assert.match(duplicate.error!, /já existe/);
+    assert.equal(fs.readFileSync(filePath, "utf8"), "primeiro");
+});
 
 test("listFiles: lista arquivos e pastas com nome/isDirectory/size corretos", () => {
     const dir = tempDir();
@@ -82,6 +105,15 @@ test("downloadFile: aplica teto de 25 MB", () => {
     const filePath = path.join(dir, "grande.pdf");
     fs.writeFileSync(filePath, Buffer.alloc(25 * 1024 * 1024 + 1));
     assert.match(downloadFile(filePath).error!, /limite.*25 MB/i);
+});
+
+test("downloadFile: política estreita de envio nega quando não há pasta configurada", () => {
+    const filePath = path.join(tempDir(), "anexo.txt");
+    fs.writeFileSync(filePath, "conteúdo");
+    const result = downloadFile(filePath, { allowedDirs: [], deniedPaths: [] });
+
+    assert.equal(result.available, false);
+    assert.match(result.error ?? "", /nenhuma pasta liberada/i);
 });
 
 test("inspectFile: distingue arquivo existente de referência removida", () => {

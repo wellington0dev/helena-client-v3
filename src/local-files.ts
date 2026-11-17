@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import os from "node:os";
 import { config } from "./config.ts";
 import { checkPathAccess, type PathPolicy } from "./local-api/path-policy.ts";
 import { expandHome } from "./local-shell.ts";
@@ -30,8 +31,8 @@ function resolvePath(target: string): string {
 }
 
 /** Política de acesso (allowedDirs/deniedPaths + arquivos sensíveis) — ver local-api/path-policy.ts. */
-function policy(): PathPolicy {
-    return { allowedDirs: config.allowedDirs, deniedPaths: config.deniedPaths, extraDeniedDirs: [path.resolve(config.whatsappAuthDir)] };
+function policy(allowAllDirs = false): PathPolicy {
+    return { allowedDirs: allowAllDirs ? [] : config.allowedDirs, deniedPaths: config.deniedPaths, extraDeniedDirs: [path.resolve(config.whatsappAuthDir)] };
 }
 
 /**
@@ -42,6 +43,8 @@ function policy(): PathPolicy {
 export interface NarrowPolicy {
     allowedDirs: string[];
     deniedPaths: string[];
+    /** Interno do client; jamais aceito diretamente de um argumento do modelo. */
+    allowAllDirs?: boolean;
     /** Tipos de arquivo liberados (sem ponto, minúsculo). Vale pra arquivo, não pra pasta. */
     allowedExtensions?: string[];
 }
@@ -53,9 +56,10 @@ function extensionOk(target: string, narrow: NarrowPolicy): boolean {
 }
 
 function guard(target: string, narrow?: NarrowPolicy, kind: "file" | "dir" = "dir"): string | undefined {
-    const check = checkPathAccess(target, policy());
+    const check = checkPathAccess(target, policy(narrow?.allowAllDirs));
     if (!check.ok) return `Acesso negado: ${check.reason}.`;
     if (!narrow) return undefined;
+    if (narrow.allowAllDirs) return kind === "file" && !extensionOk(target, narrow) ? "Acesso negado: tipo de arquivo não liberado." : undefined;
     if (narrow.allowedDirs.length === 0) return "Acesso negado: nenhuma pasta liberada pra esta conversa.";
     const extra = checkPathAccess(target, { allowedDirs: narrow.allowedDirs, deniedPaths: narrow.deniedPaths });
     if (!extra.ok) return `Acesso negado: ${extra.reason}.`;
@@ -89,6 +93,46 @@ export interface FileEntry {
 export interface ListFilesResult {
     files: FileEntry[];
     error?: string;
+}
+
+export interface BrowseDirectoriesResult {
+    path: string;
+    parentPath?: string;
+    directories: { name: string; path: string }[];
+    error?: string;
+}
+
+/** Navegação remota de pastas: retorna nomes de diretórios, nunca arquivos ou conteúdo. */
+export function browseDirectories(dirPath: string): BrowseDirectoriesResult {
+    const resolved = resolvePath(dirPath);
+    const browsingPolicy: PathPolicy = {
+        allowedDirs: [],
+        deniedPaths: config.deniedPaths,
+        extraDeniedDirs: [path.resolve(config.whatsappAuthDir)],
+    };
+    const access = checkPathAccess(resolved, browsingPolicy);
+    if (!access.ok) return { path: resolved, directories: [], error: `Acesso negado: ${access.reason}.` };
+    try {
+        const directories = fs.readdirSync(access.resolved, { withFileTypes: true })
+            .filter((entry) => entry.isDirectory())
+            .map((entry) => ({ name: entry.name, path: path.join(access.resolved, entry.name) }))
+            .filter((entry) => checkPathAccess(entry.path, browsingPolicy).ok)
+            .sort((a, b) => a.name.localeCompare(b.name));
+        const root = path.parse(access.resolved).root;
+        return {
+            path: access.resolved,
+            ...(access.resolved !== root && { parentPath: path.dirname(access.resolved) }),
+            directories,
+        };
+    } catch (err) {
+        return { path: access.resolved, directories: [], error: `Não consegui listar as pastas: ${describe(err)}` };
+    }
+}
+
+export function machineFileRoots(): string[] {
+    if (process.platform !== "win32") return [path.parse(os.homedir()).root];
+    return Array.from({ length: 26 }, (_, index) => `${String.fromCharCode(65 + index)}:\\`)
+        .filter((root) => fs.existsSync(root));
 }
 
 /** `pattern` é regex sobre o NOME (não glob) — mesma convenção de `namePattern` em `searchFiles`, só uma forma de casar em todo o módulo. */
@@ -225,7 +269,7 @@ export interface SearchFilesResult {
     error?: string;
 }
 
-function walk(dir: string, nameRegex: RegExp | undefined, contentRegex: RegExp | undefined, results: string[]): void {
+function walk(dir: string, nameRegex: RegExp | undefined, contentRegex: RegExp | undefined, results: string[], narrow?: NarrowPolicy): void {
     if (results.length >= MAX_SEARCH_RESULTS) return;
 
     let entries: fs.Dirent[];
@@ -237,11 +281,11 @@ function walk(dir: string, nameRegex: RegExp | undefined, contentRegex: RegExp |
 
     for (const entry of entries) {
         if (results.length >= MAX_SEARCH_RESULTS) return;
-        if (guard(path.join(dir, entry.name))) continue; // política de arquivos: nunca entra nem devolve o que é protegido
+        if (guard(path.join(dir, entry.name), narrow)) continue; // política de arquivos: nunca entra nem devolve o que é protegido
 
         if (entry.isDirectory()) {
             if (IGNORED_DIR_NAMES.has(entry.name)) continue;
-            walk(path.join(dir, entry.name), nameRegex, contentRegex, results);
+            walk(path.join(dir, entry.name), nameRegex, contentRegex, results, narrow);
             continue;
         }
 
@@ -262,7 +306,7 @@ function walk(dir: string, nameRegex: RegExp | undefined, contentRegex: RegExp |
     }
 }
 
-export function searchFiles(dirPath: string, namePattern?: string, contentPattern?: string): SearchFilesResult {
+export function searchFiles(dirPath: string, namePattern?: string, contentPattern?: string, narrow?: NarrowPolicy): SearchFilesResult {
     if (!namePattern && !contentPattern) return { paths: [], error: "Informe namePattern e/ou contentPattern." };
 
     const nameRegex = namePattern ? safeRegex(namePattern) : undefined;
@@ -271,10 +315,10 @@ export function searchFiles(dirPath: string, namePattern?: string, contentPatter
     const contentRegex = contentPattern ? safeRegex(contentPattern) : undefined;
     if (contentPattern && !contentRegex) return { paths: [], error: `Padrão de conteúdo inválido: "${contentPattern}"` };
 
-    const rootDenied = guard(resolvePath(dirPath));
+    const rootDenied = guard(resolvePath(dirPath), narrow);
     if (rootDenied) return { paths: [], error: rootDenied };
     const results: string[] = [];
-    walk(resolvePath(dirPath), nameRegex, contentRegex, results);
+    walk(resolvePath(dirPath), nameRegex, contentRegex, results, narrow);
     return { paths: results };
 }
 
@@ -491,6 +535,31 @@ export function writeFile(filePath: string, edits: FileEdit[], narrow?: NarrowPo
     }
 
     return writeWhole(resolved, filePath, lines.join("\n"));
+}
+
+/** Criação atômica e sem sobrescrever um arquivo existente. */
+export function createFile(filePath: string, content: string, narrow?: NarrowPolicy): WriteFileResult {
+    const resolved = resolvePath(filePath);
+    const denied = guard(resolved, narrow, "file");
+    if (denied) return { ok: false, error: denied };
+    if (Buffer.byteLength(content, "utf8") > MAX_READ_BYTES) {
+        return { ok: false, error: "O conteúdo excede o limite de 2 MB." };
+    }
+    let fd: number | undefined;
+    try {
+        fd = fs.openSync(resolved, "wx", 0o600);
+        fs.writeFileSync(fd, content, "utf8");
+        fs.closeSync(fd);
+        return { ok: true, bytesWritten: Buffer.byteLength(content, "utf8") };
+    } catch (err) {
+        if (fd !== undefined) {
+            try { fs.closeSync(fd); } catch { /* best effort */ }
+        }
+        if ((err as NodeJS.ErrnoException).code === "EEXIST") {
+            return { ok: false, error: "O arquivo já existe; use a operação de edição para alterá-lo." };
+        }
+        return { ok: false, error: `Não consegui criar "${filePath}": ${describe(err)}` };
+    }
 }
 
 /**
