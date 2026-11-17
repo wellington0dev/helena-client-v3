@@ -17,6 +17,8 @@ import { getState, onStateChange } from "./local-api/status-bus.ts";
 import { logoutWhatsapp, startWhatsapp, stopWhatsapp } from "./channels/whatsapp.ts";
 import { startTelegram, stopTelegram, validateTelegramToken } from "./channels/telegram.ts";
 import { startMachineAgent, stopMachineAgent } from "./machine-agent.ts";
+import { pairDeviceAfterLogin } from "./device-pairing.ts";
+import { LocalSkillsManager } from "./local-skills-management.ts";
 import { startOutboundPoller } from "./outbound-poller.ts";
 import { captureError, reportError } from "./telemetry.ts";
 import { startMachineMetrics } from "./machine-metrics.ts";
@@ -49,14 +51,43 @@ hub.setState("channels", getState());
 onStateChange((state) => hub.setState("channels", { ...state }));
 let session: ReturnType<typeof createSessionManager>;
 let clientRuntimeActive = false;
+let pairingAbort: AbortController | undefined;
+function startMachineConnection(): void {
+    startMachineAgent(
+        config.backendUrl,
+        () => session.getAccessToken(),
+        new LocalSkillsManager(path.join(configDir(), "skills")),
+        () => { void beginDevicePairing(); },
+    );
+}
+function beginDevicePairing(): Promise<void> {
+    if (!session?.isLoggedIn() || !session.hasRefreshSession()) return Promise.resolve();
+    if (pairingAbort && !pairingAbort.signal.aborted) return Promise.resolve();
+    const controller = new AbortController();
+    pairingAbort = controller;
+    return pairDeviceAfterLogin({
+        fetch: (path, init) => session.authedFetch(path, init),
+        signal: controller.signal,
+    }).then((result) => {
+        if (result === "paired" && !controller.signal.aborted && session.isLoggedIn()) startMachineConnection();
+    }).catch(() => {
+        if (!controller.signal.aborted) {
+            console.warn("[device-pairing] Pareamento visual pendente; o Client seguirá sem skills remotas até autorização.");
+        }
+    }).finally(() => {
+        if (pairingAbort === controller) pairingAbort = undefined;
+    });
+}
 function startClientRuntime(): void {
     if (clientRuntimeActive || !session?.isLoggedIn()) return;
     clientRuntimeActive = true;
     startWhatsapp();
     startTelegram();
-    startMachineAgent(config.backendUrl, () => session.getAccessToken());
+    startMachineConnection();
 }
 function stopClientRuntime(): void {
+    pairingAbort?.abort();
+    pairingAbort = undefined;
     clientRuntimeActive = false;
     void stopWhatsapp();
     void stopTelegram();
@@ -66,7 +97,13 @@ session = createSessionManager({
     backendUrl: () => config.backendUrl,
     store: { load: loadSession, save: saveSession, clear: clearSession },
     hub,
-    onLogin: () => startClientRuntime(),
+    onLogin: (_accessToken, auth) => {
+        startClientRuntime();
+        pairingAbort?.abort();
+        pairingAbort = undefined;
+        // Legacy JWT adoption has no refresh-backed user session and cannot provision a durable device identity.
+        if (auth.hasRefreshToken) void beginDevicePairing();
+    },
     onLogout: stopClientRuntime,
     deviceLabel: config.machineName || os.hostname(),
 });
@@ -123,7 +160,11 @@ startLocalApi({
     doctor: () => runDoctor({ backendUrl: config.backendUrl, session, hub, secretPaths, listenHost: config.localBind, version }),
 });
 startProgressUpstream({ backendUrl: config.backendUrl, hub, getToken: () => session.getAccessToken() });
-void session.getAccessToken().then((accessToken) => { if (accessToken) startClientRuntime(); });
+void session.getAccessToken().then((accessToken) => {
+    if (!accessToken) return;
+    startClientRuntime();
+    if (session.hasRefreshSession()) void beginDevicePairing();
+});
 startOutboundPoller(() => session.isLoggedIn());
 startMachineMetrics();
 

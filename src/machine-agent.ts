@@ -1,5 +1,7 @@
 import os from "node:os";
+import { WebSocket } from "ws";
 import { config } from "./config.ts";
+import { loadDeviceIdentity } from "./device-identity.ts";
 import { deleteFile, downloadFile, globFiles, grepFiles, inspectFiles, listFiles, previewDiff, readFile, searchFiles, writeFile, type FileEdit, type NarrowPolicy } from "./local-files.ts";
 import { runCommand, runCommandInternal, type StreamCallbacks } from "./local-shell.ts";
 import { discoverMcpServers } from "./mcp-discovery.ts";
@@ -10,7 +12,7 @@ import {
     LOCAL_SKILLS_CAPABILITY,
     LOCAL_SKILLS_PROTOCOL_VERSION,
     handleLocalSkillsExec,
-    type LocalSkillsProvider,
+    type LocalSkillsManagementProvider,
 } from "./local-skills-protocol.ts";
 
 /**
@@ -27,7 +29,7 @@ interface AgentRegisterMessage {
     machineName: string;
     capabilities: string[];
     platform?: NodeJS.Platform;
-    skills?: { version: 1; operations: Array<"list" | "load"> };
+    skills?: { version: 1; operations: Array<"list" | "load" | "inspect" | "create" | "edit" | "preview_file" | "install_file" | "preview_git" | "install_git" | "enable" | "disable" | "delete"> };
 }
 
 interface AgentExecResultMessage {
@@ -159,7 +161,7 @@ function dispatchCapability(capability: string, payload: unknown): unknown | Pro
     }
 }
 
-async function handleExec(message: AgentExecRequest, socket: WebSocket, localSkills?: LocalSkillsProvider): Promise<AgentClientMessage> {
+async function handleExec(message: AgentExecRequest, socket: WebSocket, localSkills?: LocalSkillsManagementProvider): Promise<AgentClientMessage> {
     try {
         if (message.capability === LOCAL_SKILLS_CAPABILITY) {
             return handleLocalSkillsExec(message.requestId, message.payload, localSkills);
@@ -233,7 +235,7 @@ export function stopMachineAgent(): void {
     stopCurrent = undefined;
 }
 
-export function startMachineAgent(backendUrl: string, getAccessToken: () => Promise<string | undefined>, localSkills?: LocalSkillsProvider): void {
+export function startMachineAgent(backendUrl: string, getAccessToken: () => Promise<string | undefined>, localSkills?: LocalSkillsManagementProvider, onDeviceRevoked?: () => void): void {
     stopMachineAgent();
     if (!backendUrl) {
         updateMachineAgent({ status: "error", error: "URL do backend central não configurada." });
@@ -253,16 +255,38 @@ export function startMachineAgent(backendUrl: string, getAccessToken: () => Prom
 
     async function connect(): Promise<void> {
         if (stopped) return;
+        const identity = loadDeviceIdentity();
         const accessToken = await getAccessToken().catch(() => undefined);
+        let paired: typeof identity;
+        if (identity?.credential && identity.backendUrl === new URL(backendUrl).origin && accessToken) {
+            // Validate the credential against the currently logged-in owner before every reconnect.
+            // This prevents an account switch from reusing a previous owner's device credential.
+            try {
+                const check = await fetch(`${backendUrl.replace(/\/$/, "")}/machines/devices/${encodeURIComponent(identity.deviceId)}/pairing-status`, {
+                    headers: { Authorization: `Bearer ${accessToken}` },
+                    signal: AbortSignal.timeout(5_000),
+                });
+                if (check.ok) {
+                    const status = (await check.json() as { status?: string }).status;
+                    if (status === "active") paired = identity;
+                    else if (status === "revoked") onDeviceRevoked?.();
+                }
+            } catch {
+                // Without an owner-scoped active readback, never send the durable device credential.
+            }
+        }
         if (stopped) return;
-        if (!accessToken) {
+        if (!accessToken && !paired) {
             updateMachineAgent({ status: "connecting", machineName, error: "Aguardando autenticação." });
             reconnectTimer = setTimeout(() => { void connect(); }, RECONNECT_DELAY_MS);
             return;
         }
         updateMachineAgent({ status: "connecting", machineName, error: undefined });
-        // O JWT de acesso é obtido/renovado pelo daemon imediatamente antes do handshake.
-        const ws = new WebSocket(`${backendWsUrl}/ws/agent?token=${encodeURIComponent(accessToken)}`);
+        // Pairing credential is sent only to the exact backend origin it was created for.
+        // An invalid/revoked device credential must never fall back to the owner's JWT.
+        const ws = paired
+            ? new WebSocket(`${backendWsUrl}/ws/agent`, { headers: { Authorization: `Bearer ${paired.credential}` } })
+            : new WebSocket(`${backendWsUrl}/ws/agent?token=${encodeURIComponent(accessToken!)}`);
         socket = ws;
 
         ws.addEventListener("open", () => {
@@ -275,7 +299,7 @@ export function startMachineAgent(backendUrl: string, getAccessToken: () => Prom
                 machineName,
                 capabilities,
                 platform: process.platform,
-                ...(localSkills && { skills: { version: LOCAL_SKILLS_PROTOCOL_VERSION, operations: ["list", "load"] } }),
+                ...(localSkills && { skills: { version: LOCAL_SKILLS_PROTOCOL_VERSION, operations: ["list", "load", "inspect", "create", "edit", "preview_file", "install_file", "preview_git", "install_git", "enable", "disable", "delete"] } }),
             } satisfies AgentRegisterMessage;
             ws.send(JSON.stringify(registerMsg));
         });
@@ -314,7 +338,7 @@ export function startMachineAgent(backendUrl: string, getAccessToken: () => Prom
         });
 
         ws.addEventListener("error", (event) => {
-            const message = (event as ErrorEvent).message ?? String(event);
+            const message = event.message ?? String(event);
             console.error("[machine-agent] erro de conexão:", message);
             void reportTelemetry("warn", `machine-agent: erro de conexão WS — ${message}`, { source: "machine-agent" });
         });

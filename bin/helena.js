@@ -24,6 +24,18 @@ Uso: helena [comando] [--help]
   helena                          abre o chat (conecta ao backend configurado no build)
   helena local-token rotate       gera um token local novo pra API do daemon
   helena local-token path         mostra onde está o arquivo do token (nunca imprime o token)
+  helena device pair-request      solicita pareamento (a aprovação é separada)
+  helena device pair-complete     registra credencial após a aprovação
+  helena devices list|requests    lista dispositivos ou pedidos do proprietário
+  helena devices approve <id> <código>
+  helena devices reject <id>
+  helena devices revoke <id>      revoga somente esse dispositivo
+  helena skills list              lista skills locais
+  helena skills inspect <id>      inspeciona uma skill local
+  helena skills create <id> <descrição> <instruções>
+  helena skills install <URL|arquivo>  pré-visualiza e instala SKILL.md
+  helena skills edit|enable|disable <id> ...
+  helena skills remove <id> --yes remove skill gerenciada
   helena mcp-server               inicia MCP server via stdio (expondo list/read/search/grep/glob/write/preview de arquivo)
   helena --help, -h               mostra esta ajuda
 
@@ -35,6 +47,16 @@ const [cmd, ...args] = process.argv.slice(2);
 
 if (cmd === "local-token") {
     const sub = spawnSync(process.execPath, [path.join(CLIENT_DIR, "src/cli/local-token-main.ts"), ...process.argv.slice(3)], { cwd: CLIENT_DIR, stdio: "inherit" });
+    process.exit(sub.status ?? 1);
+}
+
+if (cmd === "device" || cmd === "devices") {
+    const sub = spawnSync(process.execPath, [path.join(CLIENT_DIR, "src/cli/device-main.ts"), cmd, ...args], { cwd: CLIENT_DIR, stdio: "inherit" });
+    process.exit(sub.status ?? 1);
+}
+
+if (cmd === "skills") {
+    const sub = spawnSync(process.execPath, [path.join(CLIENT_DIR, "src/cli/skills-main.ts"), ...args], { cwd: CLIENT_DIR, stdio: "inherit" });
     process.exit(sub.status ?? 1);
 }
 

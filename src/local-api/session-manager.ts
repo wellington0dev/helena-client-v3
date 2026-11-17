@@ -25,7 +25,7 @@ export interface SessionManagerOptions {
     hub: EventHub;
     fetchImpl?: typeof fetch;
     /** Chamado (sem esperar) depois de login/registro bem-sucedido — ex.: provisionar o token de dispositivo. */
-    onLogin?: (accessToken: string) => void | Promise<void>;
+    onLogin?: (accessToken: string, session: { hasRefreshToken: boolean }) => void | Promise<void>;
     /** Desliga integrações locais quando a sessão é revogada ou expira. */
     onLogout?: () => void | Promise<void>;
     /** Nome desta máquina, enviado no login só pra o usuário reconhecer a sessão em `GET /auth/sessions`. */
@@ -36,6 +36,7 @@ export interface SessionManagerOptions {
 
 export interface SessionManager {
     isLoggedIn(): boolean;
+    hasRefreshSession(): boolean;
     login(email: string, password: string): Promise<{ user: unknown }>;
     register(email: string, password: string, displayName?: string): Promise<{ user: unknown }>;
     /** JWT válido para um handshake WS; renova preventivamente usando o refresh token mantido pelo daemon. */
@@ -123,7 +124,7 @@ export function createSessionManager(options: SessionManagerOptions): SessionMan
         const parsed = (await response.json()) as { accessToken?: string; refreshToken?: string; expiresIn?: number; user?: unknown };
         if (!parsed.accessToken) throw new HttpError(502, "Resposta do backend sem accessToken.");
         setSession(parsed.accessToken, parsed.refreshToken, parsed.expiresIn);
-        void Promise.resolve(options.onLogin?.(parsed.accessToken)).catch(() => undefined);
+        void Promise.resolve(options.onLogin?.(parsed.accessToken, { hasRefreshToken: Boolean(parsed.refreshToken) })).catch(() => undefined);
         return { user: parsed.user };
     }
 
@@ -166,6 +167,7 @@ export function createSessionManager(options: SessionManagerOptions): SessionMan
 
     return {
         isLoggedIn: () => Boolean(token),
+        hasRefreshSession: () => Boolean(token && refreshToken),
         async getAccessToken() {
             if (!token) return undefined;
             if (refreshToken && expiresAt !== undefined && expiresAt - Date.now() < leeway) {
@@ -192,7 +194,8 @@ export function createSessionManager(options: SessionManagerOptions): SessionMan
         },
         adoptToken(accessToken) {
             setSession(accessToken); // legado: JWT sem refresh
-            void Promise.resolve(options.onLogin?.(accessToken)).catch(() => undefined);
+            // Adopting a legacy JWT is intentionally not sufficient to provision a permanent device credential.
+            void Promise.resolve(options.onLogin?.(accessToken, { hasRefreshToken: false })).catch(() => undefined);
         },
         async authedFetch(path, init = {}) {
             if (!token) return noSession();
