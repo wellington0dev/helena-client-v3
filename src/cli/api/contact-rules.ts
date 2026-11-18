@@ -6,8 +6,9 @@ export type DisclosurePreset = "cpf" | "cnpj" | "cartao" | "email" | "telefone" 
 
 export interface FileGrant {
     machine: string;
-    read?: { dirs: string[]; extensions: string[] };
-    write?: { dirs: string[]; extensions: string[]; maxBytes?: number };
+    read?: { dirs: string[]; files?: string[]; extensions: string[] };
+    write?: { dirs: string[]; files?: string[]; extensions: string[]; maxBytes?: number };
+    edit?: { dirs: string[]; files?: string[]; extensions: string[]; maxBytes?: number };
     deniedDirs: string[];
 }
 

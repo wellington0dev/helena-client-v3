@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import os from "node:os";
 import { config } from "./config.ts";
-import { checkPathAccess, type PathPolicy } from "./local-api/path-policy.ts";
+import { checkPathAccess, realResolve, type PathPolicy } from "./local-api/path-policy.ts";
 import { expandHome } from "./local-shell.ts";
 
 /**
@@ -42,6 +42,7 @@ function policy(allowAllDirs = false): PathPolicy {
  */
 export interface NarrowPolicy {
     allowedDirs: string[];
+    allowedFiles?: string[];
     deniedPaths: string[];
     /** Interno do client; jamais aceito diretamente de um argumento do modelo. */
     allowAllDirs?: boolean;
@@ -50,7 +51,7 @@ export interface NarrowPolicy {
 }
 
 function extensionOk(target: string, narrow: NarrowPolicy): boolean {
-    if (!narrow.allowedExtensions) return true;
+    if (!narrow.allowedExtensions?.length) return true;
     const ext = path.extname(target).slice(1).toLowerCase();
     return !!ext && narrow.allowedExtensions.map((e) => e.toLowerCase().replace(/^\./, "")).includes(ext);
 }
@@ -60,8 +61,9 @@ function guard(target: string, narrow?: NarrowPolicy, kind: "file" | "dir" = "di
     if (!check.ok) return `Acesso negado: ${check.reason}.`;
     if (!narrow) return undefined;
     if (narrow.allowAllDirs) return kind === "file" && !extensionOk(target, narrow) ? "Acesso negado: tipo de arquivo não liberado." : undefined;
-    if (narrow.allowedDirs.length === 0) return "Acesso negado: nenhuma pasta liberada pra esta conversa.";
-    const extra = checkPathAccess(target, { allowedDirs: narrow.allowedDirs, deniedPaths: narrow.deniedPaths });
+    const exactFile = kind === "file" && (narrow.allowedFiles ?? []).some((file) => realResolve(file) === realResolve(target));
+    if (!exactFile && narrow.allowedDirs.length === 0) return "Acesso negado: nenhum caminho liberado pra esta conversa.";
+    const extra = checkPathAccess(target, { allowedDirs: exactFile ? [] : narrow.allowedDirs, deniedPaths: narrow.deniedPaths });
     if (!extra.ok) return `Acesso negado: ${extra.reason}.`;
     if (kind === "file" && !extensionOk(target, narrow)) return "Acesso negado: tipo de arquivo não liberado.";
     return undefined;

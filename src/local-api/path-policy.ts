@@ -14,6 +14,7 @@ import { configDir } from "./paths.ts";
  */
 export interface PathPolicy {
     allowedDirs: string[];
+    allowedFiles?: string[];
     deniedPaths: string[];
     /** Diretório de auth do WhatsApp (variável, por isso entra como parâmetro). */
     extraDeniedDirs?: string[];
