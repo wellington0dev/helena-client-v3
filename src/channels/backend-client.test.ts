@@ -57,6 +57,27 @@ test("sendInboundMessage: preserva o payload de áudio multimodal", async () => 
     assert.deepEqual(capturedBody, { channel: "telegram", contactId: "42", text: "o que eu disse?", audio: { mimeType: "audio/ogg", base64: "YXVkaW8=" } });
 });
 
+test("sendInboundMessage: preserva documento baixado do canal", async () => {
+    let capturedBody: unknown;
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+        capturedBody = JSON.parse(init?.body as string);
+        return new Response(JSON.stringify({ sessionId: "doc-session", text: "lido" }), { status: 200 });
+    }) as typeof fetch;
+    useSessionFetch();
+
+    await sendInboundMessage({
+        channel: "whatsapp",
+        contactId: "5511999999999",
+        document: { filename: "contrato.pdf", mimeType: "application/pdf", base64: "JVBERg==" },
+    });
+
+    assert.deepEqual(capturedBody, {
+        channel: "whatsapp",
+        contactId: "5511999999999",
+        document: { filename: "contrato.pdf", mimeType: "application/pdf", base64: "JVBERg==" },
+    });
+});
+
 test("sendInboundMessage: resposta {blocked:true} (rate limit) chega como está, sem lançar", async () => {
     globalThis.fetch = (async () => new Response(JSON.stringify({ blocked: true }), { status: 201 })) as typeof fetch;
     useSessionFetch();

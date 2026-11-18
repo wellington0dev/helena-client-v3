@@ -1,5 +1,5 @@
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
-import { downloadMediaMessage, isJidGroup, makeWASocket, useMultiFileAuthState, DisconnectReason } from "baileys";
+import { downloadMediaMessage, isJidGroup, makeWASocket, useMultiFileAuthState, DisconnectReason, normalizeMessageContent } from "baileys";
 import type { WAMessage, WASocket } from "baileys";
 import pino from "pino";
 import QRCode from "qrcode";
@@ -9,6 +9,22 @@ import { sendGroupInboundMessage, sendInboundMessage } from "./backend-client.ts
 import { exceedsMediaLimit, mediaTooLargeMessage } from "./media-limit.ts";
 import { toWhatsappText } from "./markdown-format.ts";
 import { captureError } from "../telemetry.ts";
+
+const DOCUMENT_MAX_BYTES = 10 * 1024 * 1024;
+const DOCUMENT_MIME_BY_EXTENSION: Record<string, string> = {
+    pdf: "application/pdf",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    txt: "text/plain",
+    csv: "text/csv",
+    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+};
+
+export function supportedDocumentMime(filename: string, mimeType?: string | null): string | undefined {
+    const extension = filename.split(".").pop()?.toLowerCase();
+    const expected = extension ? DOCUMENT_MIME_BY_EXTENSION[extension] : undefined;
+    if (!expected) return undefined;
+    return !mimeType || mimeType === "application/octet-stream" || mimeType === expected ? expected : undefined;
+}
 
 /**
  * Ponte de WhatsApp pro backend-v2 (Fase 5 — ver docs/architecture-v2.md
@@ -133,6 +149,15 @@ export async function sendWhatsappMessage(jid: string, text: string): Promise<vo
     }
 }
 
+export async function sendWhatsappFile(jid: string, file: { filename: string; mimeType: string; base64: string }): Promise<void> {
+    if (!currentSock) throw new Error("WhatsApp não está conectado.");
+    await currentSock.sendMessage(jid, {
+        document: Buffer.from(file.base64, "base64"),
+        mimetype: file.mimeType,
+        fileName: file.filename,
+    });
+}
+
 /**
  * Valida se um número existe no WhatsApp (`onWhatsApp`, mesmo mecanismo que
  * o dono usa pra checar antes de salvar um contato novo). Chamado pela
@@ -156,8 +181,41 @@ export async function sendWhatsappSticker(jid: string, base64: string): Promise<
     await currentSock.sendMessage(jid, { sticker: Buffer.from(base64, "base64") });
 }
 
-function textOf(msg: WAMessage): string | undefined {
-    return msg.message?.conversation ?? msg.message?.extendedTextMessage?.text ?? undefined;
+const IGNORED_MESSAGE_TYPES = new Set([
+    "messageContextInfo",
+    "protocolMessage",
+    "reactionMessage",
+    "senderKeyDistributionMessage",
+    "pollUpdateMessage",
+]);
+
+/** Baileys may wrap real user content in ephemeral/view-once/document-caption envelopes. Normalize before examining it. */
+export function normalizedInboundContent(msg: WAMessage): NonNullable<WAMessage["message"]> | undefined {
+    return normalizeMessageContent(msg.message) ?? undefined;
+}
+
+export function textOf(msg: WAMessage): string | undefined {
+    const content = normalizedInboundContent(msg);
+    const nativeResponse = content?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson;
+    let nativeResponseText: string | undefined;
+    if (nativeResponse) {
+        try {
+            const parsed = JSON.parse(nativeResponse) as Record<string, unknown>;
+            const value = parsed.title ?? parsed.label ?? parsed.text ?? parsed.id;
+            if (typeof value === "string") nativeResponseText = value;
+        } catch {
+            // Invalid interactive payload is not useful as prompt text.
+        }
+    }
+    return content?.conversation
+        ?? content?.extendedTextMessage?.text
+        ?? content?.imageMessage?.caption
+        ?? content?.videoMessage?.caption
+        ?? content?.documentMessage?.caption
+        ?? content?.buttonsResponseMessage?.selectedDisplayText
+        ?? content?.listResponseMessage?.singleSelectReply?.selectedRowId
+        ?? content?.templateButtonReplyMessage?.selectedDisplayText
+        ?? nativeResponseText;
 }
 
 /** fileLength do Baileys pode vir como number ou Long — normaliza pra number puro (mesmo helper do backend single-owner). */
@@ -175,12 +233,20 @@ async function handleMessage(msg: WAMessage, sock: WASocket): Promise<void> {
     const remoteJid = msg.key.remoteJid;
     if (!remoteJid || msg.key.fromMe) return;
 
+    const content = normalizedInboundContent(msg);
     const text = textOf(msg);
-    const imageMessage = msg.message?.imageMessage;
-    const stickerMessage = msg.message?.stickerMessage;
-    const audioMessage = msg.message?.audioMessage;
+    const imageMessage = content?.imageMessage;
+    const stickerMessage = content?.stickerMessage;
+    const audioMessage = content?.audioMessage;
+    const documentMessage = content?.documentMessage;
 
-    if (!text && !imageMessage && !stickerMessage && !audioMessage) return; // vídeo/documento seguem fora do escopo.
+    if (!text && !imageMessage && !stickerMessage && !audioMessage && !documentMessage) {
+        const unsupportedType = Object.keys(content ?? {}).find((key) => !IGNORED_MESSAGE_TYPES.has(key));
+        if (unsupportedType) {
+            await sendWhatsappMessage(remoteJid, "Recebi sua mensagem, mas ainda não consigo processar esse formato. Envie texto, foto, áudio ou um documento PDF, DOCX, TXT, CSV ou XLSX.");
+        }
+        return;
+    }
 
     try {
         if (imageMessage && exceedsMediaLimit(toNumber(imageMessage.fileLength))) {
@@ -193,6 +259,13 @@ async function handleMessage(msg: WAMessage, sock: WASocket): Promise<void> {
         }
         if (audioMessage && exceedsMediaLimit(toNumber(audioMessage.fileLength))) {
             await sendWhatsappMessage(remoteJid, mediaTooLargeMessage("áudio"));
+            return;
+        }
+        const documentMime = documentMessage
+            ? supportedDocumentMime(documentMessage.fileName ?? "", documentMessage.mimetype)
+            : undefined;
+        if (documentMessage && (!documentMime || (toNumber(documentMessage.fileLength) ?? 0) > DOCUMENT_MAX_BYTES)) {
+            await sendWhatsappMessage(remoteJid, documentMime ? "Esse documento excede o limite de 10 MB." : "Não consigo ler esse formato. Envie PDF, DOCX, TXT, CSV ou XLSX.");
             return;
         }
 
@@ -209,6 +282,14 @@ async function handleMessage(msg: WAMessage, sock: WASocket): Promise<void> {
             ? { mimeType: audioMessage.mimetype || "audio/ogg", base64: (await downloadMedia(msg, sock)).toString("base64") }
             : undefined;
 
+        const document = documentMessage
+            ? {
+                  mimeType: documentMime!,
+                  filename: documentMessage.fileName!,
+                  base64: (await downloadMedia(msg, sock)).toString("base64"),
+              }
+            : undefined;
+
         const result = await sendInboundMessage({
             channel: "whatsapp",
             contactId: resolvePhoneContactId(remoteJid, msg.key.senderPn),
@@ -216,14 +297,21 @@ async function handleMessage(msg: WAMessage, sock: WASocket): Promise<void> {
             text,
             image,
             audio,
+            document,
             sticker,
         });
-        if ("blocked" in result) return; // rate limit — sem resposta, mesmo comportamento do backend single-owner.
+        if ("blocked" in result) {
+            await sendWhatsappMessage(remoteJid, "Recebi sua mensagem, mas este chat atingiu o limite temporário de mensagens. Tente novamente mais tarde.");
+            return;
+        }
 
         await sendWhatsappMessage(remoteJid, result.text);
         if (result.sticker) await sendWhatsappSticker(remoteJid, result.sticker.base64);
+        for (const file of result.files ?? []) await sendWhatsappFile(remoteJid, file);
     } catch (error) {
         captureError("whatsapp", "falha ao processar mensagem", error);
+        await sendWhatsappMessage(remoteJid, "Recebi sua mensagem, mas não consegui processá-la agora. Tente enviar novamente em alguns instantes.")
+            .catch((replyError) => captureError("whatsapp", "falha ao avisar sobre mensagem não processada", replyError, "warn"));
     }
 }
 
@@ -236,7 +324,12 @@ function isMentioned(msg: WAMessage): boolean {
     if (!currentSock?.user?.id) return false;
     const ownJid = normalizeJid(currentSock.user.id);
 
-    const contextInfo = msg.message?.extendedTextMessage?.contextInfo;
+    const content = normalizedInboundContent(msg);
+    const contextInfo = content?.extendedTextMessage?.contextInfo
+        ?? content?.imageMessage?.contextInfo
+        ?? content?.videoMessage?.contextInfo
+        ?? content?.documentMessage?.contextInfo
+        ?? content?.audioMessage?.contextInfo;
     const mentionedJids = contextInfo?.mentionedJid ?? [];
     if (mentionedJids.some((jid) => normalizeJid(jid) === ownJid)) return true;
 
@@ -244,12 +337,20 @@ function isMentioned(msg: WAMessage): boolean {
     return repliedParticipant ? normalizeJid(repliedParticipant) === ownJid : false;
 }
 
-async function handleGroupMessage(msg: WAMessage): Promise<void> {
+async function handleGroupMessage(msg: WAMessage, sock: WASocket): Promise<void> {
     const remoteJid = msg.key.remoteJid;
     if (!remoteJid || msg.key.fromMe) return;
 
-    const text = textOf(msg);
-    if (!text) return; // mídia: fora de escopo desta leva.
+    const content = normalizedInboundContent(msg);
+    const documentMessage = content?.documentMessage;
+    const text = textOf(msg) ?? documentMessage?.caption ?? (documentMessage ? "Leia o documento anexado." : undefined);
+    if (!text) {
+        const unsupportedType = Object.keys(content ?? {}).find((key) => !IGNORED_MESSAGE_TYPES.has(key));
+        if (unsupportedType) {
+            await sendWhatsappMessage(remoteJid, "Recebi sua mensagem, mas ainda não consigo processar esse formato. Envie texto ou um documento PDF, DOCX, TXT, CSV ou XLSX.");
+        }
+        return;
+    }
 
     const mentioned = isMentioned(msg);
 
@@ -265,6 +366,20 @@ async function handleGroupMessage(msg: WAMessage): Promise<void> {
     }
 
     try {
+        const documentMime = documentMessage
+            ? supportedDocumentMime(documentMessage.fileName ?? "", documentMessage.mimetype)
+            : undefined;
+        if (documentMessage && (!documentMime || (toNumber(documentMessage.fileLength) ?? 0) > DOCUMENT_MAX_BYTES)) {
+            await sendWhatsappMessage(remoteJid, documentMime ? "Esse documento excede o limite de 10 MB." : "Não consigo ler esse formato. Envie PDF, DOCX, TXT, CSV ou XLSX.");
+            return;
+        }
+        const document = documentMessage
+            ? {
+                  mimeType: documentMime!,
+                  filename: documentMessage.fileName!,
+                  base64: (await downloadMedia(msg, sock)).toString("base64"),
+              }
+            : undefined;
         const result = await sendGroupInboundMessage({
             channel: "whatsapp",
             groupId: remoteJid,
@@ -272,12 +387,19 @@ async function handleGroupMessage(msg: WAMessage): Promise<void> {
             senderName: msg.pushName || "alguém",
             text,
             mentioned,
+            document,
         });
-        if ("noReply" in result || "blocked" in result) return;
+        if ("noReply" in result) return;
+        if ("blocked" in result) {
+            await sendWhatsappMessage(remoteJid, "O grupo atingiu o limite temporário de mensagens. Tente novamente mais tarde.");
+            return;
+        }
 
         await sendWhatsappMessage(remoteJid, result.text);
     } catch (error) {
         captureError("whatsapp", "falha ao processar mensagem de grupo", error);
+        await sendWhatsappMessage(remoteJid, "Recebi a mensagem do grupo, mas não consegui processá-la agora.")
+            .catch((replyError) => captureError("whatsapp", "falha ao avisar sobre mensagem de grupo não processada", replyError, "warn"));
     }
 }
 
@@ -327,7 +449,7 @@ async function connect(): Promise<void> {
         for (const msg of messages) {
             const remoteJid = msg.key.remoteJid;
             if (remoteJid && isJidGroup(remoteJid)) {
-                handleGroupMessage(msg).catch((error) => captureError("whatsapp", "erro processando mensagem de grupo", error));
+                handleGroupMessage(msg, sock).catch((error) => captureError("whatsapp", "erro processando mensagem de grupo", error));
             } else {
                 handleMessage(msg, sock).catch((error) => captureError("whatsapp", "erro processando mensagem", error));
             }

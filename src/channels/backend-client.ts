@@ -27,6 +27,12 @@ export interface InboundAudioPayload {
     base64: string;
 }
 
+export interface InboundDocumentPayload {
+    mimeType: string;
+    filename: string;
+    base64: string;
+}
+
 export interface InboundStickerPayload {
     mimeType: string;
     base64: string;
@@ -45,6 +51,7 @@ export interface InboundMessagePayload {
     text?: string;
     image?: InboundImagePayload;
     audio?: InboundAudioPayload;
+    document?: InboundDocumentPayload;
     sticker?: InboundStickerPayload;
 }
 
@@ -53,6 +60,8 @@ export interface InboundMessageResult {
     text: string;
     /** Presente quando a Helena decidiu (send_sticker) mandar uma figurinha junto da resposta — vai ALÉM do texto, nunca no lugar dele. */
     sticker?: { mimeType: string; base64: string };
+    /** Arquivos locais que a Helena anexou à resposta do WhatsApp do próprio dono. */
+    files?: { filename: string; mimeType: string; base64: string; size: number }[];
 }
 
 export async function sendInboundMessage(payload: InboundMessagePayload): Promise<InboundMessageResult | { blocked: true }> {
@@ -77,6 +86,7 @@ export interface GroupInboundMessagePayload {
     senderName: string;
     text: string;
     mentioned: boolean;
+    document?: InboundDocumentPayload;
 }
 
 /** `mentioned` já resolvido pelo chamador (client/) — ver channels/whatsapp.ts/telegram.ts, únicos lugares com acesso às estruturas específicas de canal pra detectar menção/reply. */

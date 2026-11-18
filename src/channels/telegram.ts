@@ -47,6 +47,20 @@ let activeBot: Bot<TelegramContext> | undefined;
  */
 const CALLBACK_ENTRIES_MAX = 500;
 const callbackAnswers = new Map<string, { chatId: string; answer: string }>();
+const DOCUMENT_MAX_BYTES = 10 * 1024 * 1024;
+const DOCUMENT_MIME_BY_EXTENSION: Record<string, string> = {
+    pdf: "application/pdf",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    txt: "text/plain",
+    csv: "text/csv",
+    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+};
+
+export function telegramDocumentMime(filename: string, mimeType?: string): string | undefined {
+    const extension = filename.split(".").pop()?.toLowerCase();
+    const expected = extension ? DOCUMENT_MIME_BY_EXTENSION[extension] : undefined;
+    return expected && (!mimeType || mimeType === "application/octet-stream" || mimeType === expected) ? expected : undefined;
+}
 
 /** Guarda a resposta de um botão e devolve o token curto que vai no `callback_data`. */
 function rememberCallback(chatId: string, answer: string): string {
@@ -115,13 +129,14 @@ function isMentioned(ctx: Context): boolean {
 }
 
 async function handlePrivateMessage(ctx: TelegramContext): Promise<void> {
-    const text = ctx.message?.text;
+    const text = ctx.message?.text ?? ctx.message?.caption;
     const photo = ctx.message?.photo;
     const stickerMsg = ctx.message?.sticker;
     const voice = ctx.message?.voice;
     const audioMsg = ctx.message?.audio;
     const audioFile = voice ?? audioMsg;
-    if (!text && !photo && !stickerMsg && !audioFile) return; // vídeo/documento seguem fora do escopo.
+    const documentMsg = ctx.message?.document;
+    if (!text && !photo && !stickerMsg && !audioFile && !documentMsg) return; // vídeo continua fora do escopo.
     if (!ctx.from) return;
 
     try {
@@ -135,6 +150,13 @@ async function handlePrivateMessage(ctx: TelegramContext): Promise<void> {
         }
         if (audioFile && exceedsMediaLimit(audioFile.file_size)) {
             await ctx.reply(mediaTooLargeMessage("áudio"));
+            return;
+        }
+        const documentMime = documentMsg
+            ? telegramDocumentMime(documentMsg.file_name ?? "", documentMsg.mime_type)
+            : undefined;
+        if (documentMsg && (!documentMime || (documentMsg.file_size ?? 0) > DOCUMENT_MAX_BYTES)) {
+            await ctx.reply(documentMime ? "Esse documento excede o limite de 10 MB." : "Não consigo ler esse formato. Envie PDF, DOCX, TXT, CSV ou XLSX.");
             return;
         }
 
@@ -159,6 +181,14 @@ async function handlePrivateMessage(ctx: TelegramContext): Promise<void> {
               }
             : undefined;
 
+        const document = documentMsg
+            ? {
+                  mimeType: documentMime!,
+                  filename: documentMsg.file_name!,
+                  base64: Buffer.from(await (await fetch((await ctx.getFile()).getUrl())).arrayBuffer()).toString("base64"),
+              }
+            : undefined;
+
         const result = await sendInboundMessage({
             channel: "telegram",
             contactId: String(ctx.from.id),
@@ -166,6 +196,7 @@ async function handlePrivateMessage(ctx: TelegramContext): Promise<void> {
             text,
             image,
             audio,
+            document,
             sticker,
         });
         if ("blocked" in result) return;
@@ -177,8 +208,9 @@ async function handlePrivateMessage(ctx: TelegramContext): Promise<void> {
     }
 }
 
-async function handleGroupMessage(ctx: Context): Promise<void> {
-    const text = ctx.message?.text;
+async function handleGroupMessage(ctx: TelegramContext): Promise<void> {
+    const documentMsg = ctx.message?.document;
+    const text = ctx.message?.text ?? ctx.message?.caption ?? (documentMsg ? "Leia o documento anexado." : undefined);
     if (!text || !ctx.from || !ctx.chat) return;
 
     const mentioned = isMentioned(ctx);
@@ -186,6 +218,20 @@ async function handleGroupMessage(ctx: Context): Promise<void> {
     const groupName = ("title" in ctx.chat ? ctx.chat.title : undefined) ?? groupId;
 
     try {
+        const documentMime = documentMsg
+            ? telegramDocumentMime(documentMsg.file_name ?? "", documentMsg.mime_type)
+            : undefined;
+        if (documentMsg && (!documentMime || (documentMsg.file_size ?? 0) > DOCUMENT_MAX_BYTES)) {
+            await ctx.reply(documentMime ? "Esse documento excede o limite de 10 MB." : "Não consigo ler esse formato. Envie PDF, DOCX, TXT, CSV ou XLSX.");
+            return;
+        }
+        const document = documentMsg
+            ? {
+                  mimeType: documentMime!,
+                  filename: documentMsg.file_name!,
+                  base64: Buffer.from(await (await fetch((await ctx.getFile()).getUrl())).arrayBuffer()).toString("base64"),
+              }
+            : undefined;
         const result = await sendGroupInboundMessage({
             channel: "telegram",
             groupId,
@@ -193,6 +239,7 @@ async function handleGroupMessage(ctx: Context): Promise<void> {
             senderName: ctx.from.first_name || "alguém",
             text,
             mentioned,
+            document,
         });
         if ("noReply" in result || "blocked" in result) return;
 

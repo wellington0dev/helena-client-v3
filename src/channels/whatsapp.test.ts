@@ -1,7 +1,26 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { getState, updateWhatsapp } from "../local-api/status-bus.ts";
-import { resolveContactIdPure, stopWhatsapp } from "./whatsapp.ts";
+import { resolveContactIdPure, stopWhatsapp, supportedDocumentMime, textOf } from "./whatsapp.ts";
+
+test("supportedDocumentMime: aceita extensões suportadas, infere MIME ausente e rejeita MIME incompatível", () => {
+    assert.equal(supportedDocumentMime("contrato.pdf", "application/pdf"), "application/pdf");
+    assert.equal(supportedDocumentMime("planilha.XLSX"), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    assert.equal(supportedDocumentMime("contrato.pdf", "text/plain"), undefined);
+    assert.equal(supportedDocumentMime("program.exe", "application/octet-stream"), undefined);
+});
+
+test("textOf: extrai mensagem de texto embrulhada como temporária e texto de resposta interativa", () => {
+    const ephemeral = {
+        message: { ephemeralMessage: { message: { conversation: "mensagem recebida" } } },
+    } as unknown as Parameters<typeof textOf>[0];
+    const listReply = {
+        message: { listResponseMessage: { singleSelectReply: { selectedRowId: "opcao-1" } } },
+    } as unknown as Parameters<typeof textOf>[0];
+
+    assert.equal(textOf(ephemeral), "mensagem recebida");
+    assert.equal(textOf(listReply), "opcao-1");
+});
 
 test("resolveContactIdPure: JID normal (@s.whatsapp.net) passa direto, sem tentar resolver nada", () => {
     assert.equal(resolveContactIdPure("5521968177605@s.whatsapp.net", undefined, {}), "5521968177605@s.whatsapp.net");
