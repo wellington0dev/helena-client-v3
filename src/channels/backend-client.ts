@@ -60,6 +60,7 @@ export interface InboundMessageResult {
     text: string;
     /** Presente quando a Helena decidiu (send_sticker) mandar uma figurinha junto da resposta — vai ALÉM do texto, nunca no lugar dele. */
     sticker?: { mimeType: string; base64: string };
+    image?: { mimeType: string; filename: string; base64: string };
     /** Arquivos locais que a Helena anexou à resposta do WhatsApp do próprio dono. */
     files?: { filename: string; mimeType: string; base64: string; size: number }[];
 }
@@ -111,6 +112,7 @@ export interface PendingOutboundMessage {
     contactId: string;
     /** Ausente quando a mensagem é só figurinha (ver `sticker`) — sempre pelo menos um dos dois preenchido. */
     text?: string;
+    image?: { mimeType: string; filename: string; base64: string };
     sticker?: { mimeType: string; base64: string };
 }
 

@@ -158,6 +158,13 @@ export async function sendWhatsappFile(jid: string, file: { filename: string; mi
     });
 }
 
+export async function sendWhatsappImage(jid: string, image: { filename: string; mimeType: string; base64: string }, caption?: string): Promise<void> {
+    if (!currentSock) throw new Error("WhatsApp não está conectado.");
+    const payload = Buffer.from(image.base64, "base64");
+    await currentSock.sendMessage(jid, { image: payload, mimetype: image.mimeType, ...(caption && caption.length <= 1024 ? { caption } : {}), fileName: image.filename });
+    if (caption && caption.length > 1024) await sendWhatsappMessage(jid, caption);
+}
+
 /**
  * Valida se um número existe no WhatsApp (`onWhatsApp`, mesmo mecanismo que
  * o dono usa pra checar antes de salvar um contato novo). Chamado pela

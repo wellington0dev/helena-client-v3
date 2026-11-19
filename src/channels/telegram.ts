@@ -108,6 +108,12 @@ export async function sendTelegramSticker(chatId: string, base64: string): Promi
     await currentBot.api.sendSticker(chatId, new InputFile(Buffer.from(base64, "base64")));
 }
 
+export async function sendTelegramImage(chatId: string, image: { mimeType: string; filename: string; base64: string }, caption?: string): Promise<void> {
+    if (!currentBot) throw new Error("Telegram não está conectado.");
+    await currentBot.api.sendPhoto(chatId, new InputFile(Buffer.from(image.base64, "base64"), image.filename), caption && caption.length <= 1024 ? { caption } : {});
+    if (caption && caption.length > 1024) await sendTelegramMessage(chatId, caption);
+}
+
 /** Responde no 1:1 (via `ctx.reply`) já com os botões nativos quando a resposta tiver bloco interativo — mesma conversão de `sendTelegramMessage`. */
 async function replyWithTelegramContent(ctx: TelegramContext, text: string): Promise<void> {
     const chatId = String(ctx.from?.id ?? ctx.chat?.id ?? "");

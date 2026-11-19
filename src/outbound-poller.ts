@@ -1,6 +1,6 @@
 import { fetchPendingOutbound, type PendingOutboundMessage } from "./channels/backend-client.ts";
-import { sendTelegramMessage, sendTelegramSticker } from "./channels/telegram.ts";
-import { sendWhatsappMessage, sendWhatsappSticker } from "./channels/whatsapp.ts";
+import { sendTelegramImage, sendTelegramMessage, sendTelegramSticker } from "./channels/telegram.ts";
+import { sendWhatsappImage, sendWhatsappMessage, sendWhatsappSticker } from "./channels/whatsapp.ts";
 import { config, hasBackendConfig } from "./config.ts";
 import { captureError } from "./telemetry.ts";
 
@@ -23,10 +23,12 @@ const POLL_INTERVAL_MS = 15_000;
 async function deliverOne(message: PendingOutboundMessage): Promise<void> {
     if (message.channel === "whatsapp") {
         const jid = `${message.contactId}@s.whatsapp.net`;
-        if (message.text) await sendWhatsappMessage(jid, message.text);
+        if (message.image) await sendWhatsappImage(jid, message.image, message.text);
+        else if (message.text) await sendWhatsappMessage(jid, message.text);
         if (message.sticker) await sendWhatsappSticker(jid, message.sticker.base64);
     } else if (message.channel === "telegram") {
-        if (message.text) await sendTelegramMessage(message.contactId, message.text);
+        if (message.image) await sendTelegramImage(message.contactId, message.image, message.text);
+        else if (message.text) await sendTelegramMessage(message.contactId, message.text);
         if (message.sticker) await sendTelegramSticker(message.contactId, message.sticker.base64);
     } else {
         captureError("outbound-poller", `canal desconhecido: ${message.channel}`, undefined, "warn");
