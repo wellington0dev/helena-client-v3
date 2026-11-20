@@ -62,7 +62,7 @@ function guard(target: string, narrow?: NarrowPolicy, kind: "file" | "dir" = "di
     if (!narrow) return undefined;
     if (narrow.allowAllDirs) return kind === "file" && !extensionOk(target, narrow) ? "Acesso negado: tipo de arquivo não liberado." : undefined;
     const exactFile = kind === "file" && (narrow.allowedFiles ?? []).some((file) => realResolve(file) === realResolve(target));
-    if (!exactFile && narrow.allowedDirs.length === 0) return "Acesso negado: nenhum caminho liberado pra esta conversa.";
+    if (!exactFile && narrow.allowedDirs.length === 0) return "Acesso negado: nenhuma pasta liberada para esta conversa.";
     const extra = checkPathAccess(target, { allowedDirs: exactFile ? [] : narrow.allowedDirs, deniedPaths: narrow.deniedPaths });
     if (!extra.ok) return `Acesso negado: ${extra.reason}.`;
     if (kind === "file" && !extensionOk(target, narrow)) return "Acesso negado: tipo de arquivo não liberado.";
