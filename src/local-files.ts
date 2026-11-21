@@ -56,17 +56,45 @@ function extensionOk(target: string, narrow: NarrowPolicy): boolean {
     return !!ext && narrow.allowedExtensions.map((e) => e.toLowerCase().replace(/^\./, "")).includes(ext);
 }
 
+type GuardedPath = { ok: true; path: string } | { ok: false; error: string };
+
+/**
+ * Valida o caminho e devolve o CAMINHO CANÔNICO (realResolve, links já
+ * resolvidos) — não o `resolvePath()` original. Antes, `guard()` só devolvia
+ * um erro e as operações abriam `resolvePath(target)` (que apenas expande
+ * `~`), então o que era checado não era necessariamente o que era aberto:
+ * um link simbólico trocado entre a checagem e o `readFileSync` furava a
+ * política. Aqui a operação usa SEMPRE o caminho validado, e revalidamos
+ * logo antes do uso para fechar a janela TOCTOU.
+ */
+function guardPath(target: string, narrow?: NarrowPolicy, kind: "file" | "dir" = "dir"): GuardedPath {
+    const base = checkPathAccess(target, policy(narrow?.allowAllDirs));
+    if (!base.ok) return { ok: false, error: `Acesso negado: ${base.reason}.` };
+    let resolved = base.resolved;
+    if (narrow) {
+        if (narrow.allowAllDirs) {
+            // allowAllDirs só libera pastas; a base ainda barra arquivos sensíveis (checkPathAccess acima).
+        } else {
+            const exactFile = kind === "file" && (narrow.allowedFiles ?? []).some((file) => realResolve(file) === resolved);
+            if (!exactFile && narrow.allowedDirs.length === 0) return { ok: false, error: "Acesso negado: nenhuma pasta liberada para esta conversa." };
+            const extra = checkPathAccess(resolved, { allowedDirs: exactFile ? [] : narrow.allowedDirs, deniedPaths: narrow.deniedPaths });
+            if (!extra.ok) return { ok: false, error: `Acesso negado: ${extra.reason}.` };
+            resolved = extra.resolved;
+        }
+        // A extensão é avaliada no CAMINHO CANÔNICO: um link .txt para um .pdf não
+        // deve herdar a extensão permissiva do nome do link.
+        if (kind === "file" && !extensionOk(resolved, narrow)) return { ok: false, error: "Acesso negado: tipo de arquivo não liberado." };
+    }
+    // Revalidação imediata: se o alvo mudou (symlink trocado) desde a checagem,
+    // NUNCA usa o caminho — falha fechada em vez de ler/escrever o novo alvo.
+    if (realResolve(resolved) !== resolved) return { ok: false, error: "Acesso negado: o caminho mudou durante a validação." };
+    return { ok: true, path: resolved };
+}
+
+/** Versão só-erro, para filtros onde o caminho canônico não é necessário. */
 function guard(target: string, narrow?: NarrowPolicy, kind: "file" | "dir" = "dir"): string | undefined {
-    const check = checkPathAccess(target, policy(narrow?.allowAllDirs));
-    if (!check.ok) return `Acesso negado: ${check.reason}.`;
-    if (!narrow) return undefined;
-    if (narrow.allowAllDirs) return kind === "file" && !extensionOk(target, narrow) ? "Acesso negado: tipo de arquivo não liberado." : undefined;
-    const exactFile = kind === "file" && (narrow.allowedFiles ?? []).some((file) => realResolve(file) === realResolve(target));
-    if (!exactFile && narrow.allowedDirs.length === 0) return "Acesso negado: nenhuma pasta liberada para esta conversa.";
-    const extra = checkPathAccess(target, { allowedDirs: exactFile ? [] : narrow.allowedDirs, deniedPaths: narrow.deniedPaths });
-    if (!extra.ok) return `Acesso negado: ${extra.reason}.`;
-    if (kind === "file" && !extensionOk(target, narrow)) return "Acesso negado: tipo de arquivo não liberado.";
-    return undefined;
+    const result = guardPath(target, narrow, kind);
+    return result.ok ? undefined : result.error;
 }
 
 function describe(err: unknown): string {
@@ -139,9 +167,9 @@ export function machineFileRoots(): string[] {
 
 /** `pattern` é regex sobre o NOME (não glob) — mesma convenção de `namePattern` em `searchFiles`, só uma forma de casar em todo o módulo. */
 export function listFiles(dirPath: string, pattern?: string, narrow?: NarrowPolicy): ListFilesResult {
-    const resolved = resolvePath(dirPath);
-    const denied = guard(resolved, narrow);
-    if (denied) return { files: [], error: denied };
+    const guarded = guardPath(dirPath, narrow);
+    if (!guarded.ok) return { files: [], error: guarded.error };
+    const resolved = guarded.path;
 
     let entries: fs.Dirent[];
     try {
@@ -176,9 +204,9 @@ export interface ReadFileResult {
 }
 
 export function readFile(filePath: string, narrow?: NarrowPolicy): ReadFileResult {
-    const resolved = resolvePath(filePath);
-    const denied = guard(resolved, narrow, "file");
-    if (denied) return { content: "", error: denied };
+    const guarded = guardPath(filePath, narrow, "file");
+    if (!guarded.ok) return { content: "", error: guarded.error };
+    const resolved = guarded.path;
 
     let stat: fs.Stats;
     try {
@@ -226,9 +254,9 @@ function mimeTypeFor(filePath: string): string {
 
 /** Verifica referências locais persistidas sem ler o conteúdo do arquivo. */
 export function inspectFile(filePath: string, narrow?: NarrowPolicy): LocalFileInspection {
-    const resolved = resolvePath(filePath);
-    const denied = guard(resolved, narrow, "file");
-    if (denied) return { available: false, error: denied };
+    const guarded = guardPath(filePath, narrow, "file");
+    if (!guarded.ok) return { available: false, error: guarded.error };
+    const resolved = guarded.path;
     try {
         const stat = fs.statSync(resolved);
         if (!stat.isFile()) return { available: false, error: "O caminho não é um arquivo." };
@@ -238,18 +266,18 @@ export function inspectFile(filePath: string, narrow?: NarrowPolicy): LocalFileI
     }
 }
 
-export function inspectFiles(filePaths: string[]): LocalFileInspection[] {
+export function inspectFiles(filePaths: string[], narrow?: NarrowPolicy): LocalFileInspection[] {
     if (filePaths.length > 200) {
         return filePaths.map(() => ({ available: false, error: "Máximo de 200 arquivos por consulta." }));
     }
-    return filePaths.map((filePath) => inspectFile(filePath));
+    return filePaths.map((filePath) => inspectFile(filePath, narrow));
 }
 
 /** Lê bytes respeitando a política local e o limite do protocolo de transferência. */
 export function downloadFile(filePath: string, narrow?: NarrowPolicy): LocalFileInspection & { base64?: string } {
-    const resolved = resolvePath(filePath);
-    const denied = guard(resolved, narrow, "file");
-    if (denied) return { available: false, error: denied };
+    const guarded = guardPath(filePath, narrow, "file");
+    if (!guarded.ok) return { available: false, error: guarded.error };
+    const resolved = guarded.path;
     try {
         const stat = fs.statSync(resolved);
         if (!stat.isFile()) return { available: false, error: "O caminho não é um arquivo." };
@@ -317,10 +345,10 @@ export function searchFiles(dirPath: string, namePattern?: string, contentPatter
     const contentRegex = contentPattern ? safeRegex(contentPattern) : undefined;
     if (contentPattern && !contentRegex) return { paths: [], error: `Padrão de conteúdo inválido: "${contentPattern}"` };
 
-    const rootDenied = guard(resolvePath(dirPath), narrow);
-    if (rootDenied) return { paths: [], error: rootDenied };
+    const guarded = guardPath(dirPath, narrow);
+    if (!guarded.ok) return { paths: [], error: guarded.error };
     const results: string[] = [];
-    walk(resolvePath(dirPath), nameRegex, contentRegex, results, narrow);
+    walk(guarded.path, nameRegex, contentRegex, results, narrow);
     return { paths: results };
 }
 
@@ -349,7 +377,7 @@ function isTextFile(filePath: string): boolean {
     }
 }
 
-export function grepFiles(dirPath: string, pattern: string, filePattern?: string): GrepResult {
+export function grepFiles(dirPath: string, pattern: string, filePattern?: string, narrow?: NarrowPolicy): GrepResult {
     const regex = safeRegex(pattern);
     if (!regex) return { matches: [], error: `Padrão de regex inválido: "${pattern}"` };
 
@@ -358,9 +386,9 @@ export function grepFiles(dirPath: string, pattern: string, filePattern?: string
 
     // Política de arquivos (2026-09-24): antes grep NÃO passava pelo guard — `grep_files` em "~" devolvia linhas de
     // `~/.ssh/*` e `.env` sem confirmação nenhuma (grep é comando "seguro"). Raiz e cada entrada passam pelo guard.
-    const root = resolvePath(dirPath);
-    const rootDenied = guard(root);
-    if (rootDenied) return { matches: [], error: rootDenied };
+    const guarded = guardPath(dirPath, narrow);
+    if (!guarded.ok) return { matches: [], error: guarded.error };
+    const root = guarded.path;
 
     const matches: GrepMatch[] = [];
 
@@ -376,7 +404,7 @@ export function grepFiles(dirPath: string, pattern: string, filePattern?: string
 
         for (const entry of entries) {
             if (matches.length >= MAX_GREP_RESULTS) return;
-            if (guard(path.join(dir, entry.name))) continue; // nunca entra nem lê o que a política protege
+            if (guard(path.join(dir, entry.name), narrow)) continue; // nunca entra nem lê o que a política protege
 
             if (entry.isDirectory()) {
                 if (IGNORED_DIR_NAMES.has(entry.name)) continue;
@@ -423,7 +451,7 @@ export interface GlobResult {
     error?: string;
 }
 
-export function globFiles(dirPath: string, pattern: string): GlobResult {
+export function globFiles(dirPath: string, pattern: string, narrow?: NarrowPolicy): GlobResult {
     // Convert glob pattern to regex
     const regexPattern = pattern
         .replace(/\./g, "\\.")
@@ -433,9 +461,9 @@ export function globFiles(dirPath: string, pattern: string): GlobResult {
     if (!regex) return { paths: [], error: `Padrão glob inválido: "${pattern}"` };
 
     // Mesmo furo do grep (2026-09-24): glob listava nomes dentro de pastas protegidas.
-    const root = resolvePath(dirPath);
-    const rootDenied = guard(root);
-    if (rootDenied) return { paths: [], error: rootDenied };
+    const guarded = guardPath(dirPath, narrow);
+    if (!guarded.ok) return { paths: [], error: guarded.error };
+    const root = guarded.path;
 
     const results: string[] = [];
 
@@ -451,7 +479,7 @@ export function globFiles(dirPath: string, pattern: string): GlobResult {
 
         for (const entry of entries) {
             if (results.length >= MAX_SEARCH_RESULTS) return;
-            if (guard(path.join(dir, entry.name))) continue;
+            if (guard(path.join(dir, entry.name), narrow)) continue;
 
             if (entry.isDirectory()) {
                 if (IGNORED_DIR_NAMES.has(entry.name)) continue;
@@ -502,16 +530,15 @@ function writeWhole(resolvedPath: string, originalPath: string, content: string)
 
 export function writeFile(filePath: string, edits: FileEdit[], narrow?: NarrowPolicy): WriteFileResult {
     if (edits.length === 0) return { ok: false, error: "Nenhuma edição informada." };
-    const denied = guard(resolvePath(filePath), narrow, "file");
-    if (denied) return { ok: false, error: denied };
+    const guarded = guardPath(filePath, narrow, "file");
+    if (!guarded.ok) return { ok: false, error: guarded.error };
+    const resolved = guarded.path;
 
     const replaceAll = edits.find((edit) => edit.type === "replace_all");
     if (replaceAll) {
         if (edits.length > 1) return { ok: false, error: "replace_all não pode ser combinado com outras edições." };
-        return writeWhole(resolvePath(filePath), filePath, replaceAll.content);
+        return writeWhole(resolved, filePath, replaceAll.content);
     }
-
-    const resolved = resolvePath(filePath);
     let original: string;
     try {
         original = fs.readFileSync(resolved, "utf8");
@@ -541,9 +568,9 @@ export function writeFile(filePath: string, edits: FileEdit[], narrow?: NarrowPo
 
 /** Criação atômica e sem sobrescrever um arquivo existente. */
 export function createFile(filePath: string, content: string, narrow?: NarrowPolicy): WriteFileResult {
-    const resolved = resolvePath(filePath);
-    const denied = guard(resolved, narrow, "file");
-    if (denied) return { ok: false, error: denied };
+    const guarded = guardPath(filePath, narrow, "file");
+    if (!guarded.ok) return { ok: false, error: guarded.error };
+    const resolved = guarded.path;
     if (Buffer.byteLength(content, "utf8") > MAX_READ_BYTES) {
         return { ok: false, error: "O conteúdo excede o limite de 2 MB." };
     }
@@ -568,15 +595,15 @@ export function createFile(filePath: string, content: string, narrow?: NarrowPol
  * Gera um diff unificado (estilo git diff) entre o conteúdo original e o resultado
  * das edições — sem aplicar as edições. Útil pra preview antes de confirmar.
  */
-export function previewDiff(filePath: string, edits: FileEdit[]): { diff: string; error?: string } {
+export function previewDiff(filePath: string, edits: FileEdit[], narrow?: NarrowPolicy): { diff: string; error?: string } {
     // O diff MOSTRA o conteúdo original — sem guard, previewDiff lia qualquer arquivo protegido (2026-09-24).
-    const denied = guard(resolvePath(filePath));
-    if (denied) return { diff: "", error: denied };
+    const guarded = guardPath(filePath, narrow, "file");
+    if (!guarded.ok) return { diff: "", error: guarded.error };
+    const resolved = guarded.path;
     const replaceAll = edits.find((edit) => edit.type === "replace_all");
     if (replaceAll) {
         if (edits.length > 1) return { diff: "", error: "replace_all não pode ser combinado com outras edições." };
-        
-        const resolved = resolvePath(filePath);
+
         let original: string;
         try {
             original = fs.readFileSync(resolved, "utf8");
@@ -587,7 +614,6 @@ export function previewDiff(filePath: string, edits: FileEdit[]): { diff: string
         return { diff: generateUnifiedDiff(original, newContent, filePath) };
     }
 
-    const resolved = resolvePath(filePath);
     let original: string;
     try {
         original = fs.readFileSync(resolved, "utf8");
@@ -707,10 +733,10 @@ export interface DeleteFileResult {
  * genérico dado direto ao agente de dev seria uma superfície de risco à
  * toa que ninguém pediu.
  */
-export function deleteFile(filePath: string): DeleteFileResult {
-    const resolved = resolvePath(filePath);
-    const denied = guard(resolved);
-    if (denied) return { ok: false, error: denied };
+export function deleteFile(filePath: string, narrow?: NarrowPolicy): DeleteFileResult {
+    const guarded = guardPath(filePath, narrow, "file");
+    if (!guarded.ok) return { ok: false, error: guarded.error };
+    const resolved = guarded.path;
     try {
         fs.unlinkSync(resolved);
         return { ok: true };

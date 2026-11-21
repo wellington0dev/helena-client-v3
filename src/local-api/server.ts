@@ -12,6 +12,7 @@ import type { EventHub, HubEvent } from "./event-hub.ts";
 import { rotateLocalToken, tokensMatch } from "./local-token.ts";
 import { payloadTooLarge, readBody, sendJson } from "./http-utils.ts";
 import { HttpError, type SessionManager } from "./session-manager.ts";
+import { localDocuments, type LocalDocumentWorkspace } from "../local-documents/local-document-workspace.ts";
 
 /** Versão do contrato `/v1`. A TUI recusa daemon com `apiVersion` maior que o que conhece. */
 export const API_VERSION = 1;
@@ -36,6 +37,8 @@ export interface LocalApiOptions {
   doctor?: () => Promise<unknown>;
   /** Built desktop renderer, served only when configured by the Electron app. */
   webRoot?: string;
+  /** Document Workspace local. Ausente ⇒ lazy singleton (mesma instância das capabilities). */
+  documents?: LocalDocumentWorkspace;
 }
 
 export interface ChannelsController {
@@ -94,6 +97,7 @@ export function startLocalApi(options: LocalApiOptions): Server {
   const host = options.host ?? "127.0.0.1";
   const machineName = options.machineName ?? os.hostname();
   const tokenRef = { value: options.localToken }; // mutável: `POST /v1/local-token/rotate` troca sem reiniciar
+  const documents = options.documents ?? localDocuments();
 
   function deny(
     res: ServerResponse,
@@ -360,7 +364,9 @@ export function startLocalApi(options: LocalApiOptions): Server {
     const upstream = await session.authedFetch(`${backendPath}${url.search}`, {
       method,
       headers,
-      ...(body?.length ? { body } : {}),
+      // `new Uint8Array` normaliza Buffer<ArrayBufferLike> -> BodyInit aceito
+      // pelo @types/node/undici que o docx traz aninhado (TS 7 do client).
+      ...(body?.length ? { body: new Uint8Array(body) } : {}),
     });
     const upstreamType = upstream.headers.get("content-type");
     if (upstreamType) res.setHeader("Content-Type", upstreamType);
@@ -391,6 +397,37 @@ export function startLocalApi(options: LocalApiOptions): Server {
           session: { loggedIn: session.isLoggedIn() },
         });
       }
+      /**
+       * Download/prévia do Document Workspace local. Ficam ANTES do authorize()
+       * porque um `<iframe>`/link do navegador não manda Bearer: a credencial é
+       * o token opaco de 48 hex, rotacionado a cada revisão. Nunca aceitamos
+       * JWT em URL e nunca devolvemos paths de filesystem.
+       */
+      if (path.startsWith("/v1/local-documents/") && req.method === "GET") {
+        const match = /^\/v1\/local-documents\/([0-9a-f-]{36})\/(download|preview)$/.exec(path);
+        if (!match) return deny(res, 400, "invalid_request", "Link de documento inválido.");
+        const found = documents.byToken(match[1]!, url.searchParams.get("token") ?? "");
+        if (!found) return deny(res, 404, "invalid_token", "Link de documento inválido ou expirado.");
+        res.setHeader("Cache-Control", "no-store");
+        res.setHeader("Referrer-Policy", "no-referrer");
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        res.setHeader("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'");
+        if (match[2] === "download") {
+          res.setHeader("Content-Type", found.identity.mimeType);
+          res.setHeader(
+            "Content-Disposition",
+            `attachment; filename*=UTF-8''${encodeURIComponent(found.identity.filename)}`,
+          );
+          res.statusCode = 200;
+          return res.end(found.bytes);
+        }
+        const preview = await documents.previewByToken(match[1]!, url.searchParams.get("token") ?? "");
+        if (!preview) return deny(res, 404, "invalid_token", "Link de documento inválido ou expirado.");
+        res.setHeader("Content-Type", preview.mimeType);
+        res.statusCode = 200;
+        return res.end(preview.bytes);
+      }
+
       if (!authorize(req, res, bearerFrom(req))) return;
 
       if (path === "/v1/capabilities" && req.method === "GET") {

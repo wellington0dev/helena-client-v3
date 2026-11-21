@@ -16,6 +16,10 @@ import {
     handleLocalSkillsExec,
     type LocalSkillsManagementProvider,
 } from "./local-skills-protocol.ts";
+import {
+    DOCUMENT_WORKSPACE_CAPABILITIES,
+    dispatchDocumentCapability,
+} from "./local-documents/local-document-capabilities.ts";
 
 /**
  * Protocolo de `/ws/agent` no backend-v2 — mesmo shape de
@@ -104,10 +108,15 @@ const TIMEOUT_MS = 30_000;
  * local-files.ts). Fixa, sem env var pra configurar — YAGNI enquanto o
  * conjunto não mudar por tenant.
  */
-const CAPABILITIES = ["shell", "list_files", "read_file", "search_files", "write_file", "delete_file", "grep_files", "glob_files", "preview_diff", "inspect_files", "download_file", "send_whatsapp_file", "manage_whatsapp_files", "manage_whatsapp_file_access", "mcp_list_tools", "mcp_call_tool", "mcp_discover", "path_policy_v1"];
+const CAPABILITIES = ["shell", "list_files", "read_file", "search_files", "write_file", "delete_file", "grep_files", "glob_files", "preview_diff", "inspect_files", "download_file", "send_whatsapp_file", "manage_whatsapp_files", "manage_whatsapp_file_access", "mcp_list_tools", "mcp_call_tool", "mcp_discover", "path_policy_v1", ...DOCUMENT_WORKSPACE_CAPABILITIES];
 
 /** As capabilities de arquivo são síncronas e locais (sem I/O de rede); `mcp_list_tools`/`mcp_call_tool` são assíncronas (rede até o servidor MCP local) — `handleExec` faz `await` no resultado dos dois casos (await num valor que não é Promise é inofensivo). */
 function dispatchCapability(capability: string, payload: unknown): unknown | Promise<unknown> {
+    // Document Workspace: capabilities declaradas acima, mesmo envelope
+    // documental nos dois executores; falhas voltam como { ok:false, error, code }.
+    if ((DOCUMENT_WORKSPACE_CAPABILITIES as readonly string[]).includes(capability)) {
+        return dispatchDocumentCapability(capability, payload);
+    }
     switch (capability) {
         case "mcp_discover": return discoverMcpServers();
         case "mcp_list_tools": {
@@ -127,12 +136,12 @@ function dispatchCapability(capability: string, payload: unknown): unknown | Pro
             return readFile(path, policy);
         }
         case "inspect_files": {
-            const { paths } = payload as { paths: string[] };
-            return inspectFiles(paths);
+            const { paths, policy } = payload as { paths: string[]; policy?: NarrowPolicy };
+            return inspectFiles(paths, policy);
         }
         case "download_file": {
-            const { path } = payload as { path: string };
-            return downloadFile(path);
+            const { path, policy } = payload as { path: string; policy?: NarrowPolicy };
+            return downloadFile(path, policy);
         }
         case "send_whatsapp_file": {
             const { path } = payload as { path: string };
@@ -205,28 +214,28 @@ function dispatchCapability(capability: string, payload: unknown): unknown | Pro
             return { settings: config.whatsappFileAccess };
         }
         case "search_files": {
-            const { path, namePattern, contentPattern } = payload as { path: string; namePattern?: string; contentPattern?: string };
-            return searchFiles(path, namePattern, contentPattern);
+            const { path, namePattern, contentPattern, policy } = payload as { path: string; namePattern?: string; contentPattern?: string; policy?: NarrowPolicy };
+            return searchFiles(path, namePattern, contentPattern, policy);
         }
         case "grep_files": {
-            const { path, pattern, filePattern } = payload as { path: string; pattern: string; filePattern?: string };
-            return grepFiles(path, pattern, filePattern);
+            const { path, pattern, filePattern, policy } = payload as { path: string; pattern: string; filePattern?: string; policy?: NarrowPolicy };
+            return grepFiles(path, pattern, filePattern, policy);
         }
         case "glob_files": {
-            const { path, pattern } = payload as { path: string; pattern: string };
-            return globFiles(path, pattern);
+            const { path, pattern, policy } = payload as { path: string; pattern: string; policy?: NarrowPolicy };
+            return globFiles(path, pattern, policy);
         }
         case "write_file": {
             const { path, edits, policy } = payload as { path: string; edits: FileEdit[]; policy?: NarrowPolicy };
             return writeFile(path, edits, policy);
         }
         case "delete_file": {
-            const { path } = payload as { path: string };
-            return deleteFile(path);
+            const { path, policy } = payload as { path: string; policy?: NarrowPolicy };
+            return deleteFile(path, policy);
         }
         case "preview_diff": {
-            const { path, edits } = payload as { path: string; edits: FileEdit[] };
-            return previewDiff(path, edits);
+            const { path, edits, policy } = payload as { path: string; edits: FileEdit[]; policy?: NarrowPolicy };
+            return previewDiff(path, edits, policy);
         }
         default:
             throw new Error(`capability desconhecida: "${capability}"`);
