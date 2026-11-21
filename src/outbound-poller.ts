@@ -1,4 +1,4 @@
-import { fetchPendingOutbound, type PendingOutboundMessage } from "./channels/backend-client.ts";
+import { fetchPendingOutbound, reportOutboundAck, type PendingOutboundMessage } from "./channels/backend-client.ts";
 import { sendTelegramImage, sendTelegramMessage, sendTelegramSticker } from "./channels/telegram.ts";
 import { sendWhatsappImage, sendWhatsappMessage, sendWhatsappSticker } from "./channels/whatsapp.ts";
 import { config, hasBackendConfig } from "./config.ts";
@@ -40,8 +40,11 @@ async function pollOnce(): Promise<void> {
     for (const message of messages) {
         try {
             await deliverOne(message);
+            await reportOutboundAck(message.id, "delivered");
         } catch (error) {
+            const detail = error instanceof Error ? error.message : String(error);
             captureError("outbound-poller", `falha ao entregar mensagem (${message.channel})`, error);
+            await reportOutboundAck(message.id, "failed", detail.slice(0, 200));
         }
     }
 }

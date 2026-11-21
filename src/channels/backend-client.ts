@@ -128,3 +128,29 @@ export async function fetchPendingOutbound(): Promise<PendingOutboundMessage[]> 
     const { messages } = (await response.json()) as { messages: PendingOutboundMessage[] };
     return messages;
 }
+
+/**
+ * Reporta o desfecho REAL da entrega. Aditivo: se o backend ainda não tem a
+ * rota (client/ mais novo que backend-v2), uma 404 é engolida — clients
+ * antigos continuam funcionando exatamente como antes. O primeiro ACK
+ * terminal vence no backend (first-terminal-ack-wins).
+ */
+export async function reportOutboundAck(
+    id: string,
+    status: "delivered" | "failed",
+    error?: string,
+): Promise<boolean> {
+    try {
+        const response = await backendSessionFetch(`/channels/outbound/${encodeURIComponent(id)}/ack`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ status, ...(error ? { error } : {}) }),
+        });
+        if (response.status === 404) return false; // backend antigo sem a rota
+        if (!response.ok) return false;
+        const body = (await response.json()) as { ok?: boolean };
+        return body.ok === true;
+    } catch {
+        return false; // ACK é best-effort; nunca derruba o poller
+    }
+}
